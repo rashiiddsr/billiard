@@ -104,8 +104,6 @@ PORT=3001
 CORS_ORIGIN="http://localhost:3000"
 IOT_HMAC_SECRET="change-this-iot-secret"
 IOT_NONCE_WINDOW_SECONDS=300
-# Optional: enable single-ESP gateway mode (all tables routed to this device ID)
-IOT_GATEWAY_DEVICE_ID=""
 ```
 
 **apps/web/.env.local:**
@@ -246,10 +244,6 @@ x-signature: hmac_sha256(device_id:timestamp:nonce:body, IOT_HMAC_SECRET)
 - `LIGHT_ON` — Turn on table lamp (session start)
 - `BLINK_3X` — Blink 3 times (1 minute remaining warning)
 - `LIGHT_OFF` — Turn off lamp (session end)
-
-### Single ESP Gateway Mode (optional)
-If you use one ESP to control relays for all tables, set `IOT_GATEWAY_DEVICE_ID` in API env.
-When set, billing commands for any table are queued to this one device and include `payload.tableId` so ESP can route to the correct relay channel.
 
 ---
 
