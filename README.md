@@ -15,7 +15,7 @@ A production-ready POS system for billiard halls with:
 |-------|------|
 | Frontend | Next.js 14 (App Router) + TypeScript + Tailwind CSS |
 | Backend | NestJS + TypeScript |
-| Database | PostgreSQL + Prisma ORM |
+| Database | MySQL + Prisma ORM |
 | Auth | JWT (access 15m + refresh 7d) + RBAC |
 | IoT | HTTP polling + HMAC-SHA256 signature |
 
@@ -60,7 +60,7 @@ billiard-pos/
 
 ### Prerequisites
 - Node.js 18+
-- PostgreSQL 14+ (or use Docker)
+- MySQL 8+ (or use Docker)
 - npm / yarn
 
 ### 1. Clone & Install
@@ -74,10 +74,10 @@ cd apps/api && npm install
 cd ../web && npm install
 ```
 
-### 2. Start PostgreSQL
+### 2. Start MySQL
 
 ```bash
-docker compose up -d postgres
+docker compose up -d mysql
 ```
 
 ### 3. Configure Environment
@@ -95,7 +95,7 @@ cp .env.example .env.local
 
 **apps/api/.env:**
 ```env
-DATABASE_URL="postgresql://postgres:password@localhost:5432/billiard_pos"
+DATABASE_URL="mysql://root:password@localhost:3306/billiard_pos"
 JWT_SECRET="change-this-in-production-32chars+"
 JWT_REFRESH_SECRET="change-this-refresh-secret-32chars+"
 JWT_ACCESS_EXPIRES_IN="15m"
@@ -121,6 +121,12 @@ npx prisma migrate dev --name init
 
 # Seed initial data
 npm run prisma:seed
+```
+
+Atau jika ingin import manual ke MySQL, gunakan backup schema di:
+
+```bash
+schema/schema.sql
 ```
 
 ### 5. Start Development Servers
