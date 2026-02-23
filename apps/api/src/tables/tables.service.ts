@@ -23,7 +23,6 @@ export class TablesService {
     return this.prisma.table.findMany({
       where: includeInactive ? {} : { isActive: true },
       include: {
-        iotDevice: { select: { id: true, isOnline: true, lastSeen: true, signalStrength: true } },
         billingSessions: {
           where: { status: 'ACTIVE' },
           take: 1,
@@ -38,7 +37,6 @@ export class TablesService {
     const table = await this.prisma.table.findUnique({
       where: { id },
       include: {
-        iotDevice: true,
         billingSessions: {
           orderBy: { startTime: 'desc' },
           take: 10,

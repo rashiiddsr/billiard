@@ -59,7 +59,7 @@ export default function OwnerDashboard() {
           <div className="flex flex-wrap gap-2">
             {offlineDevices.map((d: any) => (
               <span key={d.id} className="badge bg-orange-500/20 text-orange-300 px-3 py-1">
-                {d.table?.name} — offline
+                {d.name || d.id} — offline
               </span>
             ))}
           </div>
