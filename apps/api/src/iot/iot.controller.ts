@@ -1,9 +1,15 @@
-import { Controller, Post, Get, Body, Query, Headers, UseGuards } from '@nestjs/common';
+import { Controller, Post, Get, Body, Query, Headers, UseGuards, Patch, Delete } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
+import { IsString } from 'class-validator';
 import { IotService } from './iot.service';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
+
+class GatewaySettingsDto {
+  @IsString()
+  deviceId: string;
+}
 
 @ApiTags('IoT')
 @Controller('iot')
@@ -50,11 +56,35 @@ export class IotController {
     );
   }
 
-  // Admin endpoints
+  // Owner IoT settings (single ESP gateway)
+  @Get('settings')
+  @ApiBearerAuth()
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles('OWNER' as any)
+  getSettings() {
+    return this.iotService.getGatewaySettings();
+  }
+
+  @Patch('settings/gateway')
+  @ApiBearerAuth()
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles('OWNER' as any)
+  setGateway(@Body() dto: GatewaySettingsDto) {
+    return this.iotService.setGatewayDevice(dto.deviceId);
+  }
+
+  @Delete('settings/gateway')
+  @ApiBearerAuth()
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles('OWNER' as any)
+  clearGatewayOverride() {
+    return this.iotService.clearGatewayOverride();
+  }
+
   @Get('devices')
   @ApiBearerAuth()
   @UseGuards(AuthGuard('jwt'), RolesGuard)
-  @Roles('OWNER' as any, 'MANAGER' as any)
+  @Roles('OWNER' as any)
   listDevices() {
     return this.iotService.listDevices();
   }
