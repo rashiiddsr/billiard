@@ -264,7 +264,6 @@ export class IotService {
     const gatewayDevice = gatewayDeviceId
       ? await this.prisma.iotDevice.findUnique({
           where: { id: gatewayDeviceId },
-          include: { table: { select: { id: true, name: true } } },
         })
       : null;
 
@@ -316,9 +315,6 @@ export class IotService {
 
   async listDevices() {
     return this.prisma.iotDevice.findMany({
-      include: {
-        table: { select: { id: true, name: true, status: true } },
-      },
       orderBy: { createdAt: 'asc' },
     });
   }

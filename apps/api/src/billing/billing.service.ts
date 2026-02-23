@@ -188,10 +188,12 @@ export class BillingService {
   }
 
   async getActiveSessions() {
-    return this.prisma.billingSession.findMany({
+    const gateway = await this.prisma.iotDevice.findFirst({ orderBy: { createdAt: 'asc' } });
+
+    const sessions = await this.prisma.billingSession.findMany({
       where: { status: SessionStatus.ACTIVE },
       include: {
-        table: { include: { iotDevice: true } },
+        table: true,
         createdBy: { select: { id: true, name: true } },
         orders: {
           where: { status: { not: 'CANCELLED' } },
@@ -200,13 +202,23 @@ export class BillingService {
       },
       orderBy: { startTime: 'asc' },
     });
+
+    return sessions.map((session) => ({
+      ...session,
+      table: {
+        ...session.table,
+        iotDevice: gateway,
+      },
+    }));
   }
 
   async getSession(sessionId: string) {
+    const gateway = await this.prisma.iotDevice.findFirst({ orderBy: { createdAt: 'asc' } });
+
     const session = await this.prisma.billingSession.findUnique({
       where: { id: sessionId },
       include: {
-        table: { include: { iotDevice: true } },
+        table: true,
         createdBy: { select: { id: true, name: true } },
         orders: {
           where: { status: { not: 'CANCELLED' } },
@@ -218,7 +230,14 @@ export class BillingService {
       },
     });
     if (!session) throw new NotFoundException('Session not found');
-    return session;
+
+    return {
+      ...session,
+      table: {
+        ...session.table,
+        iotDevice: gateway,
+      },
+    };
   }
 
   async listSessions(filters: {
