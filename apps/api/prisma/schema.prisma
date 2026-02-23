@@ -129,17 +129,17 @@ model Table {
   updatedAt   DateTime    @updatedAt
 
   // Relations
+  iotDevice       IotDevice?
   billingSessions BillingSession[]
-  iotRelayRoutes  IotRelayRoute[]
 
   @@map("tables")
 }
 
 model IotDevice {
   id             String   @id @default(cuid())
-  name           String?
+  tableId        String   @unique
+  table          Table    @relation(fields: [tableId], references: [id])
   deviceToken    String   @unique // hashed
-  isGateway      Boolean  @default(true)
   lastSeen       DateTime?
   signalStrength Int?
   isOnline       Boolean  @default(false)
@@ -149,18 +149,6 @@ model IotDevice {
   commands IotCommand[]
 
   @@map("iot_devices")
-}
-
-model IotRelayRoute {
-  id           String   @id @default(cuid())
-  tableId      String   @unique
-  table        Table    @relation(fields: [tableId], references: [id], onDelete: Cascade)
-  relayChannel Int
-  gpioPin      Int?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  @@map("iot_relay_routes")
 }
 
 model IotCommand {
