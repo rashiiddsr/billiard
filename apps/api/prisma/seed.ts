@@ -71,13 +71,11 @@ async function main() {
   await prisma.iotCommand.deleteMany();
   await prisma.iotDevice.deleteMany();
 
-  const gatewayTable = tables[0]; // keep relation on Meja 1 for legacy schema compatibility
   const rawToken = `iot-gateway-secret-${crypto.randomBytes(8).toString('hex')}`;
   const tokenHash = await bcrypt.hash(rawToken, 10);
 
   const gatewayDevice = await prisma.iotDevice.create({
     data: {
-      tableId: gatewayTable.id,
       deviceToken: tokenHash,
     },
   });

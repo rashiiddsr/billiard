@@ -144,7 +144,7 @@ export default function OwnerIotSettingsPage() {
             <option value="">-- pilih device --</option>
             {devices.map((d) => (
               <option key={d.id} value={d.id}>
-                {d.id} {d.table?.name ? `(${d.table.name})` : ''} {d.isOnline ? '• online' : '• offline'}
+                {d.id} {d.isOnline ? '• online' : '• offline'}
               </option>
             ))}
           </select>

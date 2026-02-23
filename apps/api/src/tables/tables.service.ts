@@ -20,10 +20,11 @@ export class TablesService {
   constructor(private prisma: PrismaService) {}
 
   async findAll(includeInactive = false) {
-    return this.prisma.table.findMany({
+    const gateway = await this.prisma.iotDevice.findFirst({ orderBy: { createdAt: 'asc' } });
+
+    const tables = await this.prisma.table.findMany({
       where: includeInactive ? {} : { isActive: true },
       include: {
-        iotDevice: { select: { id: true, isOnline: true, lastSeen: true, signalStrength: true } },
         billingSessions: {
           where: { status: 'ACTIVE' },
           take: 1,
@@ -32,13 +33,26 @@ export class TablesService {
       },
       orderBy: { name: 'asc' },
     });
+
+    return tables.map((table) => ({
+      ...table,
+      iotDevice: gateway
+        ? {
+            id: gateway.id,
+            isOnline: gateway.isOnline,
+            lastSeen: gateway.lastSeen,
+            signalStrength: gateway.signalStrength,
+          }
+        : null,
+    }));
   }
 
   async findOne(id: string) {
+    const gateway = await this.prisma.iotDevice.findFirst({ orderBy: { createdAt: 'asc' } });
+
     const table = await this.prisma.table.findUnique({
       where: { id },
       include: {
-        iotDevice: true,
         billingSessions: {
           orderBy: { startTime: 'desc' },
           take: 10,
@@ -46,7 +60,11 @@ export class TablesService {
       },
     });
     if (!table) throw new NotFoundException('Table not found');
-    return table;
+
+    return {
+      ...table,
+      iotDevice: gateway,
+    };
   }
 
   async create(dto: CreateTableDto) {

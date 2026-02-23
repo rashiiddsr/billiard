@@ -44,7 +44,6 @@ CREATE TABLE `tables` (
 -- CreateTable
 CREATE TABLE `iot_devices` (
     `id` VARCHAR(191) NOT NULL,
-    `tableId` VARCHAR(191) NOT NULL,
     `deviceToken` VARCHAR(191) NOT NULL,
     `lastSeen` DATETIME(3) NULL,
     `signalStrength` INTEGER NULL,
@@ -52,7 +51,6 @@ CREATE TABLE `iot_devices` (
     `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `updatedAt` DATETIME(3) NOT NULL,
 
-    UNIQUE INDEX `iot_devices_tableId_key`(`tableId`),
     UNIQUE INDEX `iot_devices_deviceToken_key`(`deviceToken`),
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -279,8 +277,6 @@ CREATE TABLE `audit_logs` (
 -- AddForeignKey
 ALTER TABLE `refresh_tokens` ADD CONSTRAINT `refresh_tokens_userId_fkey` FOREIGN KEY (`userId`) REFERENCES `users`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
--- AddForeignKey
-ALTER TABLE `iot_devices` ADD CONSTRAINT `iot_devices_tableId_fkey` FOREIGN KEY (`tableId`) REFERENCES `tables`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE `iot_commands` ADD CONSTRAINT `iot_commands_deviceId_fkey` FOREIGN KEY (`deviceId`) REFERENCES `iot_devices`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;

@@ -129,7 +129,6 @@ model Table {
   updatedAt   DateTime    @updatedAt
 
   // Relations
-  iotDevice       IotDevice?
   billingSessions BillingSession[]
 
   @@map("tables")
@@ -137,8 +136,6 @@ model Table {
 
 model IotDevice {
   id             String   @id @default(cuid())
-  tableId        String   @unique
-  table          Table    @relation(fields: [tableId], references: [id])
   deviceToken    String   @unique // hashed
   lastSeen       DateTime?
   signalStrength Int?
