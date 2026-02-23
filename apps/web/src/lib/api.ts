@@ -145,4 +145,8 @@ export const usersApi = {
 // ─── IoT ─────────────────────────────────────────────────────────────────────
 export const iotApi = {
   listDevices: () => api.get('/iot/devices').then((r) => r.data),
+  getSettings: () => api.get('/iot/settings').then((r) => r.data),
+  setGateway: (deviceId: string) =>
+    api.patch('/iot/settings/gateway', { deviceId }).then((r) => r.data),
+  clearGatewayOverride: () => api.delete('/iot/settings/gateway').then((r) => r.data),
 };
