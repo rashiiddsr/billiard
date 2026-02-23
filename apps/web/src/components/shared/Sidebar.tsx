@@ -31,7 +31,6 @@ const navByRole: Record<string, NavItem[]> = {
     { label: 'Billing Meja', href: '/owner/billing', icon: <BilliardIcon /> },
     { label: 'Laporan Keuangan', href: '/owner/finance', icon: <ChartIcon /> },
     { label: 'Manajemen User', href: '/owner/users', icon: <UserIcon /> },
-    { label: 'IoT Settings', href: '/owner/iot', icon: <ChipIcon /> },
     { label: 'Audit Log', href: '/owner/audit', icon: <LogIcon /> },
   ],
   MANAGER: [
@@ -136,8 +135,4 @@ function WalletIcon() {
 }
 function LogoutIcon() {
   return <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>;
-}
-
-function ChipIcon() {
-  return <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3v2m6-2v2M9 19v2m6-2v2M3 9h2m14 0h2M3 15h2m14 0h2M7 7h10v10H7V7z" /></svg>;
 }
