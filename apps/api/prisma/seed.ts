@@ -1,121 +1,8 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Role } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 
 const prisma = new PrismaClient();
-
-async function ensureSingleGatewaySchema() {
-  // User requested seed-only transition (no extra migration file).
-  // This block normalizes legacy IoT schema to the single-gateway model.
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS iot_devices (
-      id VARCHAR(191) NOT NULL,
-      name VARCHAR(191) NULL,
-      deviceToken VARCHAR(191) NOT NULL,
-      isGateway BOOLEAN NOT NULL DEFAULT true,
-      lastSeen DATETIME(3) NULL,
-      signalStrength INTEGER NULL,
-      isOnline BOOLEAN NOT NULL DEFAULT false,
-      createdAt DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-      updatedAt DATETIME(3) NOT NULL,
-      UNIQUE INDEX iot_devices_deviceToken_key (deviceToken),
-      PRIMARY KEY (id)
-    ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
-  `);
-
-  await prisma.$executeRawUnsafe(`
-    SET @fk_exists := (
-      SELECT COUNT(*)
-      FROM information_schema.TABLE_CONSTRAINTS
-      WHERE CONSTRAINT_SCHEMA = DATABASE()
-        AND TABLE_NAME = 'iot_devices'
-        AND CONSTRAINT_NAME = 'iot_devices_tableId_fkey'
-        AND CONSTRAINT_TYPE = 'FOREIGN KEY'
-    )
-  `);
-  await prisma.$executeRawUnsafe(`
-    SET @sql := IF(@fk_exists > 0,
-      'ALTER TABLE iot_devices DROP FOREIGN KEY iot_devices_tableId_fkey',
-      'SELECT 1')
-  `);
-  await prisma.$executeRawUnsafe('PREPARE stmt FROM @sql');
-  await prisma.$executeRawUnsafe('EXECUTE stmt');
-  await prisma.$executeRawUnsafe('DEALLOCATE PREPARE stmt');
-
-  await prisma.$executeRawUnsafe(`
-    SET @idx_exists := (
-      SELECT COUNT(*)
-      FROM information_schema.STATISTICS
-      WHERE TABLE_SCHEMA = DATABASE()
-        AND TABLE_NAME = 'iot_devices'
-        AND INDEX_NAME = 'iot_devices_tableId_key'
-    )
-  `);
-  await prisma.$executeRawUnsafe(`
-    SET @sql := IF(@idx_exists > 0,
-      'DROP INDEX iot_devices_tableId_key ON iot_devices',
-      'SELECT 1')
-  `);
-  await prisma.$executeRawUnsafe('PREPARE stmt FROM @sql');
-  await prisma.$executeRawUnsafe('EXECUTE stmt');
-  await prisma.$executeRawUnsafe('DEALLOCATE PREPARE stmt');
-
-  await prisma.$executeRawUnsafe(`
-    SET @tableid_col_exists := (
-      SELECT COUNT(*)
-      FROM information_schema.COLUMNS
-      WHERE TABLE_SCHEMA = DATABASE()
-        AND TABLE_NAME = 'iot_devices'
-        AND COLUMN_NAME = 'tableId'
-    )
-  `);
-  await prisma.$executeRawUnsafe(`
-    SET @sql := IF(@tableid_col_exists > 0,
-      'ALTER TABLE iot_devices DROP COLUMN tableId',
-      'SELECT 1')
-  `);
-  await prisma.$executeRawUnsafe('PREPARE stmt FROM @sql');
-  await prisma.$executeRawUnsafe('EXECUTE stmt');
-  await prisma.$executeRawUnsafe('DEALLOCATE PREPARE stmt');
-
-  await prisma.$executeRawUnsafe(`
-    ALTER TABLE iot_devices
-      ADD COLUMN IF NOT EXISTS isGateway BOOLEAN NOT NULL DEFAULT true,
-      ADD COLUMN IF NOT EXISTS name VARCHAR(191) NULL
-  `);
-
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS iot_relay_routes (
-      id VARCHAR(191) NOT NULL,
-      tableId VARCHAR(191) NOT NULL,
-      relayChannel INTEGER NOT NULL,
-      gpioPin INTEGER NULL,
-      createdAt DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-      updatedAt DATETIME(3) NOT NULL,
-      UNIQUE INDEX iot_relay_routes_tableId_key (tableId),
-      PRIMARY KEY (id)
-    )
-  `);
-
-  await prisma.$executeRawUnsafe(`
-    SET @route_fk_exists := (
-      SELECT COUNT(*)
-      FROM information_schema.TABLE_CONSTRAINTS
-      WHERE CONSTRAINT_SCHEMA = DATABASE()
-        AND TABLE_NAME = 'iot_relay_routes'
-        AND CONSTRAINT_NAME = 'iot_relay_routes_tableId_fkey'
-        AND CONSTRAINT_TYPE = 'FOREIGN KEY'
-    )
-  `);
-  await prisma.$executeRawUnsafe(`
-    SET @sql := IF(@route_fk_exists = 0,
-      'ALTER TABLE iot_relay_routes ADD CONSTRAINT iot_relay_routes_tableId_fkey FOREIGN KEY (tableId) REFERENCES tables(id) ON DELETE CASCADE ON UPDATE CASCADE',
-      'SELECT 1')
-  `);
-  await prisma.$executeRawUnsafe('PREPARE stmt FROM @sql');
-  await prisma.$executeRawUnsafe('EXECUTE stmt');
-  await prisma.$executeRawUnsafe('DEALLOCATE PREPARE stmt');
-}
 
 async function main() {
   console.log('🌱 Seeding database...');
@@ -134,7 +21,7 @@ async function main() {
       email: 'owner@billiard.com',
       passwordHash: ownerHash,
       pin: ownerPin,
-      role: "OWNER",
+      role: Role.OWNER,
     },
   });
 
@@ -145,7 +32,7 @@ async function main() {
       name: 'Budi Manager',
       email: 'manager@billiard.com',
       passwordHash: managerHash,
-      role: "MANAGER",
+      role: Role.MANAGER,
     },
   });
 
@@ -156,7 +43,7 @@ async function main() {
       name: 'Citra Kasir',
       email: 'cashier@billiard.com',
       passwordHash: cashierHash,
-      role: "CASHIER",
+      role: Role.CASHIER,
     },
   });
 
@@ -178,40 +65,22 @@ async function main() {
   }
   console.log('✅ 10 Tables created');
 
-  await ensureSingleGatewaySchema();
-
-  // ─── IoT Single Gateway Device ────────────────────────────────────────────
-  // New architecture: one ESP gateway controls all table relays.
-  // Seed enforces a single IoT device and rotates gateway token on every seed run.
-  await prisma.iotCommand.deleteMany();
-  await prisma.iotRelayRoute.deleteMany();
-  await prisma.iotDevice.deleteMany();
-
-  const rawToken = `iot-gateway-secret-${crypto.randomBytes(8).toString('hex')}`;
-  const tokenHash = await bcrypt.hash(rawToken, 10);
-
-  const gatewayDevice = await prisma.iotDevice.create({
-    data: {
-      name: 'Main ESP Gateway',
-      isGateway: true,
-      deviceToken: tokenHash,
-    },
-  });
-
-  // default route: table order -> relay channel 0..n
-  for (let i = 0; i < tables.length; i++) {
-    await prisma.iotRelayRoute.create({
-      data: {
-        tableId: tables[i].id,
-        relayChannel: i,
-        gpioPin: i,
-      },
-    });
+  // ─── IoT Devices ──────────────────────────────────────────────────────────
+  for (let i = 0; i < 2; i++) {
+    const rawToken = `iot-device-${i + 1}-secret-${crypto.randomBytes(8).toString('hex')}`;
+    const tokenHash = await bcrypt.hash(rawToken, 10);
+    const existing = await prisma.iotDevice.findUnique({ where: { tableId: tables[i].id } });
+    if (!existing) {
+      await prisma.iotDevice.create({
+        data: {
+          tableId: tables[i].id,
+          deviceToken: tokenHash,
+        },
+      });
+      console.log(`📱 IoT Device ${i + 1} raw token (save this!): ${rawToken}`);
+    }
   }
-
-  console.log(`📱 IoT Gateway Device ID: ${gatewayDevice.id}`);
-  console.log(`🔐 IoT Gateway raw token (save this!): ${rawToken}`);
-  console.log('✅ Single IoT gateway device + relay routes created');
+  console.log('✅ IoT Devices created');
 
   // ─── Menu Items ───────────────────────────────────────────────────────────
   const menuItems = [
