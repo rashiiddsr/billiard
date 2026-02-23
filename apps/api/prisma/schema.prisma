@@ -1,0 +1,395 @@
+// This is your Prisma schema file
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum Role {
+  OWNER
+  MANAGER
+  CASHIER
+}
+
+enum TableStatus {
+  AVAILABLE
+  OCCUPIED
+  MAINTENANCE
+}
+
+enum SessionStatus {
+  ACTIVE
+  COMPLETED
+  CANCELLED
+  PAUSED
+}
+
+enum IoTCommandType {
+  LIGHT_ON
+  LIGHT_OFF
+  BLINK_3X
+}
+
+enum IoTCommandStatus {
+  PENDING
+  SENT
+  ACK
+  FAILED
+}
+
+enum OrderStatus {
+  DRAFT
+  CONFIRMED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING_PAYMENT
+  PAID
+  REFUNDED
+}
+
+enum PaymentMethod {
+  CASH
+  QRIS
+  TRANSFER
+}
+
+enum StockActionType {
+  MANUAL_ADJUSTMENT
+  SALE_DEDUCTION
+  RESTOCK
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  LOGIN
+  LOGOUT
+  FAILED_AUTH
+  START_BILLING
+  STOP_BILLING
+  EXTEND_BILLING
+  PAYMENT
+  DISCOUNT_APPROVED
+}
+
+// ─── Models ───────────────────────────────────────────────────────────────────
+
+model User {
+  id            String   @id @default(cuid())
+  name          String
+  email         String   @unique
+  passwordHash  String
+  pin           String?  // hashed 6-digit PIN
+  role          Role
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  billingSessions   BillingSession[]  @relation("CreatedBy")
+  approvedSessions  BillingSession[]  @relation("ApprovedBy")
+  orders            Order[]
+  payments          Payment[]
+  expenses          Expense[]
+  auditLogs         AuditLog[]
+  stockAdjustments  StockAdjustment[]
+  menuChanges       MenuItem[]        @relation("MenuChangedBy")
+  refreshTokens     RefreshToken[]
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@map("refresh_tokens")
+}
+
+model Table {
+  id          String      @id @default(cuid())
+  name        String      @unique
+  description String?
+  status      TableStatus @default(AVAILABLE)
+  hourlyRate  Decimal     @db.Decimal(12, 2)
+  isActive    Boolean     @default(true)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  // Relations
+  iotDevice       IotDevice?
+  billingSessions BillingSession[]
+
+  @@map("tables")
+}
+
+model IotDevice {
+  id             String   @id @default(cuid())
+  tableId        String   @unique
+  table          Table    @relation(fields: [tableId], references: [id])
+  deviceToken    String   @unique // hashed
+  lastSeen       DateTime?
+  signalStrength Int?
+  isOnline       Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  commands IotCommand[]
+
+  @@map("iot_devices")
+}
+
+model IotCommand {
+  id        String           @id @default(cuid())
+  deviceId  String
+  device    IotDevice        @relation(fields: [deviceId], references: [id])
+  command   IoTCommandType
+  status    IoTCommandStatus @default(PENDING)
+  nonce     String           @unique
+  payload   Json?
+  sentAt    DateTime?
+  ackedAt   DateTime?
+  createdAt DateTime         @default(now())
+
+  @@map("iot_commands")
+}
+
+model BillingSession {
+  id               String        @id @default(cuid())
+  tableId          String
+  table            Table         @relation(fields: [tableId], references: [id])
+  startTime        DateTime
+  endTime          DateTime
+  actualEndTime    DateTime?
+  durationMinutes  Int
+  rateType         String        @default("HOURLY") // HOURLY | MANUAL
+  ratePerHour      Decimal       @db.Decimal(12, 2)
+  totalAmount      Decimal       @db.Decimal(12, 2) @default(0)
+  status           SessionStatus @default(ACTIVE)
+  blinkCommandSent Boolean       @default(false)
+  
+  createdById  String
+  createdBy    User    @relation("CreatedBy", fields: [createdById], references: [id])
+  approvedById String?
+  approvedBy   User?   @relation("ApprovedBy", fields: [approvedById], references: [id])
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  orders   Order[]
+  payments Payment[]
+
+  @@map("billing_sessions")
+}
+
+model MenuItem {
+  id              String   @id @default(cuid())
+  sku             String   @unique
+  name            String
+  category        String
+  price           Decimal  @db.Decimal(12, 2)
+  cost            Decimal? @db.Decimal(12, 2)
+  taxFlag         Boolean  @default(false)
+  taxRate         Decimal  @db.Decimal(5, 4) @default(0.11)
+  isActive        Boolean  @default(true)
+  imageUrl        String?
+  description     String?
+  changedById     String?
+  changedBy       User?    @relation("MenuChangedBy", fields: [changedById], references: [id])
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  stock     StockFnb?
+  orderItems OrderItem[]
+  modifiers  Modifier[]
+
+  @@map("menu_items")
+}
+
+model Modifier {
+  id         String   @id @default(cuid())
+  menuItemId String
+  menuItem   MenuItem @relation(fields: [menuItemId], references: [id])
+  name       String
+  price      Decimal  @db.Decimal(12, 2) @default(0)
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+
+  orderItemModifiers OrderItemModifier[]
+
+  @@map("modifiers")
+}
+
+model StockFnb {
+  id                 String   @id @default(cuid())
+  menuItemId         String   @unique
+  menuItem           MenuItem @relation(fields: [menuItemId], references: [id])
+  qtyOnHand          Int      @default(0)
+  lowStockThreshold  Int      @default(5)
+  trackStock         Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  adjustments StockAdjustment[]
+
+  @@map("stock_fnb")
+}
+
+model StockAdjustment {
+  id           String          @id @default(cuid())
+  stockFnbId   String
+  stockFnb     StockFnb        @relation(fields: [stockFnbId], references: [id])
+  actionType   StockActionType
+  quantityDelta Int
+  notes        String?
+  performedById String
+  performedBy  User            @relation(fields: [performedById], references: [id])
+  createdAt    DateTime        @default(now())
+
+  @@map("stock_adjustments")
+}
+
+model Order {
+  id               String      @id @default(cuid())
+  orderNumber      String      @unique
+  billingSessionId String?
+  billingSession   BillingSession? @relation(fields: [billingSessionId], references: [id])
+  tableId          String?
+  status           OrderStatus @default(DRAFT)
+  subtotal         Decimal     @db.Decimal(12, 2) @default(0)
+  taxAmount        Decimal     @db.Decimal(12, 2) @default(0)
+  total            Decimal     @db.Decimal(12, 2) @default(0)
+  notes            String?
+  createdById      String
+  createdBy        User        @relation(fields: [createdById], references: [id])
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  items    OrderItem[]
+  payments Payment[]
+
+  @@map("orders")
+}
+
+model OrderItem {
+  id         String   @id @default(cuid())
+  orderId    String
+  order      Order    @relation(fields: [orderId], references: [id])
+  menuItemId String
+  menuItem   MenuItem @relation(fields: [menuItemId], references: [id])
+  quantity   Int
+  unitPrice  Decimal  @db.Decimal(12, 2)
+  discount   Decimal  @db.Decimal(12, 2) @default(0)
+  taxAmount  Decimal  @db.Decimal(12, 2) @default(0)
+  subtotal   Decimal  @db.Decimal(12, 2)
+  notes      String?
+  createdAt  DateTime @default(now())
+
+  modifiers OrderItemModifier[]
+
+  @@map("order_items")
+}
+
+model OrderItemModifier {
+  id          String   @id @default(cuid())
+  orderItemId String
+  orderItem   OrderItem @relation(fields: [orderItemId], references: [id])
+  modifierId  String
+  modifier    Modifier  @relation(fields: [modifierId], references: [id])
+  price       Decimal   @db.Decimal(12, 2)
+
+  @@map("order_item_modifiers")
+}
+
+model Payment {
+  id               String        @id @default(cuid())
+  paymentNumber    String        @unique
+  orderId          String?
+  order            Order?        @relation(fields: [orderId], references: [id])
+  billingSessionId String?
+  billingSession   BillingSession? @relation(fields: [billingSessionId], references: [id])
+  
+  method           PaymentMethod
+  status           PaymentStatus @default(PENDING_PAYMENT)
+  
+  billingAmount    Decimal  @db.Decimal(12, 2) @default(0)
+  fnbAmount        Decimal  @db.Decimal(12, 2) @default(0)
+  subtotal         Decimal  @db.Decimal(12, 2)
+  discountAmount   Decimal  @db.Decimal(12, 2) @default(0)
+  discountReason   String?
+  discountApprovedById String?
+  taxAmount        Decimal  @db.Decimal(12, 2) @default(0)
+  totalAmount      Decimal  @db.Decimal(12, 2)
+  
+  amountPaid       Decimal? @db.Decimal(12, 2)
+  changeAmount     Decimal? @db.Decimal(12, 2)
+  reference        String?  // for QRIS/TRANSFER
+  
+  paidById         String?
+  paidBy           User?    @relation(fields: [paidById], references: [id])
+  paidAt           DateTime?
+  isPrinted        Boolean  @default(false)
+  printedAt        DateTime?
+  
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@map("payments")
+}
+
+model Expense {
+  id           String   @id @default(cuid())
+  category     String
+  date         DateTime
+  amount       Decimal  @db.Decimal(12, 2)
+  notes        String?
+  proofUrl     String?
+  createdById  String
+  createdBy    User     @relation(fields: [createdById], references: [id])
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("expenses")
+}
+
+model OperationalAsset {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  category    String
+  qtyGood     Int      @default(0)
+  qtyBad      Int      @default(0)
+  notes       String?
+  updatedAt   DateTime @updatedAt
+  createdAt   DateTime @default(now())
+
+  @@map("operational_assets")
+}
+
+model AuditLog {
+  id          String      @id @default(cuid())
+  userId      String?
+  user        User?       @relation(fields: [userId], references: [id])
+  action      AuditAction
+  entity      String      // e.g., "BillingSession", "Payment"
+  entityId    String?
+  beforeData  Json?
+  afterData   Json?
+  metadata    Json?       // extra context
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime    @default(now())
+
+  @@map("audit_logs")
+}
