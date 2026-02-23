@@ -1,4 +1,4 @@
-import { PrismaClient, Role } from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 
@@ -21,7 +21,7 @@ async function main() {
       email: 'owner@billiard.com',
       passwordHash: ownerHash,
       pin: ownerPin,
-      role: Role.OWNER,
+      role: "OWNER",
     },
   });
 
@@ -32,7 +32,7 @@ async function main() {
       name: 'Budi Manager',
       email: 'manager@billiard.com',
       passwordHash: managerHash,
-      role: Role.MANAGER,
+      role: "MANAGER",
     },
   });
 
@@ -43,7 +43,7 @@ async function main() {
       name: 'Citra Kasir',
       email: 'cashier@billiard.com',
       passwordHash: cashierHash,
-      role: Role.CASHIER,
+      role: "CASHIER",
     },
   });
 
