@@ -153,28 +153,12 @@ export class IotService {
     });
   }
 
-  private async resolveCommandTargetDevice(tableId: string) {
-    // Existing mode: one IoT device per table
-    const tableDevice = await this.prisma.iotDevice.findUnique({ where: { tableId } });
-    if (tableDevice) return tableDevice;
-
-    // Single ESP mode: all tables routed through one gateway device
-    const gatewayDeviceId = this.config.get<string>('IOT_GATEWAY_DEVICE_ID');
-    if (gatewayDeviceId) {
-      const gateway = await this.prisma.iotDevice.findUnique({ where: { id: gatewayDeviceId } });
-      if (gateway) return gateway;
-    }
-
-    // Fallback to first device so system can keep operating in mixed setups
-    return this.prisma.iotDevice.findFirst({ orderBy: { createdAt: 'asc' } });
-  }
-
-  // Internal: send command to table's own device, or shared gateway in single-ESP mode
+  // Internal: send command to a table's device
   async sendCommand(tableId: string, commandType: IoTCommandType | string) {
-    const device = await this.resolveCommandTargetDevice(tableId);
-
+    const device = await this.prisma.iotDevice.findUnique({ where: { tableId } });
+    
     if (!device) {
-      console.warn(`No IoT device configured, command ${commandType} for table ${tableId} skipped`);
+      console.warn(`No IoT device for table ${tableId}, command ${commandType} skipped`);
       return null;
     }
 
@@ -185,12 +169,11 @@ export class IotService {
         command: commandType as IoTCommandType,
         nonce,
         status: IoTCommandStatus.PENDING,
-        payload: { tableId },
       },
     });
 
     // If device is offline, mark as failed after timeout (fallback)
-    if (!device.isOnline || !device.lastSeen ||
+    if (!device.isOnline || !device.lastSeen || 
         Date.now() - device.lastSeen.getTime() > 5 * 60 * 1000) {
       console.warn(`Device ${device.id} appears offline, command ${commandType} queued`);
     }
