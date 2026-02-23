@@ -191,7 +191,7 @@ export class BillingService {
     return this.prisma.billingSession.findMany({
       where: { status: SessionStatus.ACTIVE },
       include: {
-        table: true,
+        table: { include: { iotDevice: true } },
         createdBy: { select: { id: true, name: true } },
         orders: {
           where: { status: { not: 'CANCELLED' } },
@@ -206,7 +206,7 @@ export class BillingService {
     const session = await this.prisma.billingSession.findUnique({
       where: { id: sessionId },
       include: {
-        table: true,
+        table: { include: { iotDevice: true } },
         createdBy: { select: { id: true, name: true } },
         orders: {
           where: { status: { not: 'CANCELLED' } },
