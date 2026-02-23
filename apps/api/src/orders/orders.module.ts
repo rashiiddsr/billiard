@@ -11,7 +11,7 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { AuditAction } from '@prisma/client';
-import Decimal from 'decimal.js';
+import { Decimal } from '@prisma/client/runtime/library';
 
 class OrderItemDto {
   @IsString() menuItemId: string;

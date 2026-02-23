@@ -13,7 +13,7 @@ import { AuditService } from '../common/audit/audit.service';
 import { IotService } from '../iot/iot.service';
 import { AuditAction, Role, SessionStatus, TableStatus } from '@prisma/client';
 import { CreateBillingSessionDto, ExtendBillingSessionDto } from './billing.dto';
-import Decimal from 'decimal.js';
+import { Decimal } from '@prisma/client/runtime/library';
 
 @Injectable()
 export class BillingService {
