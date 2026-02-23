@@ -14,7 +14,7 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { AuditAction, PaymentMethod } from '@prisma/client';
-import Decimal from 'decimal.js';
+import { Decimal } from '@prisma/client/runtime/library';
 
 export class CreateCheckoutDto {
   @IsOptional() @IsString() billingSessionId?: string;
