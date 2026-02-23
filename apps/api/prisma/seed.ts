@@ -65,22 +65,38 @@ async function main() {
   }
   console.log('✅ 10 Tables created');
 
-  // ─── IoT Devices ──────────────────────────────────────────────────────────
-  for (let i = 0; i < 2; i++) {
-    const rawToken = `iot-device-${i + 1}-secret-${crypto.randomBytes(8).toString('hex')}`;
-    const tokenHash = await bcrypt.hash(rawToken, 10);
-    const existing = await prisma.iotDevice.findUnique({ where: { tableId: tables[i].id } });
-    if (!existing) {
-      await prisma.iotDevice.create({
-        data: {
-          tableId: tables[i].id,
-          deviceToken: tokenHash,
-        },
-      });
-      console.log(`📱 IoT Device ${i + 1} raw token (save this!): ${rawToken}`);
-    }
+  // ─── IoT Single Gateway Device ────────────────────────────────────────────
+  // New architecture: one ESP gateway controls all table relays.
+  // Seed enforces a single IoT device and rotates gateway token on every seed run.
+  await prisma.iotCommand.deleteMany();
+  await prisma.iotRelayRoute.deleteMany();
+  await prisma.iotDevice.deleteMany();
+
+  const rawToken = `iot-gateway-secret-${crypto.randomBytes(8).toString('hex')}`;
+  const tokenHash = await bcrypt.hash(rawToken, 10);
+
+  const gatewayDevice = await prisma.iotDevice.create({
+    data: {
+      name: 'Main ESP Gateway',
+      isGateway: true,
+      deviceToken: tokenHash,
+    },
+  });
+
+  // default route: table order -> relay channel 0..n
+  for (let i = 0; i < tables.length; i++) {
+    await prisma.iotRelayRoute.create({
+      data: {
+        tableId: tables[i].id,
+        relayChannel: i,
+        gpioPin: i,
+      },
+    });
   }
-  console.log('✅ IoT Devices created');
+
+  console.log(`📱 IoT Gateway Device ID: ${gatewayDevice.id}`);
+  console.log(`🔐 IoT Gateway raw token (save this!): ${rawToken}`);
+  console.log('✅ Single IoT gateway device + relay routes created');
 
   // ─── Menu Items ───────────────────────────────────────────────────────────
   const menuItems = [
