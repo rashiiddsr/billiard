@@ -159,7 +159,6 @@ export default function BillingPage() {
           const session = getSessionForTable(table.id);
           const remaining = session ? getRemainingTime(session.endTime) : null;
           const isOccupied = !!session;
-          const device = table.iotDevice;
 
           return (
             <div
@@ -173,12 +172,11 @@ export default function BillingPage() {
                 <span className={`badge text-xs ${isOccupied ? 'bg-yellow-500/20 text-yellow-300' : 'bg-green-500/20 text-green-300'}`}>
                   {isOccupied ? 'Aktif' : 'Kosong'}
                 </span>
-                {/* IoT lamp indicator */}
-                <div className={`w-3 h-3 rounded-full ${
-                  device?.isOnline
-                    ? (isOccupied ? 'bg-yellow-400 shadow-yellow-400/50 shadow-md' : 'bg-slate-600')
-                    : 'bg-red-500/50'
-                }`} title={device?.isOnline ? 'Online' : 'Offline'} />
+                {/* Single gateway mode: lamp status follows billing session state */}
+                <div
+                  className={`w-3 h-3 rounded-full ${isOccupied ? 'bg-yellow-400 shadow-yellow-400/50 shadow-md' : 'bg-slate-600'}`}
+                  title={isOccupied ? 'Relay aktif via gateway' : 'Relay idle'}
+                />
               </div>
 
               <h3 className="font-bold text-lg mb-1">{table.name}</h3>

@@ -104,6 +104,10 @@ PORT=3001
 CORS_ORIGIN="http://localhost:3000"
 IOT_HMAC_SECRET="change-this-iot-secret"
 IOT_NONCE_WINDOW_SECONDS=300
+# Wajib diisi dgn device ID gateway hasil seed (single ESP untuk semua meja)
+IOT_GATEWAY_DEVICE_ID=""
+# Optional map relay channel -> GPIO ESP, contoh 16 channel:
+# IOT_RELAY_GPIO_MAP="23,22,21,19,18,5,17,16,4,0,2,15,13,12,14,27"
 ```
 
 **apps/web/.env.local:**
@@ -122,6 +126,11 @@ npx prisma migrate dev --name init
 # Seed initial data
 npm run prisma:seed
 ```
+
+Catatan arsitektur terbaru (single ESP gateway):
+- Seed akan menghapus relasi/device lama IoT lalu membuat **tepat 1 device gateway** + token baru.
+- Seed juga membuat route default semua meja (`relayChannel` berurutan 0..N).
+- Simpan output terminal seed: `IoT Gateway Device ID` dan `IoT Gateway raw token` untuk firmware ESP.
 
 Atau jika ingin import manual ke MySQL, gunakan backup schema di:
 
@@ -245,6 +254,295 @@ x-signature: hmac_sha256(device_id:timestamp:nonce:body, IOT_HMAC_SECRET)
 - `BLINK_3X` — Blink 3 times (1 minute remaining warning)
 - `LIGHT_OFF` — Turn off lamp (session end)
 
+### Single ESP Gateway Mode (optional)
+If you use one ESP to control relays for all tables, set `IOT_GATEWAY_DEVICE_ID` in API env.
+When set, billing commands for any table are queued to this one device and include `payload.tableId` so ESP can route to the correct relay channel.
+
+> Penting: status **device online** artinya ESP gateway terhubung ke server, **bukan** semua lampu meja otomatis ON. Lampu meja ON/OFF tetap mengikuti command billing per meja.
+
+
+### Troubleshooting compile Arduino (ESP32)
+
+Jika muncul error seperti:
+- `ApiResponse does not name a type`
+- `WiFiClientSecure was not declared in this scope`
+
+Pastikan sketch sudah memuat 2 hal berikut:
+1. `#include <WiFiClientSecure.h>`
+2. deklarasi `struct ApiResponse` **sebelum** fungsi `apiRequest(...)`
+
+Di sketch repo ini (`firmware/esp32-gateway-15-table/esp32-gateway-15-table.ino`) keduanya sudah disiapkan.
+
+### Arduino IDE Preferences (Board Manager URLs)
+
+Jika install board ESP32 gagal dari Arduino IDE, tambahkan URL berikut di:
+`File -> Preferences -> Additional Boards Manager URLs`
+
+```
+https://espressif.github.io/arduino-esp32/package_esp32_index.json
+```
+
+Jika sudah ada URL lain, pisahkan dengan koma, contoh:
+
+```
+https://espressif.github.io/arduino-esp32/package_esp32_index.json,https://downloads.arduino.cc/packages/package_index.json
+```
+
+Setelah itu:
+1. Buka `Tools -> Board -> Boards Manager`
+2. Cari `esp32 by Espressif Systems`
+3. Install versi yang stabil (mis. 3.3.7)
+
+### Contoh koneksi ESP (Arduino) untuk 1 device kontrol banyak meja
+
+Kode siap pakai untuk ESP32 + relay 16 channel + 15 push button tersedia di:
+`firmware/esp32-gateway-15-table/esp32-gateway-15-table.ino`
+
+### Cara mendapatkan `tableId` untuk firmware ESP
+
+Nilai `TABLE_ID_1` s/d `TABLE_ID_15` di firmware harus diisi dengan `id` tabel dari backend (bukan nama meja).
+
+Pilihan paling mudah:
+
+1. **Dari API `GET /api/v1/tables`** (setelah login)
+   - Endpoint mengembalikan data tabel, termasuk field `id` dan `name`.
+   - Cocokkan `name` (mis. `Meja 1`) lalu salin nilai `id` ke mapping firmware.
+
+2. **Dari database MySQL**
+
+```sql
+SELECT id, name FROM tables ORDER BY name ASC;
+```
+
+3. **Dari Prisma Studio**
+   - Jalankan `cd apps/api && npm run prisma:studio`
+   - Buka model `Table`, lalu copy kolom `id`.
+
+Contoh mapping di firmware:
+
+```cpp
+TableConfig TABLES[15] = {
+  {"cm8x...id_meja_1", 0, 0},
+  {"cm8x...id_meja_2", 1, 1},
+  // dst
+};
+```
+
+Urutan pin relay ke ID meja (update: relay dari GPIO ESP32 langsung, push button dari MCP23X17):
+
+| Meja | tableId | Relay Channel | GPIO Relay (ESP32) | Button MCP23X17 |
+|---|---|---:|---:|---:|
+| 1 | `cmlzdgfo60003kqbmjflzka01` | 0 | 13 | 0 |
+| 2 | `cmlzdgfoa0004kqbmdf5pfuuf` | 1 | 14 | 1 |
+| 3 | `cmlzdgfoc0005kqbmf004hwk9` | 2 | 27 | 2 |
+| 4 | `cmlzdgfof0006kqbm5ffnxs0` | 3 | 26 | 3 |
+| 5 | `cmlzdgfoh0007kqbmxtikli5j` | 4 | 25 | 4 |
+| 6 | `cmlzdgfoj0008kqbmu91qjuz` | 5 | 33 | 5 |
+| 7 | `cmlzdgfom0009kqbmtvck1i8g` | 6 | 32 | 6 |
+| 8 | `cmlzdgfoo000akqbm9cmkk8x1` | 7 | 23 | 7 |
+| 9 | `cmlzdgfoq000bkqbmzxb5d33f` | 8 | 22 | 8 |
+| 10 | `cmlzdgfos000ckqbm7xn5lpt9` | 9 | 21 | 9 |
+
+Catatan: channel relay 10-15 masih kosong/spare untuk meja tambahan berikutnya.
+
+Catatan: relay output memakai GPIO ESP32 (`RELAY_GPIO_PINS`), sedangkan tombol manual membaca pin MCP23X17 (`buttonChannel`).
+
+Di mode gateway, ESP melakukan 3 hal berulang:
+1. Heartbeat (`POST /api/v1/iot/devices/heartbeat`)
+2. Pull command (`GET /api/v1/iot/commands/pull?deviceId=...`)
+3. ACK command setelah eksekusi (`POST /api/v1/iot/commands/ack`)
+
+Contoh sketch Arduino (ESP32/ESP8266) sederhana:
+
+```cpp
+#include <Arduino.h>
+#include <WiFi.h>
+#include <HTTPClient.h>
+#include <ArduinoJson.h>
+#include "mbedtls/md.h"
+
+const char* WIFI_SSID = "YOUR_WIFI";
+const char* WIFI_PASS = "YOUR_PASS";
+const char* API_BASE = "http://192.168.1.10:3001/api/v1";
+
+// Dari seed / database
+const char* DEVICE_ID = "cm...";
+const char* DEVICE_TOKEN = "iot-device-1-secret-...";
+const char* HMAC_SECRET = "change-this-iot-secret";
+
+// Mapping meja ke relay pin (sesuaikan wiring)
+struct RelayMap { const char* tableId; int pin; };
+RelayMap relays[] = {
+  {"table-id-1", 23},
+  {"table-id-2", 22},
+  {"table-id-3", 21},
+};
+const int relayCount = sizeof(relays) / sizeof(relays[0]);
+
+String genNonce() {
+  return String((uint32_t)esp_random(), HEX) + String((uint32_t)esp_random(), HEX);
+}
+
+String hmacSha256(const String& message, const char* secret) {
+  byte hmac[32];
+  mbedtls_md_context_t ctx;
+  const mbedtls_md_info_t* info = mbedtls_md_info_from_type(MBEDTLS_MD_SHA256);
+
+  mbedtls_md_init(&ctx);
+  mbedtls_md_setup(&ctx, info, 1);
+  mbedtls_md_hmac_starts(&ctx, (const unsigned char*)secret, strlen(secret));
+  mbedtls_md_hmac_update(&ctx, (const unsigned char*)message.c_str(), message.length());
+  mbedtls_md_hmac_finish(&ctx, hmac);
+  mbedtls_md_free(&ctx);
+
+  char out[65];
+  for (int i = 0; i < 32; i++) sprintf(out + (i * 2), "%02x", hmac[i]);
+  out[64] = 0;
+  return String(out);
+}
+
+int relayPinByTableId(const String& tableId) {
+  for (int i = 0; i < relayCount; i++) {
+    if (tableId == relays[i].tableId) return relays[i].pin;
+  }
+  return -1;
+}
+
+void heartbeat() {
+  HTTPClient http;
+  String path = String(API_BASE) + "/iot/devices/heartbeat";
+  String body = "{\"signalStrength\":-50}";
+
+  String ts = String((long)time(nullptr));
+  String nonce = genNonce();
+  String msg = String(DEVICE_ID) + ":" + ts + ":" + nonce + ":"; // body heartbeat tidak dipakai verify di backend
+  String sig = hmacSha256(msg, HMAC_SECRET);
+
+  http.begin(path);
+  http.addHeader("Content-Type", "application/json");
+  http.addHeader("x-device-id", DEVICE_ID);
+  http.addHeader("x-device-token", DEVICE_TOKEN);
+  http.addHeader("x-timestamp", ts);
+  http.addHeader("x-nonce", nonce);
+  http.addHeader("x-signature", sig);
+  http.POST(body);
+  http.end();
+}
+
+bool ackCommand(const String& commandId, bool success) {
+  HTTPClient http;
+  String path = String(API_BASE) + "/iot/commands/ack";
+
+  StaticJsonDocument<128> doc;
+  doc["commandId"] = commandId;
+  doc["success"] = success;
+  String body;
+  serializeJson(doc, body);
+
+  String ts = String((long)time(nullptr));
+  String nonce = genNonce();
+  String msg = String(DEVICE_ID) + ":" + ts + ":" + nonce + ":" + body;
+  String sig = hmacSha256(msg, HMAC_SECRET);
+
+  http.begin(path);
+  http.addHeader("Content-Type", "application/json");
+  http.addHeader("x-device-id", DEVICE_ID);
+  http.addHeader("x-device-token", DEVICE_TOKEN);
+  http.addHeader("x-timestamp", ts);
+  http.addHeader("x-nonce", nonce);
+  http.addHeader("x-signature", sig);
+  int code = http.POST(body);
+  http.end();
+  return code >= 200 && code < 300;
+}
+
+void pullAndExecute() {
+  HTTPClient http;
+  String path = String(API_BASE) + "/iot/commands/pull?deviceId=" + DEVICE_ID;
+
+  String ts = String((long)time(nullptr));
+  String nonce = genNonce();
+  String msg = String(DEVICE_ID) + ":" + ts + ":" + nonce + ":";
+  String sig = hmacSha256(msg, HMAC_SECRET);
+
+  http.begin(path);
+  http.addHeader("x-device-token", DEVICE_TOKEN);
+  http.addHeader("x-timestamp", ts);
+  http.addHeader("x-nonce", nonce);
+  http.addHeader("x-signature", sig);
+
+  int code = http.GET();
+  if (code < 200 || code >= 300) { http.end(); return; }
+
+  String resp = http.getString();
+  http.end();
+
+  StaticJsonDocument<512> root;
+  if (deserializeJson(root, resp) != DeserializationError::Ok) return;
+  if (root["command"].isNull()) return;
+
+  String commandId = root["command"]["id"].as<String>();
+  String type = root["command"]["type"].as<String>();
+  String tableId = root["command"]["payload"]["tableId"] | "";
+
+  int pin = relayPinByTableId(tableId);
+  bool ok = false;
+
+  if (pin != -1) {
+    if (type == "LIGHT_ON") {
+      digitalWrite(pin, HIGH);
+      ok = true;
+    } else if (type == "LIGHT_OFF") {
+      digitalWrite(pin, LOW);
+      ok = true;
+    } else if (type == "BLINK_3X") {
+      for (int i = 0; i < 3; i++) {
+        digitalWrite(pin, HIGH); delay(200);
+        digitalWrite(pin, LOW);  delay(200);
+      }
+      ok = true;
+    }
+  }
+
+  ackCommand(commandId, ok);
+}
+
+void setup() {
+  Serial.begin(115200);
+
+  for (int i = 0; i < relayCount; i++) {
+    pinMode(relays[i].pin, OUTPUT);
+    digitalWrite(relays[i].pin, LOW);
+  }
+
+  WiFi.begin(WIFI_SSID, WIFI_PASS);
+  while (WiFi.status() != WL_CONNECTED) delay(500);
+
+  configTime(7 * 3600, 0, "pool.ntp.org", "time.nist.gov");
+  while (time(nullptr) < 100000) delay(200);
+}
+
+void loop() {
+  static unsigned long lastHeartbeat = 0;
+  static unsigned long lastPull = 0;
+
+  if (millis() - lastHeartbeat > 30000) {
+    heartbeat();
+    lastHeartbeat = millis();
+  }
+
+  if (millis() - lastPull > 5000) {
+    pullAndExecute();
+    lastPull = millis();
+  }
+}
+```
+
+Catatan penting:
+- Pastikan API env mengisi `IOT_GATEWAY_DEVICE_ID` dengan device ID ESP gateway Anda.
+- ESP harus pakai jam yang akurat (NTP) karena backend memvalidasi `x-timestamp` dalam window tertentu.
+- `x-nonce` wajib unik setiap request agar tidak ditolak sebagai replay attack.
+
 ---
 
 ## Server-side Timer
@@ -321,6 +619,6 @@ npm start
 After `npm run prisma:seed`:
 - 3 users (owner/manager/cashier)
 - 10 billiard tables (Meja 1-10, rate Rp30k-40k/jam)
-- 2 IoT devices (linked to Meja 1 & 2)
+- 1 IoT gateway device (single ESP architecture, token rotated each seed run)
 - 20 menu items across 5 categories
 - 5 operational assets
