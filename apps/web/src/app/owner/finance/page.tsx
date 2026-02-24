@@ -137,7 +137,7 @@ export default function FinancePage() {
           </div>
           <div className="flex items-center gap-2">
             <input type="date" className="input text-sm" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
-            <span className="text-slate-500">s/d</span>
+            <span className="text-slate-400">s/d</span>
             <input type="date" className="input text-sm" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
             <button onClick={fetchReport} className="btn-primary text-sm py-2 px-4" disabled={loading}>
               {loading ? '...' : 'Tampilkan'}
@@ -151,34 +151,34 @@ export default function FinancePage() {
         <>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="card">
-              <p className="text-slate-500 text-sm">Total Pendapatan</p>
-              <p className="text-2xl font-bold text-emerald-600 mt-1">{formatCurrency(report.revenue.total)}</p>
+              <p className="text-slate-400 text-sm">Total Pendapatan</p>
+              <p className="text-2xl font-bold text-green-400 mt-1">{formatCurrency(report.revenue.total)}</p>
             </div>
             <div className="card">
-              <p className="text-slate-500 text-sm">Billiard</p>
+              <p className="text-slate-400 text-sm">Billiard</p>
               <p className="text-2xl font-bold text-blue-400 mt-1">{formatCurrency(report.revenue.billiard)}</p>
             </div>
             <div className="card">
-              <p className="text-slate-500 text-sm">F&B</p>
+              <p className="text-slate-400 text-sm">F&B</p>
               <p className="text-2xl font-bold text-purple-400 mt-1">{formatCurrency(report.revenue.fnb)}</p>
             </div>
             <div className="card">
-              <p className="text-slate-500 text-sm">Pengeluaran</p>
-              <p className="text-2xl font-bold text-red-600 mt-1">{formatCurrency(report.expenses.total)}</p>
+              <p className="text-slate-400 text-sm">Pengeluaran</p>
+              <p className="text-2xl font-bold text-red-400 mt-1">{formatCurrency(report.expenses.total)}</p>
             </div>
           </div>
 
           <div className="card border-green-500/30">
             <div className="flex justify-between items-center">
               <div>
-                <p className="text-slate-500">Profit Bersih</p>
-                <p className={`text-3xl font-bold mt-1 ${parseFloat(report.netProfit) >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                <p className="text-slate-400">Profit Bersih</p>
+                <p className={`text-3xl font-bold mt-1 ${parseFloat(report.netProfit) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
                   {formatCurrency(report.netProfit)}
                 </p>
               </div>
               <div className="text-right">
                 {report.paymentMethods.map((p: any) => (
-                  <div key={p.method} className="text-sm text-slate-500">
+                  <div key={p.method} className="text-sm text-slate-400">
                     {p.method}: {formatCurrency(p.total)} ({p.count}x)
                   </div>
                 ))}
@@ -204,7 +204,7 @@ export default function FinancePage() {
                       <tr key={t.tableId}>
                         <td className="font-medium">{t.tableName}</td>
                         <td>{t.sessions} sesi</td>
-                        <td className="font-bold text-emerald-600">{formatCurrency(t.revenue)}</td>
+                        <td className="font-bold text-green-400">{formatCurrency(t.revenue)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -232,10 +232,10 @@ export default function FinancePage() {
                     {expenses.map((e: any) => (
                       <tr key={e.id}>
                         <td>{formatDateShort(e.date)}</td>
-                        <td><span className="badge bg-slate-100 text-slate-700">{e.category}</span></td>
-                        <td className="font-medium text-red-600">{formatCurrency(e.amount)}</td>
-                        <td className="text-slate-500 text-sm">{e.notes || '-'}</td>
-                        <td className="text-slate-500 text-sm">{e.createdBy?.name}</td>
+                        <td><span className="badge bg-slate-700 text-slate-300">{e.category}</span></td>
+                        <td className="font-medium text-red-400">{formatCurrency(e.amount)}</td>
+                        <td className="text-slate-400 text-sm">{e.notes || '-'}</td>
+                        <td className="text-slate-400 text-sm">{e.createdBy?.name}</td>
                       </tr>
                     ))}
                   </tbody>
