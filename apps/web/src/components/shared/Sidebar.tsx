@@ -37,6 +37,7 @@ const navByRole: Record<string, NavItem[]> = {
   MANAGER: [
     { label: 'Dashboard', href: '/manager/dashboard', icon: <HomeIcon /> },
     { label: 'Manajemen Menu', href: '/manager/menu', icon: <MenuIcon /> },
+    { label: 'Manajemen Kategori', href: '/manager/menu-categories', icon: <TagIcon /> },
     { label: 'Stok Operasional', href: '/manager/stock', icon: <BoxIcon /> },
     { label: 'Pengeluaran', href: '/manager/expenses', icon: <WalletIcon /> },
   ],
@@ -130,6 +131,9 @@ function MenuIcon() {
 }
 function BoxIcon() {
   return <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg>;
+}
+function TagIcon() {
+  return <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h7l5 5-7 7-5-5V7z" /><circle cx="10" cy="10" r="1.5" /></svg>;
 }
 function WalletIcon() {
   return <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" /></svg>;

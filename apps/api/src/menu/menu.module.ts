@@ -1,13 +1,9 @@
-import { Injectable, NotFoundException, ConflictException, ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 import { Module } from '@nestjs/common';
 import { Controller, Get, Post, Patch, Param, Body, UseGuards, Query } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
-import {
-  IsString, IsNumber, IsBoolean, IsOptional, Min,
-  IsArray, ValidateNested,
-} from 'class-validator';
-import { Type } from 'class-transformer';
+import { IsString, IsNumber, IsBoolean, IsOptional, Min } from 'class-validator';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { AuditService } from '../common/audit/audit.service';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -15,10 +11,21 @@ import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { AuditAction } from '@prisma/client';
 
-export class CreateMenuItemDto {
-  @IsString() sku: string;
+export class CreateMenuCategoryDto {
   @IsString() name: string;
-  @IsString() category: string;
+  @IsString() skuPrefix: string;
+}
+
+export class UpdateMenuCategoryDto {
+  @IsOptional() @IsString() name?: string;
+  @IsOptional() @IsString() skuPrefix?: string;
+}
+
+export class CreateMenuItemDto {
+  @IsOptional() @IsString() sku?: string;
+  @IsString() name: string;
+  @IsOptional() @IsString() category?: string;
+  @IsOptional() @IsString() categoryId?: string;
   @IsNumber() @Min(0) price: number;
   @IsOptional() @IsNumber() cost?: number;
   @IsOptional() @IsBoolean() taxFlag?: boolean;
@@ -31,6 +38,7 @@ export class CreateMenuItemDto {
 export class UpdateMenuItemDto {
   @IsOptional() @IsString() name?: string;
   @IsOptional() @IsString() category?: string;
+  @IsOptional() @IsString() categoryId?: string;
   @IsOptional() @IsNumber() @Min(0) price?: number;
   @IsOptional() @IsNumber() cost?: number;
   @IsOptional() @IsBoolean() taxFlag?: boolean;
@@ -81,23 +89,96 @@ export class MenuService {
   }
 
   async getCategories() {
-    const items = await this.prisma.menuItem.findMany({
-      select: { category: true },
-      distinct: ['category'],
-      where: { isActive: true },
+    return this.prisma.menuCategory.findMany({
+      orderBy: { name: 'asc' },
     });
-    return items.map((i) => i.category);
+  }
+
+  async createCategory(dto: CreateMenuCategoryDto, userId: string) {
+    const payload = {
+      name: dto.name.trim(),
+      skuPrefix: dto.skuPrefix.trim().toUpperCase(),
+    };
+
+    const category = await this.prisma.menuCategory.create({ data: payload });
+    await this.audit.log({
+      userId,
+      action: AuditAction.CREATE,
+      entity: 'MenuCategory',
+      entityId: category.id,
+      afterData: payload,
+    });
+    return category;
+  }
+
+  async updateCategory(id: string, dto: UpdateMenuCategoryDto, userId: string) {
+    const existing = await this.prisma.menuCategory.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('Kategori tidak ditemukan');
+
+    const payload = {
+      name: dto.name?.trim(),
+      skuPrefix: dto.skuPrefix?.trim().toUpperCase(),
+    };
+
+    const category = await this.prisma.menuCategory.update({
+      where: { id },
+      data: payload,
+    });
+
+    await this.audit.log({
+      userId,
+      action: AuditAction.UPDATE,
+      entity: 'MenuCategory',
+      entityId: id,
+      beforeData: existing,
+      afterData: payload,
+    });
+    return category;
+  }
+
+  private buildSku(prefix: string, number: number) {
+    return `${prefix}-${number.toString().padStart(3, '0')}`;
+  }
+
+  async getNextSku(categoryId: string) {
+    const category = await this.prisma.menuCategory.findUnique({ where: { id: categoryId } });
+    if (!category) throw new NotFoundException('Kategori tidak ditemukan');
+    return { sku: this.buildSku(category.skuPrefix, category.lastSkuNumber + 1) };
+  }
+
+  private async resolveCategory(categoryId?: string, categoryName?: string) {
+    if (categoryId) {
+      const category = await this.prisma.menuCategory.findUnique({ where: { id: categoryId } });
+      if (!category) throw new NotFoundException('Kategori tidak ditemukan');
+      return category;
+    }
+    if (categoryName) {
+      const category = await this.prisma.menuCategory.findUnique({ where: { name: categoryName } });
+      if (category) return category;
+    }
+    throw new BadRequestException('Kategori wajib dipilih dari Manajemen Kategori');
   }
 
   async create(dto: CreateMenuItemDto, userId: string) {
-    const existing = await this.prisma.menuItem.findUnique({ where: { sku: dto.sku } });
+    const category = await this.resolveCategory(dto.categoryId, dto.category);
+
+    let sku = dto.sku?.trim().toUpperCase();
+    if (!sku) {
+      const next = await this.prisma.menuCategory.update({
+        where: { id: category.id },
+        data: { lastSkuNumber: { increment: 1 } },
+      });
+      sku = this.buildSku(next.skuPrefix, next.lastSkuNumber);
+    }
+
+    const existing = await this.prisma.menuItem.findUnique({ where: { sku } });
     if (existing) throw new ConflictException('SKU already exists');
 
     const item = await this.prisma.menuItem.create({
       data: {
-        sku: dto.sku,
+        sku,
         name: dto.name,
-        category: dto.category,
+        category: category.name,
         price: dto.price,
         cost: dto.cost,
         taxFlag: dto.taxFlag || false,
@@ -107,7 +188,6 @@ export class MenuService {
       },
     });
 
-    // Create stock record
     await this.prisma.stockFnb.create({
       data: {
         menuItemId: item.id,
@@ -131,9 +211,16 @@ export class MenuService {
     const existing = await this.prisma.menuItem.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('Menu item not found');
 
+    let categoryName = dto.category;
+    if (dto.categoryId) {
+      const category = await this.resolveCategory(dto.categoryId);
+      categoryName = category.name;
+    }
+
+    const { categoryId, ...restDto } = dto;
     const updated = await this.prisma.menuItem.update({
       where: { id },
-      data: { ...dto, changedById: userId },
+      data: { ...restDto, category: categoryName, changedById: userId },
     });
 
     await this.audit.log({
@@ -179,6 +266,24 @@ export class MenuController {
   @Get('categories')
   getCategories() {
     return this.menuService.getCategories();
+  }
+
+  @Get('categories/:id/next-sku')
+  @Roles('OWNER' as any, 'MANAGER' as any)
+  getNextSku(@Param('id') id: string) {
+    return this.menuService.getNextSku(id);
+  }
+
+  @Post('categories')
+  @Roles('OWNER' as any, 'MANAGER' as any)
+  createCategory(@Body() dto: CreateMenuCategoryDto, @CurrentUser() user: any) {
+    return this.menuService.createCategory(dto, user.id);
+  }
+
+  @Patch('categories/:id')
+  @Roles('OWNER' as any, 'MANAGER' as any)
+  updateCategory(@Param('id') id: string, @Body() dto: UpdateMenuCategoryDto, @CurrentUser() user: any) {
+    return this.menuService.updateCategory(id, dto, user.id);
   }
 
   @Get(':id')

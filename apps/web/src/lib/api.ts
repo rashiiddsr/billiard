@@ -84,6 +84,9 @@ export const menuApi = {
   list: (params?: any) => api.get('/menu', { params }).then((r) => r.data),
   get: (id: string) => api.get(`/menu/${id}`).then((r) => r.data),
   categories: () => api.get('/menu/categories').then((r) => r.data),
+  getNextSku: (categoryId: string) => api.get(`/menu/categories/${categoryId}/next-sku`).then((r) => r.data),
+  createCategory: (data: any) => api.post('/menu/categories', data).then((r) => r.data),
+  updateCategory: (id: string, data: any) => api.patch(`/menu/categories/${id}`, data).then((r) => r.data),
   create: (data: any) => api.post('/menu', data).then((r) => r.data),
   update: (id: string, data: any) => api.patch(`/menu/${id}`, data).then((r) => r.data),
 };
@@ -115,6 +118,7 @@ export const financeApi = {
     api.get('/finance/report/daily', { params: { date } }).then((r) => r.data),
   createExpense: (data: any) => api.post('/finance/expenses', data).then((r) => r.data),
   listExpenses: (params?: any) => api.get('/finance/expenses', { params }).then((r) => r.data),
+  expenseCategories: () => api.get('/finance/expenses/categories').then((r) => r.data),
 };
 
 // ─── Stock ───────────────────────────────────────────────────────────────────
