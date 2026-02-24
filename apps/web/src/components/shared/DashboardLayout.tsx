@@ -1,13 +1,24 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
 import Sidebar from '@/components/shared/Sidebar';
+import toast from 'react-hot-toast';
+
+const roleGreeting: Record<string, string> = {
+  OWNER: 'Ringkasan performa bisnis hari ini',
+  MANAGER: 'Pantau operasional dan menu secara real-time',
+  CASHIER: 'Semua kebutuhan transaksi ada di sini',
+};
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth();
+  const { user, loading, logout } = useAuth();
   const router = useRouter();
+  const [collapsed, setCollapsed] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [notifOpen, setNotifOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -15,10 +26,25 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     }
   }, [user, loading, router]);
 
+  const notifications = useMemo(
+    () => [
+      { id: 1, title: 'Pendapatan harian diperbarui', time: 'Baru saja' },
+      { id: 2, title: '2 meja akan habis dalam 15 menit', time: '5 menit lalu' },
+      { id: 3, title: 'Reminder stok minuman mendekati batas minimum', time: '12 menit lalu' },
+    ],
+    [],
+  );
+
+  const handleLogout = async () => {
+    await logout();
+    toast.success('Berhasil keluar');
+    router.push('/login');
+  };
+
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-950">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-cyan-400 border-t-transparent" />
+      <div className="flex min-h-screen items-center justify-center bg-sky-50">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-sky-500 border-t-transparent" />
       </div>
     );
   }
@@ -26,13 +52,95 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   if (!user) return null;
 
   return (
-    <div className="relative flex min-h-screen bg-slate-950">
-      <div className="pointer-events-none absolute inset-0">
-        <div className="absolute left-20 top-10 h-64 w-64 rounded-full bg-blue-500/10 blur-3xl" />
-        <div className="absolute bottom-0 right-20 h-72 w-72 rounded-full bg-cyan-500/10 blur-3xl" />
+    <div className="flex min-h-screen bg-gradient-to-br from-sky-50 via-blue-50 to-violet-100 text-slate-800">
+      <Sidebar collapsed={collapsed} mobileOpen={mobileOpen} onClose={() => setMobileOpen(false)} />
+      <div className={`flex min-h-screen flex-1 flex-col transition-all ${collapsed ? 'md:ml-24' : 'md:ml-72'}`}>
+        <header className="sticky top-0 z-30 border-b border-white/70 bg-white/85 backdrop-blur-xl">
+          <div className="flex items-center justify-between px-4 py-3 md:px-6">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => (window.innerWidth >= 768 ? setCollapsed((v) => !v) : setMobileOpen(true))}
+                className="rounded-xl border border-slate-200 bg-white p-2 text-slate-600 shadow-sm transition hover:bg-slate-50"
+                aria-label="Toggle sidebar"
+              >
+                <HamburgerIcon />
+              </button>
+              <div>
+                <p className="text-sm font-semibold text-blue-700">Selamat datang, {user.name.split(' ')[0]} 👋</p>
+                <p className="text-xs text-slate-500">{roleGreeting[user.role] || 'Dashboard operasional billiard'}</p>
+              </div>
+            </div>
+
+            <div className="relative flex items-center gap-2">
+              <div className="relative">
+                <button
+                  onClick={() => {
+                    setNotifOpen((v) => !v);
+                    setProfileOpen(false);
+                  }}
+                  className="rounded-xl border border-slate-200 bg-white p-2 text-slate-600 shadow-sm hover:bg-slate-50"
+                >
+                  <BellIcon />
+                </button>
+                {notifOpen && (
+                  <div className="absolute right-0 mt-2 w-80 rounded-2xl border border-slate-200 bg-white p-3 shadow-xl">
+                    <p className="mb-2 text-sm font-semibold text-slate-700">Notifikasi</p>
+                    <div className="space-y-2">
+                      {notifications.map((item) => (
+                        <div key={item.id} className="rounded-xl bg-slate-50 p-2">
+                          <p className="text-sm text-slate-700">{item.title}</p>
+                          <p className="text-xs text-slate-400">{item.time}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="relative">
+                <button
+                  onClick={() => {
+                    setProfileOpen((v) => !v);
+                    setNotifOpen(false);
+                  }}
+                  className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm hover:bg-slate-50"
+                >
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-blue-600 to-cyan-500 text-xs font-bold text-white">
+                    {user.name?.slice(0, 2).toUpperCase()}
+                  </div>
+                  <div className="hidden text-left md:block">
+                    <p className="text-sm font-semibold leading-none">{user.name}</p>
+                    <p className="text-xs text-slate-500">{user.role}</p>
+                  </div>
+                  <ChevronDownIcon />
+                </button>
+                {profileOpen && (
+                  <div className="absolute right-0 mt-2 w-72 rounded-2xl border border-slate-200 bg-white p-3 shadow-xl">
+                    <p className="text-sm font-semibold text-slate-800">{user.name}</p>
+                    <p className="mb-3 text-xs text-slate-500">{user.email}</p>
+                    <button onClick={handleLogout} className="w-full rounded-xl bg-red-50 px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-100">
+                      Keluar
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </header>
+        <main className="flex-1 overflow-auto px-2 py-4 md:px-6">{children}</main>
       </div>
-      <Sidebar />
-      <main className="relative z-10 flex-1 overflow-auto">{children}</main>
     </div>
   );
+}
+
+function HamburgerIcon() {
+  return <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>;
+}
+
+function BellIcon() {
+  return <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.4-1.4A2 2 0 0118 14.2V11a6 6 0 10-12 0v3.2c0 .53-.21 1.04-.59 1.41L4 17h5m6 0a3 3 0 11-6 0m6 0H9" /></svg>;
+}
+
+function ChevronDownIcon() {
+  return <svg className="h-4 w-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>;
 }
