@@ -61,6 +61,27 @@
   table.data-table tr:hover td {
     @apply bg-slate-800/40;
   }
+
+  .filter-bar {
+    @apply card flex flex-wrap items-center gap-3 p-3;
+  }
+
+  .toggle-switch {
+    @apply relative inline-flex h-6 w-11 items-center rounded-full bg-slate-700 transition-colors duration-200;
+  }
+
+  .toggle-switch.active {
+    @apply bg-emerald-500;
+  }
+
+  .toggle-switch::after {
+    content: '';
+    @apply absolute left-0.5 h-5 w-5 rounded-full bg-slate-950 transition-transform duration-200;
+  }
+
+  .toggle-switch.active::after {
+    @apply translate-x-5;
+  }
 }
 
 ::-webkit-scrollbar { width: 6px; height: 6px; }

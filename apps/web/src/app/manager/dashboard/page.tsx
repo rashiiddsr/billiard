@@ -95,6 +95,7 @@ export default function ManagerDashboard() {
       <div className="grid grid-cols-3 gap-4">
         {[
           { label: 'Manajemen Menu', href: '/manager/menu', icon: '🍽', desc: 'Kelola item F&B' },
+          { label: 'Manajemen Kategori', href: '/manager/menu-categories', icon: '🏷️', desc: 'Kelola kategori & SKU' },
           { label: 'Stok Operasional', href: '/manager/stock', icon: '📦', desc: 'Kondisi aset billiard' },
           { label: 'Pengeluaran', href: '/manager/expenses', icon: '💸', desc: 'Catat pengeluaran' },
         ].map((item) => (

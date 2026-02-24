@@ -1,9 +1,9 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, BadRequestException } from '@nestjs/common';
 import { Module } from '@nestjs/common';
 import { Controller, Get, Post, Patch, Param, Body, UseGuards, Query } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
-import { IsString, IsNumber, IsOptional, IsDateString, Min } from 'class-validator';
+import { IsString, IsNumber, IsOptional, IsDateString, Min, IsIn } from 'class-validator';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { AuditService } from '../common/audit/audit.service';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -12,8 +12,10 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { AuditAction } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
 
+export const EXPENSE_CATEGORIES = ['Operasional', 'Gaji', 'Listrik', 'Air', 'Perlengkapan', 'Perawatan', 'Lainnya'] as const;
+
 export class CreateExpenseDto {
-  @IsString() category: string;
+  @IsString() @IsIn(EXPENSE_CATEGORIES as unknown as string[]) category: string;
   @IsDateString() date: string;
   @IsNumber() @Min(0) amount: number;
   @IsOptional() @IsString() notes?: string;
@@ -125,6 +127,10 @@ export class FinanceService {
   }
 
   async createExpense(dto: CreateExpenseDto, userId: string) {
+    if (dto.category === 'Lainnya' && !dto.notes?.trim()) {
+      throw new BadRequestException('Catatan wajib diisi untuk kategori Lainnya');
+    }
+
     const expense = await this.prisma.expense.create({
       data: {
         category: dto.category,
@@ -181,11 +187,7 @@ export class FinanceService {
   }
 
   async getExpenseCategories() {
-    const items = await this.prisma.expense.findMany({
-      select: { category: true },
-      distinct: ['category'],
-    });
-    return items.map((i) => i.category);
+    return [...EXPENSE_CATEGORIES];
   }
 }
 

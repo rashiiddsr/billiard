@@ -1,13 +1,13 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { menuApi, stockApi } from '@/lib/api';
+import { menuApi } from '@/lib/api';
 import { formatCurrency } from '@/lib/utils';
 import toast from 'react-hot-toast';
 
 export default function MenuManagementPage() {
   const [items, setItems] = useState<any[]>([]);
-  const [categories, setCategories] = useState<string[]>([]);
+  const [categories, setCategories] = useState<any[]>([]);
   const [filterCat, setFilterCat] = useState('');
   const [search, setSearch] = useState('');
   const [filterActive, setFilterActive] = useState<boolean | undefined>(undefined);
@@ -16,15 +16,13 @@ export default function MenuManagementPage() {
   const [editItem, setEditItem] = useState<any>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  // Form
   const [sku, setSku] = useState('');
   const [name, setName] = useState('');
-  const [category, setCategory] = useState('');
+  const [categoryId, setCategoryId] = useState('');
   const [price, setPrice] = useState('');
   const [cost, setCost] = useState('');
   const [taxFlag, setTaxFlag] = useState(false);
   const [description, setDescription] = useState('');
-  const [isActive, setIsActive] = useState(true);
   const [initStock, setInitStock] = useState('0');
   const [stockThreshold, setStockThreshold] = useState('5');
 
@@ -36,8 +34,8 @@ export default function MenuManagementPage() {
         menuApi.categories(),
       ]);
       setItems(menuData.data || []);
-      setCategories(catData);
-    } catch (e) {
+      setCategories(catData || []);
+    } catch {
       toast.error('Gagal memuat menu');
     } finally {
       setLoading(false);
@@ -48,35 +46,48 @@ export default function MenuManagementPage() {
 
   const openCreate = () => {
     setEditItem(null);
-    setSku(''); setName(''); setCategory(''); setPrice(''); setCost('');
-    setTaxFlag(false); setDescription(''); setIsActive(true);
+    setSku(''); setName(''); setCategoryId(''); setPrice(''); setCost('');
+    setTaxFlag(false); setDescription('');
     setInitStock('50'); setStockThreshold('5');
     setShowForm(true);
   };
 
   const openEdit = (item: any) => {
+    const foundCategory = categories.find((c) => c.name === item.category);
     setEditItem(item);
-    setSku(item.sku); setName(item.name); setCategory(item.category);
+    setSku(item.sku); setName(item.name); setCategoryId(foundCategory?.id || '');
     setPrice(item.price); setCost(item.cost || ''); setTaxFlag(item.taxFlag);
-    setDescription(item.description || ''); setIsActive(item.isActive);
+    setDescription(item.description || '');
     setInitStock(''); setStockThreshold(item.stock?.lowStockThreshold?.toString() || '5');
     setShowForm(true);
   };
 
+  const onSelectCategory = async (nextCategoryId: string) => {
+    setCategoryId(nextCategoryId);
+    if (editItem || !nextCategoryId) return;
+    try {
+      const nextSku = await menuApi.getNextSku(nextCategoryId);
+      setSku(nextSku.sku);
+    } catch {
+      toast.error('Gagal generate SKU');
+    }
+  };
+
   const submit = async () => {
-    if (!sku || !name || !category || !price) {
-      toast.error('SKU, nama, kategori, dan harga wajib diisi');
+    if (!name || !categoryId || !price) {
+      toast.error('Kategori, nama, dan harga wajib diisi');
       return;
     }
     setSubmitting(true);
     try {
       const data = {
-        sku, name, category,
+        sku: editItem ? undefined : sku,
+        name,
+        categoryId,
         price: parseFloat(price),
         cost: cost ? parseFloat(cost) : undefined,
         taxFlag,
         description: description || undefined,
-        isActive,
         initialStock: initStock ? parseInt(initStock) : undefined,
         lowStockThreshold: stockThreshold ? parseInt(stockThreshold) : 5,
       };
@@ -102,7 +113,7 @@ export default function MenuManagementPage() {
       await menuApi.update(item.id, { isActive: !item.isActive });
       toast.success(`${item.name} ${!item.isActive ? 'diaktifkan' : 'dinonaktifkan'}`);
       fetchData();
-    } catch (e) {
+    } catch {
       toast.error('Gagal');
     }
   };
@@ -114,24 +125,13 @@ export default function MenuManagementPage() {
         <button onClick={openCreate} className="btn-primary">+ Tambah Item</button>
       </div>
 
-      {/* Filters */}
-      <div className="flex gap-3 flex-wrap">
-        <input
-          className="input flex-1 min-w-48"
-          placeholder="Cari nama/SKU..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && fetchData()}
-        />
-        <select className="input w-40" value={filterCat} onChange={(e) => setFilterCat(e.target.value)}>
+      <div className="filter-bar">
+        <input className="input flex-1 min-w-48" placeholder="Cari nama/SKU..." value={search} onChange={(e) => setSearch(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && fetchData()} />
+        <select className="input w-44" value={filterCat} onChange={(e) => setFilterCat(e.target.value)}>
           <option value="">Semua Kategori</option>
-          {categories.map((c) => <option key={c} value={c}>{c}</option>)}
+          {categories.map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
         </select>
-        <select
-          className="input w-40"
-          value={filterActive === undefined ? '' : filterActive.toString()}
-          onChange={(e) => setFilterActive(e.target.value === '' ? undefined : e.target.value === 'true')}
-        >
+        <select className="input w-40" value={filterActive === undefined ? '' : filterActive.toString()} onChange={(e) => setFilterActive(e.target.value === '' ? undefined : e.target.value === 'true')}>
           <option value="">Semua Status</option>
           <option value="true">Aktif</option>
           <option value="false">Nonaktif</option>
@@ -139,7 +139,6 @@ export default function MenuManagementPage() {
         <button onClick={fetchData} className="btn-secondary">Filter</button>
       </div>
 
-      {/* Form Modal */}
       {showForm && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
           <div className="bg-slate-800 border border-slate-700 rounded-xl w-full max-w-lg max-h-screen overflow-y-auto">
@@ -150,8 +149,8 @@ export default function MenuManagementPage() {
             <div className="p-4 space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="label">SKU *</label>
-                  <input className="input" value={sku} onChange={(e) => setSku(e.target.value)} disabled={!!editItem} placeholder="BEV-001" />
+                  <label className="label">SKU</label>
+                  <input className="input" value={sku} disabled placeholder="Pilih kategori" />
                 </div>
                 <div>
                   <label className="label">Nama *</label>
@@ -159,10 +158,10 @@ export default function MenuManagementPage() {
                 </div>
                 <div>
                   <label className="label">Kategori *</label>
-                  <input className="input" value={category} onChange={(e) => setCategory(e.target.value)} placeholder="Minuman" list="categories" />
-                  <datalist id="categories">
-                    {categories.map((c) => <option key={c} value={c} />)}
-                  </datalist>
+                  <select className="input" value={categoryId} onChange={(e) => onSelectCategory(e.target.value)}>
+                    <option value="">Pilih kategori</option>
+                    {categories.map((c) => <option key={c.id} value={c.id}>{c.name} ({c.skuPrefix})</option>)}
+                  </select>
                 </div>
                 <div>
                   <label className="label">Harga (Rp) *</label>
@@ -187,90 +186,42 @@ export default function MenuManagementPage() {
                 <label className="label">Deskripsi</label>
                 <textarea className="input resize-none" rows={2} value={description} onChange={(e) => setDescription(e.target.value)} />
               </div>
-              <div className="flex items-center gap-6">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" checked={taxFlag} onChange={(e) => setTaxFlag(e.target.checked)} />
-                  <span className="text-sm">Kena Pajak (11%)</span>
-                </label>
-                {editItem && (
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} />
-                    <span className="text-sm">Aktif</span>
-                  </label>
-                )}
+              <div className="flex items-center gap-2">
+                <button type="button" onClick={() => setTaxFlag(!taxFlag)} className={`toggle-switch ${taxFlag ? 'active' : ''}`} />
+                <span className="text-sm">Kena Pajak (11%)</span>
               </div>
               <div className="flex gap-2 pt-2">
                 <button onClick={() => setShowForm(false)} className="btn-secondary flex-1">Batal</button>
-                <button onClick={submit} className="btn-primary flex-1" disabled={submitting}>
-                  {submitting ? 'Menyimpan...' : 'Simpan'}
-                </button>
+                <button onClick={submit} className="btn-primary flex-1" disabled={submitting}>{submitting ? 'Menyimpan...' : 'Simpan'}</button>
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Items Table */}
       <div className="card p-0 overflow-hidden">
         <div className="table-wrapper">
           <table className="data-table">
-            <thead>
-              <tr>
-                <th>SKU</th>
-                <th>Nama</th>
-                <th>Kategori</th>
-                <th>Harga</th>
-                <th>HPP</th>
-                <th>Stok</th>
-                <th>Pajak</th>
-                <th>Status</th>
-                <th>Aksi</th>
-              </tr>
-            </thead>
+            <thead><tr><th>SKU</th><th>Nama</th><th>Kategori</th><th>Harga</th><th>HPP</th><th>Stok</th><th>Pajak</th><th>Status</th><th>Aksi</th></tr></thead>
             <tbody>
-              {loading ? (
-                <tr><td colSpan={9} className="text-center py-8 text-slate-400">Memuat...</td></tr>
-              ) : items.length === 0 ? (
-                <tr><td colSpan={9} className="text-center py-8 text-slate-400">Tidak ada item</td></tr>
-              ) : (
-                items.map((item) => {
-                  const stockLow = item.stock?.trackStock && item.stock?.qtyOnHand <= item.stock?.lowStockThreshold;
-                  return (
-                    <tr key={item.id}>
-                      <td className="font-mono text-xs text-slate-400">{item.sku}</td>
-                      <td className="font-medium">{item.name}</td>
-                      <td><span className="badge bg-slate-700 text-slate-300">{item.category}</span></td>
-                      <td className="font-medium">{formatCurrency(item.price)}</td>
-                      <td className="text-slate-400">{item.cost ? formatCurrency(item.cost) : '-'}</td>
-                      <td>
-                        <span className={`font-medium ${stockLow ? 'text-red-400' : 'text-slate-300'}`}>
-                          {item.stock?.qtyOnHand ?? '-'}
-                        </span>
-                        {stockLow && <span className="text-xs text-red-400 ml-1">⚠</span>}
-                      </td>
-                      <td>{item.taxFlag ? <span className="badge bg-yellow-500/20 text-yellow-300">11%</span> : '-'}</td>
-                      <td>
-                        <span className={`badge ${item.isActive ? 'bg-green-500/20 text-green-300' : 'bg-slate-600 text-slate-400'}`}>
-                          {item.isActive ? 'Aktif' : 'Nonaktif'}
-                        </span>
-                      </td>
-                      <td>
-                        <div className="flex gap-2">
-                          <button onClick={() => openEdit(item)} className="text-xs px-2 py-1 bg-slate-700 hover:bg-slate-600 rounded">
-                            Edit
-                          </button>
-                          <button
-                            onClick={() => toggleActive(item)}
-                            className={`text-xs px-2 py-1 rounded ${item.isActive ? 'bg-red-600/20 text-red-400 hover:bg-red-600/40' : 'bg-green-600/20 text-green-400 hover:bg-green-600/40'}`}
-                          >
-                            {item.isActive ? 'Off' : 'On'}
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
+              {loading ? <tr><td colSpan={9} className="text-center py-8 text-slate-400">Memuat...</td></tr> : items.length === 0 ? <tr><td colSpan={9} className="text-center py-8 text-slate-400">Tidak ada item</td></tr> : items.map((item) => {
+                const stockLow = item.stock?.trackStock && item.stock?.qtyOnHand <= item.stock?.lowStockThreshold;
+                return (
+                  <tr key={item.id}>
+                    <td className="font-mono text-xs text-slate-400">{item.sku}</td><td className="font-medium">{item.name}</td><td><span className="badge bg-slate-700 text-slate-300">{item.category}</span></td>
+                    <td className="font-medium">{formatCurrency(item.price)}</td><td className="text-slate-400">{item.cost ? formatCurrency(item.cost) : '-'}</td>
+                    <td><span className={`font-medium ${stockLow ? 'text-red-400' : 'text-slate-300'}`}>{item.stock?.qtyOnHand ?? '-'}</span>{stockLow && <span className="text-xs text-red-400 ml-1">⚠</span>}</td>
+                    <td>{item.taxFlag ? <span className="badge bg-yellow-500/20 text-yellow-300">11%</span> : '-'}</td>
+                    <td>
+                      <div className="flex items-center gap-2">
+                        <button type="button" onClick={() => toggleActive(item)} className={`toggle-switch ${item.isActive ? 'active' : ''}`} />
+                        <span className="text-xs text-slate-300">{item.isActive ? 'Aktif' : 'Nonaktif'}</span>
+                      </div>
+                    </td>
+                    <td><button onClick={() => openEdit(item)} className="text-xs px-2 py-1 bg-slate-700 hover:bg-slate-600 rounded">Edit</button></td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

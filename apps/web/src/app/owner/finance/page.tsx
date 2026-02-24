@@ -12,6 +12,7 @@ export default function FinancePage() {
   const [report, setReport] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [expenses, setExpenses] = useState<any[]>([]);
+  const [expenseCategories, setExpenseCategories] = useState<string[]>([]);
 
   // Expense form
   const [showExpenseForm, setShowExpenseForm] = useState(false);
@@ -37,7 +38,10 @@ export default function FinancePage() {
     }
   };
 
-  useEffect(() => { fetchReport(); }, []);
+  useEffect(() => {
+    fetchReport();
+    financeApi.expenseCategories().then(setExpenseCategories).catch(() => undefined);
+  }, []);
 
   const setPreset = (preset: string) => {
     const now = new Date();
@@ -59,6 +63,7 @@ export default function FinancePage() {
 
   const submitExpense = async () => {
     if (!expCategory || !expAmount) { toast.error('Isi kategori dan jumlah'); return; }
+    if (expCategory === 'Lainnya' && !expNotes.trim()) { toast.error('Catatan wajib untuk kategori Lainnya'); return; }
     setSubmitting(true);
     try {
       await financeApi.createExpense({
@@ -96,7 +101,7 @@ export default function FinancePage() {
           <div className="grid grid-cols-2 gap-4 mb-4">
             <div>
               <label className="label">Kategori</label>
-              <input className="input" placeholder="Operasional, Gaji, dll" value={expCategory} onChange={(e) => setExpCategory(e.target.value)} />
+              <select className="input" value={expCategory} onChange={(e) => setExpCategory(e.target.value)}><option value="">Pilih kategori</option>{expenseCategories.map((c) => <option key={c} value={c}>{c}</option>)}</select>
             </div>
             <div>
               <label className="label">Tanggal</label>
@@ -107,7 +112,7 @@ export default function FinancePage() {
               <input type="number" className="input" placeholder="0" value={expAmount} onChange={(e) => setExpAmount(e.target.value)} />
             </div>
             <div>
-              <label className="label">Catatan</label>
+              <label className="label">Catatan {expCategory === 'Lainnya' ? '*' : ''}</label>
               <input className="input" placeholder="Keterangan..." value={expNotes} onChange={(e) => setExpNotes(e.target.value)} />
             </div>
           </div>
@@ -121,7 +126,7 @@ export default function FinancePage() {
       )}
 
       {/* Date Filter */}
-      <div className="card">
+      <div className="filter-bar">
         <div className="flex items-center gap-4 flex-wrap">
           <div className="flex gap-2">
             {['today', 'week', 'month'].map((p) => (

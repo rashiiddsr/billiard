@@ -215,6 +215,17 @@ model MenuItem {
   @@map("menu_items")
 }
 
+model MenuCategory {
+  id            String   @id @default(cuid())
+  name          String   @unique
+  skuPrefix     String   @unique
+  lastSkuNumber Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("menu_categories")
+}
+
 model Modifier {
   id         String   @id @default(cuid())
   menuItemId String
