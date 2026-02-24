@@ -84,9 +84,9 @@ export default function UsersPage() {
   };
 
   const roleColor: Record<Role, string> = {
-    OWNER: 'bg-amber-100 text-amber-700',
-    MANAGER: 'bg-blue-100 text-blue-700',
-    CASHIER: 'bg-emerald-100 text-emerald-700',
+    OWNER: 'bg-yellow-500/20 text-yellow-300',
+    MANAGER: 'bg-blue-500/20 text-blue-300',
+    CASHIER: 'bg-green-500/20 text-green-300',
   };
 
   return (
@@ -99,10 +99,10 @@ export default function UsersPage() {
       {/* Form Modal */}
       {showForm && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-white border border-slate-200 rounded-xl w-full max-w-md">
-            <div className="flex items-center justify-between p-4 border-b border-slate-200">
+          <div className="bg-slate-800 border border-slate-700 rounded-xl w-full max-w-md">
+            <div className="flex items-center justify-between p-4 border-b border-slate-700">
               <h3 className="font-semibold">{editUser ? 'Edit User' : 'Tambah User Baru'}</h3>
-              <button onClick={() => setShowForm(false)} className="text-slate-500 hover:text-slate-700">✕</button>
+              <button onClick={() => setShowForm(false)} className="text-slate-400 hover:text-white">✕</button>
             </div>
             <div className="p-4 space-y-4">
               <div>
@@ -164,29 +164,29 @@ export default function UsersPage() {
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={6} className="text-center py-8 text-slate-500">Memuat...</td></tr>
+                <tr><td colSpan={6} className="text-center py-8 text-slate-400">Memuat...</td></tr>
               ) : users.length === 0 ? (
-                <tr><td colSpan={6} className="text-center py-8 text-slate-500">Tidak ada user</td></tr>
+                <tr><td colSpan={6} className="text-center py-8 text-slate-400">Tidak ada user</td></tr>
               ) : (
                 users.map((user) => (
                   <tr key={user.id}>
                     <td className="font-medium">{user.name}</td>
-                    <td className="text-slate-500">{user.email}</td>
+                    <td className="text-slate-400">{user.email}</td>
                     <td>
                       <span className={`badge ${roleColor[user.role as Role]}`}>{user.role}</span>
                     </td>
                     <td>
-                      <span className={`badge ${user.isActive ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
+                      <span className={`badge ${user.isActive ? 'bg-green-500/20 text-green-300' : 'bg-red-500/20 text-red-300'}`}>
                         {user.isActive ? 'Aktif' : 'Nonaktif'}
                       </span>
                     </td>
-                    <td className="text-slate-500 text-sm">{formatDate(user.createdAt)}</td>
+                    <td className="text-slate-400 text-sm">{formatDate(user.createdAt)}</td>
                     <td>
                       <div className="flex gap-2">
-                        <button onClick={() => openEdit(user)} className="text-xs px-2 py-1 bg-slate-100 hover:bg-slate-200 rounded">
+                        <button onClick={() => openEdit(user)} className="text-xs px-2 py-1 bg-slate-700 hover:bg-slate-600 rounded">
                           Edit
                         </button>
-                        <button onClick={() => toggleActive(user)} className={`text-xs px-2 py-1 rounded ${user.isActive ? 'bg-red-600/20 hover:bg-red-600/40 text-red-600' : 'bg-green-600/20 hover:bg-green-600/40 text-emerald-600'}`}>
+                        <button onClick={() => toggleActive(user)} className={`text-xs px-2 py-1 rounded ${user.isActive ? 'bg-red-600/20 hover:bg-red-600/40 text-red-400' : 'bg-green-600/20 hover:bg-green-600/40 text-green-400'}`}>
                           {user.isActive ? 'Nonaktifkan' : 'Aktifkan'}
                         </button>
                       </div>

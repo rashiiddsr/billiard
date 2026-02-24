@@ -141,10 +141,10 @@ export default function MenuManagementPage() {
 
       {showForm && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-white border border-slate-200 rounded-xl w-full max-w-lg max-h-screen overflow-y-auto">
-            <div className="flex items-center justify-between p-4 border-b border-slate-200 sticky top-0 bg-white">
+          <div className="bg-slate-800 border border-slate-700 rounded-xl w-full max-w-lg max-h-screen overflow-y-auto">
+            <div className="flex items-center justify-between p-4 border-b border-slate-700 sticky top-0 bg-slate-800">
               <h3 className="font-semibold">{editItem ? 'Edit Item' : 'Tambah Item Baru'}</h3>
-              <button onClick={() => setShowForm(false)} className="text-slate-500 hover:text-slate-700">✕</button>
+              <button onClick={() => setShowForm(false)} className="text-slate-400 hover:text-white">✕</button>
             </div>
             <div className="p-4 space-y-4">
               <div className="grid grid-cols-2 gap-4">
@@ -204,21 +204,21 @@ export default function MenuManagementPage() {
           <table className="data-table">
             <thead><tr><th>SKU</th><th>Nama</th><th>Kategori</th><th>Harga</th><th>HPP</th><th>Stok</th><th>Pajak</th><th>Status</th><th>Aksi</th></tr></thead>
             <tbody>
-              {loading ? <tr><td colSpan={9} className="text-center py-8 text-slate-500">Memuat...</td></tr> : items.length === 0 ? <tr><td colSpan={9} className="text-center py-8 text-slate-500">Tidak ada item</td></tr> : items.map((item) => {
+              {loading ? <tr><td colSpan={9} className="text-center py-8 text-slate-400">Memuat...</td></tr> : items.length === 0 ? <tr><td colSpan={9} className="text-center py-8 text-slate-400">Tidak ada item</td></tr> : items.map((item) => {
                 const stockLow = item.stock?.trackStock && item.stock?.qtyOnHand <= item.stock?.lowStockThreshold;
                 return (
                   <tr key={item.id}>
-                    <td className="font-mono text-xs text-slate-500">{item.sku}</td><td className="font-medium">{item.name}</td><td><span className="badge bg-slate-100 text-slate-700">{item.category}</span></td>
-                    <td className="font-medium">{formatCurrency(item.price)}</td><td className="text-slate-500">{item.cost ? formatCurrency(item.cost) : '-'}</td>
-                    <td><span className={`font-medium ${stockLow ? 'text-red-600' : 'text-slate-700'}`}>{item.stock?.qtyOnHand ?? '-'}</span>{stockLow && <span className="text-xs text-red-600 ml-1">⚠</span>}</td>
-                    <td>{item.taxFlag ? <span className="badge bg-amber-100 text-amber-700">11%</span> : '-'}</td>
+                    <td className="font-mono text-xs text-slate-400">{item.sku}</td><td className="font-medium">{item.name}</td><td><span className="badge bg-slate-700 text-slate-300">{item.category}</span></td>
+                    <td className="font-medium">{formatCurrency(item.price)}</td><td className="text-slate-400">{item.cost ? formatCurrency(item.cost) : '-'}</td>
+                    <td><span className={`font-medium ${stockLow ? 'text-red-400' : 'text-slate-300'}`}>{item.stock?.qtyOnHand ?? '-'}</span>{stockLow && <span className="text-xs text-red-400 ml-1">⚠</span>}</td>
+                    <td>{item.taxFlag ? <span className="badge bg-yellow-500/20 text-yellow-300">11%</span> : '-'}</td>
                     <td>
                       <div className="flex items-center gap-2">
                         <button type="button" onClick={() => toggleActive(item)} className={`toggle-switch ${item.isActive ? 'active' : ''}`} />
-                        <span className="text-xs text-slate-700">{item.isActive ? 'Aktif' : 'Nonaktif'}</span>
+                        <span className="text-xs text-slate-300">{item.isActive ? 'Aktif' : 'Nonaktif'}</span>
                       </div>
                     </td>
-                    <td><button onClick={() => openEdit(item)} className="text-xs px-2 py-1 bg-slate-100 hover:bg-slate-200 rounded">Edit</button></td>
+                    <td><button onClick={() => openEdit(item)} className="text-xs px-2 py-1 bg-slate-700 hover:bg-slate-600 rounded">Edit</button></td>
                   </tr>
                 );
               })}
