@@ -1,143 +1,91 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { stockApi, menuApi } from '@/lib/api';
+import { useCallback, useEffect, useState } from 'react';
+import { menuApi, stockApi, financeApi } from '@/lib/api';
 import { formatCurrency } from '@/lib/utils';
 import Link from 'next/link';
 
 export default function ManagerDashboard() {
+  const [menuItems, setMenuItems] = useState<any[]>([]);
   const [lowStock, setLowStock] = useState<any[]>([]);
-  const [assets, setAssets] = useState<any[]>([]);
-  const [menuCount, setMenuCount] = useState({ total: 0, active: 0 });
+  const [todayExpense, setTodayExpense] = useState(0);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const [alerts, assetData, menuData] = await Promise.all([
-          stockApi.getLowStockAlerts(),
-          stockApi.getAssets(),
-          menuApi.list({ limit: 1 }),
-        ]);
-        setLowStock(alerts);
-        setAssets(assetData);
-        setMenuCount({ total: menuData.total || 0, active: menuData.total || 0 });
-      } catch (e) {
-        console.error(e);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchData();
+  const fetchData = useCallback(async () => {
+    try {
+      const [menus, stock, report] = await Promise.all([
+        menuApi.list(),
+        stockApi.getLowStockAlerts(),
+        financeApi.getDailyReport(new Date().toISOString().split('T')[0]),
+      ]);
+      setMenuItems(menus);
+      setLowStock(stock);
+      setTodayExpense(Number(report?.expense?.total || 0));
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  const badAssets = assets.filter((a) => a.qtyBad > 0);
+  useEffect(() => { fetchData(); }, [fetchData]);
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin h-8 w-8 border-4 border-blue-500 border-t-transparent rounded-full" />
-      </div>
-    );
-  }
+  if (loading) return <div className="flex h-64 items-center justify-center"><div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-500 border-t-transparent" /></div>;
+
+  const categories = menuItems.reduce((acc: Record<string, number>, item: any) => {
+    const key = item.category?.name || 'Lainnya';
+    acc[key] = (acc[key] || 0) + 1;
+    return acc;
+  }, {});
 
   return (
-    <div className="p-6 space-y-6">
-      <h1 className="text-2xl font-bold">Dashboard Manager</h1>
-
-      {/* Alerts */}
-      {(lowStock.length > 0 || badAssets.length > 0) && (
-        <div className="space-y-3">
-          {lowStock.length > 0 && (
-            <div className="card border-red-500/30 bg-red-500/5">
-              <h3 className="font-semibold text-red-400 mb-2">🔴 Stok F&B Menipis ({lowStock.length})</h3>
-              <div className="flex flex-wrap gap-2">
-                {lowStock.map((s) => (
-                  <span key={s.id} className="badge bg-red-500/20 text-red-300 px-2 py-1">
-                    {s.menuItem?.name}: {s.qtyOnHand} sisa
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-          {badAssets.length > 0 && (
-            <div className="card border-orange-500/30 bg-orange-500/5">
-              <h3 className="font-semibold text-orange-400 mb-2">⚠ Aset Bermasalah</h3>
-              <div className="flex flex-wrap gap-2">
-                {badAssets.map((a) => (
-                  <span key={a.id} className="badge bg-orange-500/20 text-orange-300 px-2 py-1">
-                    {a.name}: {a.qtyBad} rusak
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Stats */}
-      <div className="grid grid-cols-3 gap-4">
-        <div className="card text-center">
-          <p className="text-slate-400 text-sm">Menu Items</p>
-          <p className="text-3xl font-bold text-blue-400 mt-1">{menuCount.total}</p>
-        </div>
-        <div className="card text-center">
-          <p className="text-slate-400 text-sm">Stok Menipis</p>
-          <p className="text-3xl font-bold text-red-400 mt-1">{lowStock.length}</p>
-        </div>
-        <div className="card text-center">
-          <p className="text-slate-400 text-sm">Aset Bermasalah</p>
-          <p className="text-3xl font-bold text-orange-400 mt-1">{badAssets.length}</p>
-        </div>
+    <div className="space-y-6 p-2 md:p-4">
+      <div>
+        <h1 className="text-3xl font-bold">Dashboard Manager</h1>
+        <p className="text-slate-500">Kontrol menu, stok, dan biaya operasional.</p>
       </div>
 
-      {/* Quick Links */}
-      <div className="grid grid-cols-3 gap-4">
-        {[
-          { label: 'Manajemen Menu', href: '/manager/menu', icon: '🍽', desc: 'Kelola item F&B' },
-          { label: 'Manajemen Kategori', href: '/manager/menu-categories', icon: '🏷️', desc: 'Kelola kategori & SKU' },
-          { label: 'Stok Operasional', href: '/manager/stock', icon: '📦', desc: 'Kondisi aset billiard' },
-          { label: 'Pengeluaran', href: '/manager/expenses', icon: '💸', desc: 'Catat pengeluaran' },
-        ].map((item) => (
-          <Link key={item.href} href={item.href} className="card hover:bg-slate-700 transition-colors">
-            <div className="text-3xl mb-2">{item.icon}</div>
-            <p className="font-semibold">{item.label}</p>
-            <p className="text-sm text-slate-400">{item.desc}</p>
-          </Link>
-        ))}
+      <div className="grid gap-4 md:grid-cols-4">
+        <ColorCard title="Total Menu" value={`${menuItems.length}`} tone="bg-cyan-50" />
+        <ColorCard title="Stok Menipis" value={`${lowStock.length}`} tone="bg-rose-50" />
+        <ColorCard title="Kategori" value={`${Object.keys(categories).length}`} tone="bg-violet-50" />
+        <ColorCard title="Biaya Hari Ini" value={formatCurrency(todayExpense)} tone="bg-amber-50" />
       </div>
 
-      {/* Operational Assets Summary */}
-      <div className="card">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="font-semibold">Kondisi Aset Operasional</h3>
-          <Link href="/manager/stock" className="text-xs text-blue-400">Perbarui →</Link>
+      <div className="grid gap-4 lg:grid-cols-3">
+        <div className="card lg:col-span-2">
+          <div className="mb-3 flex items-center justify-between">
+            <h3 className="font-semibold">Distribusi Menu per Kategori</h3>
+            <Link href="/manager/menu" className="text-sm text-blue-600">Kelola menu →</Link>
+          </div>
+          <div className="space-y-3">
+            {Object.entries(categories).map(([name, count]) => {
+              const max = Math.max(...Object.values(categories), 1);
+              return (
+                <div key={name}>
+                  <div className="mb-1 flex justify-between text-xs"><span>{name}</span><span>{count} item</span></div>
+                  <div className="h-2 rounded-full bg-slate-100"><div className="h-full rounded-full bg-gradient-to-r from-blue-500 to-cyan-400" style={{ width: `${(count / max) * 100}%` }} /></div>
+                </div>
+              );
+            })}
+          </div>
         </div>
-        <div className="table-wrapper">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Aset</th>
-                <th>Kategori</th>
-                <th>Baik</th>
-                <th>Rusak</th>
-                <th>Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {assets.map((a) => (
-                <tr key={a.id}>
-                  <td className="font-medium">{a.name}</td>
-                  <td className="text-slate-400">{a.category}</td>
-                  <td className="text-green-400">{a.qtyGood}</td>
-                  <td className={a.qtyBad > 0 ? 'text-red-400 font-bold' : 'text-slate-400'}>{a.qtyBad}</td>
-                  <td>{a.qtyGood + a.qtyBad}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+
+        <div className="card">
+          <h3 className="mb-3 font-semibold text-rose-600">Prioritas Stok</h3>
+          <div className="space-y-2">
+            {lowStock.slice(0, 6).map((s) => (
+              <div key={s.id} className="rounded-xl bg-rose-50 p-2 text-sm">
+                <p className="font-medium">{s.menuItem?.name}</p>
+                <p className="text-xs text-rose-600">Tersisa {s.qtyOnHand} / min {s.lowStockThreshold}</p>
+              </div>
+            ))}
+            {lowStock.length === 0 && <p className="text-sm text-slate-500">Semua stok aman 🎉</p>}
+          </div>
         </div>
       </div>
     </div>
   );
+}
+
+function ColorCard({ title, value, tone }: { title: string; value: string; tone: string }) {
+  return <div className={`card ${tone}`}><p className="text-sm text-slate-500">{title}</p><p className="mt-1 text-3xl font-bold text-slate-800">{value}</p></div>;
 }
