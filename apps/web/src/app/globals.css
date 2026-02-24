@@ -4,47 +4,42 @@
 
 @layer base {
   body {
-    @apply bg-slate-900 text-slate-100;
+    @apply bg-slate-950 text-slate-100;
+    background-image: radial-gradient(circle at 10% 10%, rgba(59, 130, 246, 0.14), transparent 45%), radial-gradient(circle at 80% 20%, rgba(6, 182, 212, 0.12), transparent 40%);
   }
 }
 
 @layer components {
   .card {
-    @apply bg-slate-800 rounded-xl border border-slate-700 p-4;
+    @apply rounded-2xl border border-white/10 bg-slate-900/70 p-4 shadow-xl shadow-slate-950/40 backdrop-blur;
   }
 
   .btn-primary {
-    @apply bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium
-           transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply rounded-xl bg-gradient-to-r from-blue-600 to-cyan-500 px-4 py-2 font-medium text-white transition-all hover:from-blue-500 hover:to-cyan-400 disabled:cursor-not-allowed disabled:opacity-50;
   }
 
   .btn-secondary {
-    @apply bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg font-medium
-           transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply rounded-xl border border-white/10 bg-slate-800 px-4 py-2 font-medium text-white transition-colors hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50;
   }
 
   .btn-danger {
-    @apply bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-medium
-           transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply rounded-xl bg-red-600 px-4 py-2 font-medium text-white transition-colors hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-50;
   }
 
   .btn-success {
-    @apply bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium
-           transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply rounded-xl bg-emerald-600 px-4 py-2 font-medium text-white transition-colors hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50;
   }
 
   .input {
-    @apply bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white
-           placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500
-           focus:border-transparent w-full;
+    @apply w-full rounded-xl border border-slate-700 bg-slate-800/90 px-3 py-2 text-white placeholder-slate-400 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-cyan-400;
   }
 
   .label {
-    @apply text-sm font-medium text-slate-300 mb-1 block;
+    @apply mb-1 block text-sm font-medium text-slate-300;
   }
 
   .badge {
-    @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium;
+    @apply inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium;
   }
 
   .table-wrapper {
@@ -56,20 +51,19 @@
   }
 
   table.data-table th {
-    @apply text-left py-3 px-4 text-slate-400 font-medium border-b border-slate-700 bg-slate-800;
+    @apply border-b border-slate-700 bg-slate-900 py-3 px-4 text-left font-medium text-slate-400;
   }
 
   table.data-table td {
-    @apply py-3 px-4 border-b border-slate-700/50;
+    @apply border-b border-slate-700/50 py-3 px-4;
   }
 
   table.data-table tr:hover td {
-    @apply bg-slate-700/30;
+    @apply bg-slate-800/40;
   }
 }
 
-/* Scrollbar */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: #1e293b; }
-::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #64748b; }
+::-webkit-scrollbar-track { background: #0f172a; }
+::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #475569; }

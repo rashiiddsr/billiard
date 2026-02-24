@@ -56,31 +56,31 @@ export default function Sidebar() {
   };
 
   return (
-    <div className="w-64 min-h-screen bg-slate-800 border-r border-slate-700 flex flex-col">
+    <div className="sticky top-0 z-20 flex min-h-screen w-72 flex-col border-r border-white/10 bg-slate-900/90 backdrop-blur">
       {/* Header */}
-      <div className="p-4 border-b border-slate-700">
+      <div className="border-b border-white/10 p-5">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-lg bg-blue-600 flex items-center justify-center">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-cyan-500">
             <BilliardIcon />
           </div>
           <div>
-            <p className="font-bold text-sm">Billiard POS</p>
-            <p className="text-xs text-slate-400">{user?.role}</p>
+            <p className="text-sm font-bold">Billiard POS</p>
+            <p className="text-xs text-cyan-300">{user?.role}</p>
           </div>
         </div>
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 p-3 space-y-1">
+      <nav className="flex-1 space-y-1 p-3">
         {navItems.map((item) => (
           <Link
             key={item.href}
             href={item.href}
             className={cn(
-              'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
+              'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all',
               pathname === item.href || pathname.startsWith(item.href + '/')
-                ? 'bg-blue-600 text-white'
-                : 'text-slate-400 hover:text-white hover:bg-slate-700',
+                ? 'bg-gradient-to-r from-blue-600 to-cyan-500 text-white shadow-lg shadow-blue-900/40'
+                : 'text-slate-400 hover:bg-slate-800 hover:text-white',
             )}
           >
             {item.icon}
@@ -90,14 +90,14 @@ export default function Sidebar() {
       </nav>
 
       {/* User */}
-      <div className="p-3 border-t border-slate-700">
+      <div className="border-t border-white/10 p-3">
         <div className="px-3 py-2 mb-2">
           <p className="text-sm font-medium truncate">{user?.name}</p>
           <p className="text-xs text-slate-400 truncate">{user?.email}</p>
         </div>
         <button
           onClick={handleLogout}
-          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-red-400 hover:bg-red-500/10 transition-colors"
+          className="w-full rounded-xl px-3 py-2 text-sm text-red-400 transition-colors hover:bg-red-500/10 flex items-center gap-3"
         >
           <LogoutIcon />
           Keluar
