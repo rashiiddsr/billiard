@@ -71,10 +71,10 @@ export default function ExpensesPage() {
 
       {showForm && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-800 border border-slate-700 rounded-xl w-full max-w-md">
-            <div className="flex items-center justify-between p-4 border-b border-slate-700">
+          <div className="bg-white border border-slate-200 rounded-xl w-full max-w-md">
+            <div className="flex items-center justify-between p-4 border-b border-slate-200">
               <h3 className="font-semibold">Tambah Pengeluaran</h3>
-              <button onClick={() => setShowForm(false)} className="text-slate-400 hover:text-white">✕</button>
+              <button onClick={() => setShowForm(false)} className="text-slate-500 hover:text-slate-700">✕</button>
             </div>
             <div className="p-4 space-y-4">
               <div>
@@ -98,20 +98,20 @@ export default function ExpensesPage() {
 
       <div className="filter-bar">
         <input type="date" className="input w-44" value={filterStart} onChange={(e) => setFilterStart(e.target.value)} />
-        <span className="text-slate-400">s/d</span>
+        <span className="text-slate-500">s/d</span>
         <input type="date" className="input w-44" value={filterEnd} onChange={(e) => setFilterEnd(e.target.value)} />
         <button onClick={fetchExpenses} className="btn-secondary text-sm py-2 px-4">Filter</button>
       </div>
 
-      <div className="card"><div className="flex justify-between items-center"><span className="text-slate-400">Total Pengeluaran</span><span className="text-2xl font-bold text-red-400">{formatCurrency(total)}</span></div></div>
+      <div className="card"><div className="flex justify-between items-center"><span className="text-slate-500">Total Pengeluaran</span><span className="text-2xl font-bold text-red-600">{formatCurrency(total)}</span></div></div>
 
       <div className="card p-0 overflow-hidden">
         <div className="table-wrapper">
           <table className="data-table">
             <thead><tr><th>Tanggal</th><th>Kategori</th><th>Jumlah</th><th>Catatan</th><th>Dibuat Oleh</th></tr></thead>
             <tbody>
-              {loading ? <tr><td colSpan={5} className="text-center py-8 text-slate-400">Memuat...</td></tr> : expenses.length === 0 ? <tr><td colSpan={5} className="text-center py-8 text-slate-400">Belum ada pengeluaran</td></tr> : expenses.map((e) => (
-                <tr key={e.id}><td>{formatDateShort(e.date)}</td><td><span className="badge bg-slate-700 text-slate-300">{e.category}</span></td><td className="font-bold text-red-400">{formatCurrency(e.amount)}</td><td className="text-slate-400 text-sm">{e.notes || '-'}</td><td className="text-slate-400 text-sm">{e.createdBy?.name}</td></tr>
+              {loading ? <tr><td colSpan={5} className="text-center py-8 text-slate-500">Memuat...</td></tr> : expenses.length === 0 ? <tr><td colSpan={5} className="text-center py-8 text-slate-500">Belum ada pengeluaran</td></tr> : expenses.map((e) => (
+                <tr key={e.id}><td>{formatDateShort(e.date)}</td><td><span className="badge bg-slate-100 text-slate-700">{e.category}</span></td><td className="font-bold text-red-600">{formatCurrency(e.amount)}</td><td className="text-slate-500 text-sm">{e.notes || '-'}</td><td className="text-slate-500 text-sm">{e.createdBy?.name}</td></tr>
               ))}
             </tbody>
           </table>

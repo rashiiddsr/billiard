@@ -92,13 +92,13 @@ export default function StockPage() {
       <div className="flex gap-2">
         <button
           onClick={() => setTab('fnb')}
-          className={`px-4 py-2 rounded-lg text-sm font-medium ${tab === 'fnb' ? 'bg-blue-600' : 'bg-slate-700 hover:bg-slate-600'}`}
+          className={`px-4 py-2 rounded-lg text-sm font-medium ${tab === 'fnb' ? 'bg-blue-600 text-white shadow-sm' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
         >
           🍔 Stok F&B
         </button>
         <button
           onClick={() => setTab('assets')}
-          className={`px-4 py-2 rounded-lg text-sm font-medium ${tab === 'assets' ? 'bg-blue-600' : 'bg-slate-700 hover:bg-slate-600'}`}
+          className={`px-4 py-2 rounded-lg text-sm font-medium ${tab === 'assets' ? 'bg-blue-600 text-white shadow-sm' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
         >
           🎱 Aset Operasional
         </button>
@@ -122,35 +122,35 @@ export default function StockPage() {
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan={7} className="text-center py-8 text-slate-400">Memuat...</td></tr>
+                  <tr><td colSpan={7} className="text-center py-8 text-slate-500">Memuat...</td></tr>
                 ) : (
                   fnbStock.map((s) => {
                     const isLow = s.trackStock && s.qtyOnHand <= s.lowStockThreshold;
                     const isOut = s.trackStock && s.qtyOnHand === 0;
                     return (
                       <tr key={s.id}>
-                        <td className="font-mono text-xs text-slate-400">{s.menuItem?.sku}</td>
+                        <td className="font-mono text-xs text-slate-500">{s.menuItem?.sku}</td>
                         <td className="font-medium">{s.menuItem?.name}</td>
-                        <td><span className="badge bg-slate-700 text-slate-300">{s.menuItem?.category}</span></td>
+                        <td><span className="badge bg-slate-100 text-slate-700">{s.menuItem?.category}</span></td>
                         <td>
                           <span className={`font-bold text-lg ${isOut ? 'text-red-400' : isLow ? 'text-yellow-400' : 'text-green-400'}`}>
                             {s.qtyOnHand}
                           </span>
                         </td>
-                        <td className="text-slate-400">{s.lowStockThreshold}</td>
+                        <td className="text-slate-500">{s.lowStockThreshold}</td>
                         <td>
                           {isOut ? (
-                            <span className="badge bg-red-500/20 text-red-300">Habis</span>
+                            <span className="badge bg-red-100 text-red-700">Habis</span>
                           ) : isLow ? (
-                            <span className="badge bg-yellow-500/20 text-yellow-300">⚠ Menipis</span>
+                            <span className="badge bg-amber-100 text-amber-700">⚠ Menipis</span>
                           ) : (
-                            <span className="badge bg-green-500/20 text-green-300">Normal</span>
+                            <span className="badge bg-emerald-100 text-emerald-700">Normal</span>
                           )}
                         </td>
                         <td>
                           <button
                             onClick={() => { setAdjustModal(s); setAdjustQty(''); setAdjustType('RESTOCK'); setAdjustNotes(''); }}
-                            className="text-xs px-2 py-1 bg-blue-600/20 text-blue-300 hover:bg-blue-600/40 rounded"
+                            className="text-xs px-2 py-1 bg-blue-100 text-blue-700 hover:bg-blue-200 rounded"
                           >
                             Perbarui
                           </button>
@@ -182,12 +182,12 @@ export default function StockPage() {
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan={6} className="text-center py-8 text-slate-400">Memuat...</td></tr>
+                  <tr><td colSpan={6} className="text-center py-8 text-slate-500">Memuat...</td></tr>
                 ) : (
                   assets.map((a) => (
                     <tr key={a.id}>
                       <td className="font-medium">{a.name}</td>
-                      <td><span className="badge bg-slate-700 text-slate-300">{a.category}</span></td>
+                      <td><span className="badge bg-slate-100 text-slate-700">{a.category}</span></td>
                       <td className="text-green-400 font-bold text-lg">{a.qtyGood}</td>
                       <td className={`font-bold text-lg ${a.qtyBad > 0 ? 'text-red-400' : 'text-slate-500'}`}>{a.qtyBad}</td>
                       <td>{a.qtyGood + a.qtyBad}</td>
@@ -199,7 +199,7 @@ export default function StockPage() {
                             setAssetBad(a.qtyBad.toString());
                             setAssetNotes('');
                           }}
-                          className="text-xs px-2 py-1 bg-blue-600/20 text-blue-300 hover:bg-blue-600/40 rounded"
+                          className="text-xs px-2 py-1 bg-blue-100 text-blue-700 hover:bg-blue-200 rounded"
                         >
                           Perbarui
                         </button>
@@ -216,14 +216,14 @@ export default function StockPage() {
       {/* Adjust Stock Modal */}
       {adjustModal && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-800 border border-slate-700 rounded-xl w-full max-w-sm">
-            <div className="flex items-center justify-between p-4 border-b border-slate-700">
+          <div className="bg-white border border-slate-200 rounded-xl w-full max-w-sm">
+            <div className="flex items-center justify-between p-4 border-b border-slate-200">
               <h3 className="font-semibold">Perbarui Stok — {adjustModal.menuItem?.name}</h3>
-              <button onClick={() => setAdjustModal(null)} className="text-slate-400 hover:text-white">✕</button>
+              <button onClick={() => setAdjustModal(null)} className="text-slate-500 hover:text-slate-700">✕</button>
             </div>
             <div className="p-4 space-y-4">
-              <div className="p-3 bg-slate-700 rounded-lg text-center">
-                <p className="text-slate-400 text-sm">Stok Saat Ini</p>
+              <div className="p-3 bg-slate-100 rounded-lg text-center">
+                <p className="text-slate-500 text-sm">Stok Saat Ini</p>
                 <p className="text-3xl font-bold">{adjustModal.qtyOnHand}</p>
               </div>
               <div>
@@ -262,10 +262,10 @@ export default function StockPage() {
       {/* Update Asset Modal */}
       {assetModal && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-800 border border-slate-700 rounded-xl w-full max-w-sm">
-            <div className="flex items-center justify-between p-4 border-b border-slate-700">
+          <div className="bg-white border border-slate-200 rounded-xl w-full max-w-sm">
+            <div className="flex items-center justify-between p-4 border-b border-slate-200">
               <h3 className="font-semibold">Perbarui — {assetModal.name}</h3>
-              <button onClick={() => setAssetModal(null)} className="text-slate-400 hover:text-white">✕</button>
+              <button onClick={() => setAssetModal(null)} className="text-slate-500 hover:text-slate-700">✕</button>
             </div>
             <div className="p-4 space-y-4">
               <div className="grid grid-cols-2 gap-3">
