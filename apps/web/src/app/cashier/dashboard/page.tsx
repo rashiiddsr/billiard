@@ -7,7 +7,7 @@ import Link from 'next/link';
 
 export default function CashierDashboard() {
   const [activeSessions, setActiveSessions] = useState<any[]>([]);
-  const [todayPayments, setTodayPayments] = useState<any[]>([]);
+  const [pendingPayments, setPendingPayments] = useState<any[]>([]);
   const [lowStock, setLowStock] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [now, setNow] = useState(new Date());
@@ -16,11 +16,11 @@ export default function CashierDashboard() {
     try {
       const [sessions, payments, stock] = await Promise.all([
         billingApi.getActiveSessions(),
-        paymentsApi.list({ status: 'PAID', limit: 5 }).catch(() => ({ data: [] })),
+        paymentsApi.list({ status: 'PENDING' }).catch(() => []),
         stockApi.getLowStockAlerts().catch(() => []),
       ]);
       setActiveSessions(sessions);
-      setTodayPayments((payments.data || []).slice(0, 5));
+      setPendingPayments(payments.slice(0, 5));
       setLowStock(stock);
     } finally {
       setLoading(false);
@@ -50,7 +50,7 @@ export default function CashierDashboard() {
 
       <div className="grid gap-4 md:grid-cols-3">
         <InfoCard title="Meja Aktif" value={`${activeSessions.length}`} color="from-emerald-500 to-green-400" />
-        <InfoCard title="Transaksi Terbaru" value={`${todayPayments.length}`} color="from-amber-500 to-yellow-400" />
+        <InfoCard title="Menunggu Bayar" value={`${pendingPayments.length}`} color="from-amber-500 to-yellow-400" />
         <InfoCard title="Stok Menipis" value={`${lowStock.length}`} color="from-rose-500 to-pink-400" />
       </div>
 
@@ -80,13 +80,13 @@ export default function CashierDashboard() {
         <div className="card">
           <h2 className="mb-3 text-lg font-semibold text-amber-600">Notifikasi Kasir</h2>
           <div className="space-y-2 text-sm">
-            {todayPayments.map((p) => (
+            {pendingPayments.map((p) => (
               <Link key={p.id} href={`/cashier/checkout?paymentId=${p.id}`} className="block rounded-xl bg-amber-50 p-2 hover:bg-amber-100">
                 <p className="font-medium">{p.paymentNumber}</p>
                 <p className="text-xs text-slate-500">{formatCurrency(p.totalAmount)} • {p.method}</p>
               </Link>
             ))}
-            {todayPayments.length === 0 && <p className="text-slate-500">Belum ada transaksi.</p>}
+            {pendingPayments.length === 0 && <p className="text-slate-500">Tidak ada pembayaran pending.</p>}
           </div>
         </div>
       </div>
