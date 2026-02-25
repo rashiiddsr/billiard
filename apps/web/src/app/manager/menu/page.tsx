@@ -213,18 +213,18 @@ export default function MenuManagementPage() {
                   <input className="input" value={sku} readOnly disabled placeholder="Pilih kategori" />
                 </div>
                 <div className="col-span-7">
-                  <label className="label">Nama *</label>
+                  <label className="label">Nama <span className="text-red-500">*</span></label>
                   <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Es Teh Manis" />
                 </div>
                 <div className="col-span-5">
-                  <label className="label">Kategori *</label>
+                  <label className="label">Kategori <span className="text-red-500">*</span></label>
                   <select className="input" value={categoryId} onChange={(e) => onSelectCategory(e.target.value)}>
                     <option value="">Pilih kategori</option>
                     {categories.map((c) => <option key={c.id} value={c.id}>{c.name} ({c.skuPrefix})</option>)}
                   </select>
                 </div>
                 <div className="col-span-5">
-                  <label className="label">Harga (Rp) *</label>
+                  <label className="label">Harga (Rp) <span className="text-red-500">*</span></label>
                   <input type="number" className="input" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="10000" />
                 </div>
                 <div className="col-span-5">
@@ -272,7 +272,7 @@ export default function MenuManagementPage() {
                 <p className="text-3xl font-bold">{stockModal.stock?.qtyOnHand || 0}</p>
               </div>
               <div>
-                <label className="label">Tipe Penyesuaian</label>
+                <label className="label">Tipe Penyesuaian <span className="text-red-500">*</span></label>
                 <select className="input" value={adjustType} onChange={(e) => setAdjustType(e.target.value)}>
                   <option value="RESTOCK">Restok (+)</option>
                   <option value="MANUAL_ADJUSTMENT">Penyesuaian Manual (±)</option>
@@ -280,7 +280,7 @@ export default function MenuManagementPage() {
                 </select>
               </div>
               <div>
-                <label className="label">Jumlah</label>
+                <label className="label">Jumlah <span className="text-red-500">*</span></label>
                 <input type="number" className="input" value={adjustQty} onChange={(e) => setAdjustQty(e.target.value)} placeholder="10" />
               </div>
               <div>
@@ -337,7 +337,6 @@ export default function MenuManagementPage() {
                     <td>
                       <div className="flex items-center gap-2">
                         <button type="button" onClick={() => toggleActive(item)} className={`toggle-switch ${item.isActive ? 'active' : ''}`} />
-                        <span className="text-xs text-slate-700">{item.isActive ? 'Aktif' : 'Nonaktif'}</span>
                       </div>
                     </td>
                     <td>

@@ -161,8 +161,8 @@ export default function BillingPage() {
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
             <p className="text-xs uppercase tracking-[0.2em] text-cyan-700">Live Control</p>
-            <h1 className="mt-1 text-2xl font-bold">Billing Meja Interaktif</h1>
-            <p className="mt-1 text-sm text-slate-600">Pilih meja secara visual, mulai sesi, perpanjang waktu, dan monitor status real-time.</p>
+            <h1 className="mt-1 text-2xl font-bold">Billing Meja</h1>
+            <p className="mt-1 text-sm text-slate-600">Kelola sesi meja, durasi, dan pemantauan status operasional secara real-time.</p>
           </div>
           <div className="grid grid-cols-2 gap-3 text-sm sm:min-w-[260px]">
             <SummaryBox label="Sesi Aktif" value={occupiedCount.toString()} accent="text-amber-600" />

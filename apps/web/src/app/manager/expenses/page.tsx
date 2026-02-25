@@ -15,6 +15,7 @@ export default function ExpensesPage() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
+  const [editingExpense, setEditingExpense] = useState<any>(null);
   const [submitting, setSubmitting] = useState(false);
   const [expenseCategories, setExpenseCategories] = useState<string[]>([]);
 
@@ -58,14 +59,39 @@ export default function ExpensesPage() {
     fetchExpenses();
   }, [filterStart, filterEnd]);
 
+  const openCreate = () => {
+    setEditingExpense(null);
+    setCategory('');
+    setDate(today);
+    setAmount('');
+    setNotes('');
+    setShowForm(true);
+  };
+
+  const openEdit = (expense: any) => {
+    setEditingExpense(expense);
+    setCategory(expense.category);
+    setDate(toDateInputValue(new Date(expense.date)));
+    setAmount(String(Number(expense.amount)));
+    setNotes(expense.notes || '');
+    setShowForm(true);
+  };
+
   const submit = async () => {
     if (!category || !amount) { toast.error('Kategori dan jumlah wajib diisi'); return; }
     if (category === 'Lainnya' && !notes.trim()) { toast.error('Catatan wajib diisi untuk kategori Lainnya'); return; }
     setSubmitting(true);
     try {
-      await financeApi.createExpense({ category, date, amount: parseFloat(amount), notes });
-      toast.success('Pengeluaran ditambahkan');
+      const payload = { category, date, amount: parseFloat(amount), notes };
+      if (editingExpense) {
+        await financeApi.updateExpense(editingExpense.id, payload);
+        toast.success('Pengeluaran diperbarui');
+      } else {
+        await financeApi.createExpense(payload);
+        toast.success('Pengeluaran ditambahkan');
+      }
       setShowForm(false);
+      setEditingExpense(null);
       setCategory(''); setAmount(''); setNotes(''); setDate(today);
       fetchExpenses();
     } catch (e: any) {
@@ -109,27 +135,27 @@ export default function ExpensesPage() {
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Pengeluaran</h1>
-        <button onClick={() => setShowForm(true)} className="btn-primary">+ Tambah Pengeluaran</button>
+        <button onClick={openCreate} className="btn-primary">+ Tambah Pengeluaran</button>
       </div>
 
       {showForm && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
           <div className="bg-white border border-slate-200 rounded-xl w-full max-w-md">
             <div className="flex items-center justify-between p-4 border-b border-slate-200">
-              <h3 className="font-semibold">Tambah Pengeluaran</h3>
+              <h3 className="font-semibold">{editingExpense ? 'Edit Pengeluaran' : 'Tambah Pengeluaran'}</h3>
               <button onClick={() => setShowForm(false)} className="text-slate-500 hover:text-slate-700">✕</button>
             </div>
             <div className="p-4 space-y-4">
               <div>
-                <label className="label">Kategori *</label>
+                <label className="label">Kategori <span className="text-red-500">*</span></label>
                 <select className="input" value={category} onChange={(e) => setCategory(e.target.value)}>
                   <option value="">Pilih kategori</option>
                   {expenseCategories.map((c) => <option key={c} value={c}>{c}</option>)}
                 </select>
               </div>
-              <div><label className="label">Tanggal *</label><input type="date" className="input" value={date} onChange={(e) => setDate(e.target.value)} /></div>
-              <div><label className="label">Jumlah (Rp) *</label><input type="number" className="input" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="500000" /></div>
-              <div><label className="label">Catatan {category === 'Lainnya' ? '*' : ''}</label><textarea className="input resize-none" rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Keterangan..." /></div>
+              <div><label className="label">Tanggal <span className="text-red-500">*</span></label><input type="date" className="input" value={date} onChange={(e) => setDate(e.target.value)} /></div>
+              <div><label className="label">Jumlah (Rp) <span className="text-red-500">*</span></label><input type="number" className="input" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="500000" /></div>
+              <div><label className="label">Catatan {category === 'Lainnya' && <span className="text-red-500">*</span>}</label><textarea className="input resize-none" rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Keterangan..." /></div>
               <div className="flex gap-2">
                 <button onClick={() => setShowForm(false)} className="btn-secondary flex-1">Batal</button>
                 <button onClick={submit} className="btn-primary flex-1" disabled={submitting}>{submitting ? 'Menyimpan...' : 'Simpan'}</button>
@@ -159,10 +185,10 @@ export default function ExpensesPage() {
       <div className="card p-0 overflow-hidden">
         <div className="table-wrapper">
           <table className="data-table">
-            <thead><tr><th>Tanggal</th><th>Kategori</th><th>Jumlah</th><th>Catatan</th><th>Dibuat Oleh</th></tr></thead>
+            <thead><tr><th>Tanggal</th><th>Kategori</th><th>Jumlah</th><th>Catatan</th><th>Dibuat Oleh</th><th>Aksi</th></tr></thead>
             <tbody>
-              {loading ? <tr><td colSpan={5} className="text-center py-8 text-slate-500">Memuat...</td></tr> : expenses.length === 0 ? <tr><td colSpan={5} className="text-center py-8 text-slate-500">Belum ada pengeluaran</td></tr> : expenses.map((e) => (
-                <tr key={e.id}><td>{formatDateShort(e.date)}</td><td><span className="badge bg-slate-100 text-slate-700">{e.category}</span></td><td className="font-bold text-red-600">{formatCurrency(e.amount)}</td><td className="text-slate-500 text-sm">{e.notes || '-'}</td><td className="text-slate-500 text-sm">{e.createdBy?.name}</td></tr>
+              {loading ? <tr><td colSpan={6} className="text-center py-8 text-slate-500">Memuat...</td></tr> : expenses.length === 0 ? <tr><td colSpan={6} className="text-center py-8 text-slate-500">Belum ada pengeluaran</td></tr> : expenses.map((e) => (
+                <tr key={e.id}><td>{formatDateShort(e.date)}</td><td><span className="badge bg-slate-100 text-slate-700">{e.category}</span></td><td className="font-bold text-red-600">{formatCurrency(e.amount)}</td><td className="text-slate-500 text-sm">{e.notes || '-'}</td><td className="text-slate-500 text-sm">{e.createdBy?.name}</td><td><button onClick={() => openEdit(e)} className="text-xs px-2 py-1 rounded bg-amber-100 text-amber-700 hover:bg-amber-200">Edit</button></td></tr>
               ))}
             </tbody>
           </table>
