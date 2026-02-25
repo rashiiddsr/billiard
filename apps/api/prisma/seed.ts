@@ -85,6 +85,27 @@ async function main() {
   console.log('✅ Single IoT gateway device created');
 
   // ─── Menu Items ───────────────────────────────────────────────────────────
+  const defaultCategories = [
+    { name: 'Minuman', skuPrefix: 'BEV', lastSkuNumber: 6 },
+    { name: 'Snack', skuPrefix: 'SNK', lastSkuNumber: 5 },
+    { name: 'Makanan', skuPrefix: 'MLS', lastSkuNumber: 5 },
+    { name: 'Dessert', skuPrefix: 'DSS', lastSkuNumber: 2 },
+    { name: 'Rokok', skuPrefix: 'CIG', lastSkuNumber: 2 },
+  ];
+
+  for (const category of defaultCategories) {
+    await prisma.menuCategory.upsert({
+      where: { name: category.name },
+      update: {
+        skuPrefix: category.skuPrefix,
+        lastSkuNumber: category.lastSkuNumber,
+      },
+      create: category,
+    });
+  }
+
+  console.log('✅ Default menu categories created');
+
   const menuItems = [
     { sku: 'BEV-001', name: 'Es Teh Manis', category: 'Minuman', price: 5000, cost: 2000 },
     { sku: 'BEV-002', name: 'Es Jeruk', category: 'Minuman', price: 7000, cost: 3000 },

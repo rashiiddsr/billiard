@@ -44,6 +44,18 @@ export default function MenuManagementPage() {
 
   useEffect(() => { fetchData(); }, []);
 
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      fetchData();
+    }, 300);
+
+    return () => clearTimeout(timeoutId);
+  }, [search]);
+
+  useEffect(() => {
+    fetchData();
+  }, [filterCat, filterActive]);
+
   const openCreate = () => {
     setEditItem(null);
     setSku(''); setName(''); setCategoryId(''); setPrice(''); setCost('');
@@ -126,7 +138,14 @@ export default function MenuManagementPage() {
       </div>
 
       <div className="filter-bar">
-        <input className="input flex-1 min-w-48" placeholder="Cari nama/SKU..." value={search} onChange={(e) => setSearch(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && fetchData()} />
+        <div className="relative flex-1 min-w-48">
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" aria-hidden>
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35m1.35-5.15a6.5 6.5 0 11-13 0 6.5 6.5 0 0113 0z" />
+            </svg>
+          </span>
+          <input className="input w-full pl-9" placeholder="Cari nama/SKU..." value={search} onChange={(e) => setSearch(e.target.value)} />
+        </div>
         <select className="input w-44" value={filterCat} onChange={(e) => setFilterCat(e.target.value)}>
           <option value="">Semua Kategori</option>
           {categories.map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
@@ -136,7 +155,6 @@ export default function MenuManagementPage() {
           <option value="true">Aktif</option>
           <option value="false">Nonaktif</option>
         </select>
-        <button onClick={fetchData} className="btn-secondary">Filter</button>
       </div>
 
       {showForm && (
@@ -147,37 +165,37 @@ export default function MenuManagementPage() {
               <button onClick={() => setShowForm(false)} className="text-slate-500 hover:text-slate-700">✕</button>
             </div>
             <div className="p-4 space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
+              <div className="grid grid-cols-10 gap-4">
+                <div className="col-span-3">
                   <label className="label">SKU</label>
-                  <input className="input" value={sku} disabled placeholder="Pilih kategori" />
+                  <input className="input" value={sku} readOnly disabled placeholder="Pilih kategori" />
                 </div>
-                <div>
+                <div className="col-span-7">
                   <label className="label">Nama *</label>
                   <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Es Teh Manis" />
                 </div>
-                <div>
+                <div className="col-span-5">
                   <label className="label">Kategori *</label>
                   <select className="input" value={categoryId} onChange={(e) => onSelectCategory(e.target.value)}>
                     <option value="">Pilih kategori</option>
                     {categories.map((c) => <option key={c.id} value={c.id}>{c.name} ({c.skuPrefix})</option>)}
                   </select>
                 </div>
-                <div>
+                <div className="col-span-5">
                   <label className="label">Harga (Rp) *</label>
                   <input type="number" className="input" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="10000" />
                 </div>
-                <div>
+                <div className="col-span-5">
                   <label className="label">HPP (Rp)</label>
                   <input type="number" className="input" value={cost} onChange={(e) => setCost(e.target.value)} placeholder="5000" />
                 </div>
                 {!editItem && (
-                  <div>
+                  <div className="col-span-5">
                     <label className="label">Stok Awal</label>
                     <input type="number" className="input" value={initStock} onChange={(e) => setInitStock(e.target.value)} />
                   </div>
                 )}
-                <div>
+                <div className="col-span-5">
                   <label className="label">Batas Stok Rendah</label>
                   <input type="number" className="input" value={stockThreshold} onChange={(e) => setStockThreshold(e.target.value)} />
                 </div>
