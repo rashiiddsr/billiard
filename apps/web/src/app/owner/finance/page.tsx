@@ -133,28 +133,6 @@ export default function FinancePage() {
     }
   };
 
-
-  const downloadCsv = () => {
-    if (!report) return;
-    const rows = [
-      ['Mulai', startDate],
-      ['Selesai', endDate],
-      ['Total Pendapatan', report.revenue.total],
-      ['Pendapatan Billiard', report.revenue.billiard],
-      ['Pendapatan FNB', report.revenue.fnb],
-      ['Total Pengeluaran', report.expenses.total],
-      ['Profit Bersih', report.netProfit],
-    ];
-    const csv = ['Metrik,Nilai', ...rows.map((r) => `${r[0]},${r[1]}`)].join('\n');
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `laporan-keuangan-${startDate}-${endDate}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
-  };
-
   const applyShortcut = (type: 'today' | 'last7' | 'last30' | 'month') => {
     const now = new Date();
     const end = toDateInputValue(now);
@@ -185,7 +163,7 @@ export default function FinancePage() {
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Laporan Keuangan</h1>
-        <div className="flex gap-2"><button onClick={downloadCsv} className="btn-secondary">Unduh CSV</button><button onClick={openCreateExpense} className="btn-primary">+ Tambah Pengeluaran</button></div>
+        <button onClick={openCreateExpense} className="btn-primary">+ Tambah Pengeluaran</button>
       </div>
 
       {showExpenseForm && (

@@ -1,12 +1,12 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { tablesApi, billingApi, authApi, ordersApi } from '@/lib/api';
+import { tablesApi, billingApi, authApi } from '@/lib/api';
 import { formatCurrency, getRemainingTime, formatTime } from '@/lib/utils';
 import { useAuth } from '@/lib/auth';
 import toast from 'react-hot-toast';
 
-type ModalType = 'start' | 'extend' | 'stop' | 'reauth' | 'detail' | null;
+type ModalType = 'start' | 'extend' | 'stop' | 'reauth' | null;
 
 export default function BillingPage() {
   const { isOwner } = useAuth();
@@ -16,8 +16,6 @@ export default function BillingPage() {
   const [modal, setModal] = useState<ModalType>(null);
   const [selectedTable, setSelectedTable] = useState<any>(null);
   const [selectedSession, setSelectedSession] = useState<any>(null);
-  const [sessionDetail, setSessionDetail] = useState<any>(null);
-  const [detailLoading, setDetailLoading] = useState(false);
   const [now, setNow] = useState(new Date());
 
   const [duration, setDuration] = useState(60);
@@ -141,39 +139,6 @@ export default function BillingPage() {
     }
   };
 
-  const openDetailModal = async (session: any) => {
-    setSelectedSession(session);
-    setSessionDetail(null);
-    setDetailLoading(true);
-    setModal('detail');
-    try {
-      const detail = await billingApi.getSession(session.id);
-      setSessionDetail(detail);
-    } catch (e: any) {
-      toast.error(e?.response?.data?.message || 'Gagal memuat detail tagihan');
-    } finally {
-      setDetailLoading(false);
-    }
-  };
-
-  const cancelOrderFromSession = async (orderId: string) => {
-    if (!sessionDetail) return;
-    const hasPaid = (sessionDetail.payments || []).some((p: any) => p.status === 'PAID');
-    if (hasPaid) {
-      toast.error('Tagihan sudah dibayar, order tidak bisa dihapus');
-      return;
-    }
-    try {
-      await ordersApi.cancel(orderId);
-      toast.success('Order F&B dihapus');
-      const refreshed = await billingApi.getSession(sessionDetail.id);
-      setSessionDetail(refreshed);
-      fetchData();
-    } catch (e: any) {
-      toast.error(e?.response?.data?.message || 'Gagal menghapus order');
-    }
-  };
-
   const estimatedCost = () => {
     if (!selectedTable) return 0;
     const rate = rateType === 'MANUAL' ? parseFloat(manualRate || '0') : parseFloat(selectedTable.hourlyRate);
@@ -234,13 +199,13 @@ export default function BillingPage() {
               {session && remaining && (
                 <div className="mb-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
                   <p className={`font-mono text-sm font-bold ${remaining.isWarning ? 'animate-pulse text-red-500' : 'text-emerald-600'}`}>{remaining.text}</p>
-                  <p className="mt-1 text-xs text-slate-500">{session.rateType === 'OWNER_LOCK' ? 'Sesi owner (tanpa tagihan)' : `Tagihan sementara: ${formatCurrency(session.totalAmount)}`}</p>
+                  <p className="mt-1 text-xs text-slate-500">Tagihan sementara: {formatCurrency(session.totalAmount)}</p>
                 </div>
               )}
 
-              <div className="grid grid-cols-4 gap-2">
+              <div className="flex flex-col gap-2">
                 {!isOccupied ? (
-                  <button onClick={() => openStartModal(table)} className="btn-primary col-span-4 py-2 text-sm">
+                  <button onClick={() => openStartModal(table)} className="btn-primary py-2 text-sm">
                     Mulai Billing
                   </button>
                 ) : (
@@ -251,32 +216,18 @@ export default function BillingPage() {
                         setExtendMinutes(30);
                         setModal('extend');
                       }}
-                      disabled={session.rateType === 'OWNER_LOCK' || (session.payments || []).length > 0}
-                      className="btn-secondary py-2 text-sm disabled:cursor-not-allowed disabled:opacity-40"
-                      title="Perpanjang"
+                      className="btn-secondary py-2 text-sm"
                     >
-                      ⏱
+                      Perpanjang Waktu
                     </button>
-                    <a
-                      href={session.rateType !== 'OWNER_LOCK' && (session.payments || []).length === 0 ? `/cashier/orders?sessionId=${session.id}` : '#'}
-                      onClick={(e) => {
-                        if (session.rateType === 'OWNER_LOCK' || (session.payments || []).length > 0) e.preventDefault();
-                      }}
-                      className={`btn-primary py-2 text-center text-sm ${(session.rateType === 'OWNER_LOCK' || (session.payments || []).length > 0) ? 'pointer-events-none opacity-40' : ''}`}
-                      title="Tambah F&B"
-                    >
-                      🍽
-                    </a>
-                    <button onClick={() => openDetailModal(session)} className="btn-secondary py-2 text-sm" title="Detail">👁</button>
                     <button
                       onClick={() => {
                         setSelectedSession(session);
                         setModal('stop');
                       }}
                       className="btn-danger py-2 text-sm"
-                      title="Stop"
                     >
-                      ⏹
+                      Hentikan Sesi
                     </button>
                   </>
                 )}
@@ -287,10 +238,10 @@ export default function BillingPage() {
       </div>
 
       {activeSessions.length > 0 && (
-        <div className="card border border-slate-200 bg-white shadow-sm">
-          <h2 className="mb-4 text-lg font-semibold text-slate-800">Ringkasan Sesi Aktif</h2>
+        <div className="card">
+          <h2 className="mb-4 font-semibold">Ringkasan Sesi Aktif</h2>
           <div className="table-wrapper">
-            <table className="data-table bg-white">
+            <table className="data-table">
               <thead>
                 <tr>
                   <th>Meja</th>
@@ -317,25 +268,15 @@ export default function BillingPage() {
                       <td className="text-sm text-slate-400">{s.createdBy?.name}</td>
                       <td>
                         <div className="flex gap-2">
-                          {s.rateType !== 'OWNER_LOCK' && (s.payments || []).length === 0 && (
-                            <button
-                              onClick={() => {
-                                setSelectedSession(s);
-                                setExtendMinutes(30);
-                                setModal('extend');
-                              }}
-                              className="rounded-lg bg-slate-200 px-2 py-1 text-xs text-slate-700 hover:bg-slate-300"
-                            >
-                              +Waktu
-                            </button>
-                          )}
-                          {s.rateType !== 'OWNER_LOCK' && (s.payments || []).length === 0 && <a href={`/cashier/orders?sessionId=${s.id}`} className="rounded-lg bg-blue-100 px-2 py-1 text-xs text-blue-700 hover:bg-blue-200">+F&B</a>}
                           <button
-                            onClick={() => openDetailModal(s)}
-                            className="rounded-lg bg-indigo-100 px-2 py-1 text-xs text-indigo-700 hover:bg-indigo-200"
-                            title="Lihat tagihan realtime"
+                            onClick={() => {
+                              setSelectedSession(s);
+                              setExtendMinutes(30);
+                              setModal('extend');
+                            }}
+                            className="rounded-lg bg-slate-200 px-2 py-1 text-xs text-slate-700 hover:bg-slate-300"
                           >
-                            👁
+                            +Waktu
                           </button>
                           <button
                             onClick={() => {
@@ -470,55 +411,6 @@ export default function BillingPage() {
               {submitting ? 'Menghentikan...' : 'Hentikan Sesi'}
             </button>
           </div>
-        </Modal>
-      )}
-
-      {modal === 'detail' && selectedSession && (
-        <Modal title={`Detail Tagihan — ${selectedSession.table?.name || '-'}`} onClose={() => setModal(null)}>
-          {detailLoading && <p className="text-sm text-slate-500">Memuat detail...</p>}
-          {!detailLoading && sessionDetail && (
-            <div className="space-y-3 text-sm">
-              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-                <div className="flex justify-between"><span className="text-slate-500">Sesi</span><span>{new Date(sessionDetail.startTime).toLocaleTimeString('id-ID')} - {new Date(sessionDetail.endTime).toLocaleTimeString('id-ID')}</span></div>
-                <div className="mt-1 flex justify-between"><span className="text-slate-500">Status Pembayaran</span><span className={`font-semibold ${(sessionDetail.payments || []).some((p: any) => p.status === 'PAID') ? 'text-emerald-600' : 'text-amber-600'}`}>{(sessionDetail.payments || []).some((p: any) => p.status === 'PAID') ? 'Sudah Dibayar' : 'Belum Dibayar'}</span></div>
-                <div className="mt-1 flex justify-between"><span className="text-slate-500">Billing awal</span><span className="font-semibold">{formatCurrency(sessionDetail.billingBreakdown?.baseAmount || 0)}</span></div>
-                {(sessionDetail.billingBreakdown?.extensions || []).map((ext: any, idx: number) => (
-                  <div key={ext.id || idx} className="mt-1 flex justify-between text-slate-600"><span>Perpanjangan #{idx + 1} (+{ext.additionalMinutes} menit)</span><span>{formatCurrency(ext.additionalAmount)}</span></div>
-                ))}
-                <div className="mt-1 flex justify-between border-t border-slate-200 pt-1"><span className="text-slate-500">Total Sesi</span><span className="font-semibold">{formatCurrency(sessionDetail.totalAmount)}</span></div>
-              </div>
-
-              <div className="rounded-lg border border-slate-200 p-3">
-                <p className="mb-2 font-semibold">Pesanan F&B</p>
-                {(sessionDetail.orders || []).length === 0 && <p className="text-slate-500">Belum ada pesanan F&B.</p>}
-                <div className="space-y-2">
-                  {(sessionDetail.orders || []).map((order: any) => {
-                    const canDelete = order.status === 'DRAFT' && !(sessionDetail.payments || []).some((p: any) => p.status === 'PAID');
-                    return (
-                      <div key={order.id} className="rounded border border-slate-200 bg-slate-50 p-2">
-                        <div className="flex items-start justify-between gap-2">
-                          <div>
-                            <p className="text-xs font-semibold">{order.orderNumber} • {formatCurrency(order.total)}</p>
-                            <p className="text-xs text-slate-500">{order.notes || 'Tanpa catatan'}</p>
-                          </div>
-                          {canDelete && (
-                            <button onClick={() => cancelOrderFromSession(order.id)} className="rounded bg-red-100 px-2 py-1 text-xs text-red-600 hover:bg-red-200">
-                              Hapus
-                            </button>
-                          )}
-                        </div>
-                        <ul className="mt-2 space-y-1 text-xs text-slate-600">
-                          {(order.items || []).map((item: any) => (
-                            <li key={item.id}>• {item.menuItem?.name || 'Menu'} × {item.quantity}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-          )}
         </Modal>
       )}
     </div>
