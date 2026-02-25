@@ -85,7 +85,7 @@ export class TablesService {
         ...(includeInactive ? {} : { isActive: true }),
       },
       include: {
-        iotDevice: { select: { id: true, name: true, isOnline: true, lastSeen: true, signalStrength: true } },
+        iotDevice: { select: { id: true, name: true, isOnline: true, isActive: true, lastSeen: true, signalStrength: true } },
         billingSessions: {
           where: { status: 'ACTIVE' },
           take: 1,
@@ -101,7 +101,7 @@ export class TablesService {
     const table = await this.prisma.table.findUnique({
       where: { id },
       include: {
-        iotDevice: { select: { id: true, name: true, isOnline: true, lastSeen: true, signalStrength: true } },
+        iotDevice: { select: { id: true, name: true, isOnline: true, isActive: true, lastSeen: true, signalStrength: true } },
         billingSessions: {
           orderBy: { startTime: 'desc' },
           take: 10,

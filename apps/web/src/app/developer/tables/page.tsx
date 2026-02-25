@@ -33,14 +33,45 @@ export default function DeveloperTablesPage() {
 
   useEffect(() => { load(); }, []);
 
+  const deviceUsageMap = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const t of tables) map[t.iotDeviceId] = (map[t.iotDeviceId] || 0) + 1;
+    return map;
+  }, [tables]);
+
+  const availableDevices = useMemo(() => {
+    return devices.filter((d) => {
+      const used = deviceUsageMap[d.id] || 0;
+      const occupiedByEditing = editing?.iotDeviceId === d.id ? 1 : 0;
+      return d.isActive && used - occupiedByEditing < 16;
+    });
+  }, [devices, deviceUsageMap, editing]);
+
+  const usedByDevice = useMemo(() => {
+    const usedRelay: Record<string, Set<number>> = {};
+    const usedGpio: Record<string, Set<number>> = {};
+    for (const t of tables) {
+      if (editing?.id === t.id) continue;
+      if (!usedRelay[t.iotDeviceId]) usedRelay[t.iotDeviceId] = new Set();
+      if (!usedGpio[t.iotDeviceId]) usedGpio[t.iotDeviceId] = new Set();
+      usedRelay[t.iotDeviceId].add(t.relayChannel);
+      usedGpio[t.iotDeviceId].add(t.gpioPin);
+    }
+    return { usedRelay, usedGpio };
+  }, [tables, editing]);
+
   const openCreate = () => {
-    if (devices.length === 0) {
-      toast.error('Tambahkan device IoT terlebih dahulu di menu IoT Configurated');
+    if (availableDevices.length === 0) {
+      toast.error('Tidak ada device aktif dengan slot kosong. Tambahkan/aktifkan device IoT terlebih dahulu.');
       return;
     }
 
+    const firstDeviceId = availableDevices[0].id;
+    const firstRelay = RELAY_CHANNEL_OPTIONS.find((ch) => !usedByDevice.usedRelay[firstDeviceId]?.has(ch));
+    const firstGpio = GPIO_OPTIONS.find((pin) => !usedByDevice.usedGpio[firstDeviceId]?.has(pin));
+
     setEditing(null);
-    setForm({ name: '', iotDeviceId: devices[0].id, relayChannel: RELAY_CHANNEL_OPTIONS[0], gpioPin: GPIO_OPTIONS[0], hourlyRate: '' });
+    setForm({ name: '', iotDeviceId: firstDeviceId, relayChannel: firstRelay ?? '', gpioPin: firstGpio ?? '', hourlyRate: '' });
     setShowForm(true);
   };
 
@@ -54,6 +85,12 @@ export default function DeveloperTablesPage() {
       hourlyRate: t.hourlyRate,
     });
     setShowForm(true);
+  };
+
+  const onChangeDevice = (iotDeviceId: string) => {
+    const nextRelay = RELAY_CHANNEL_OPTIONS.find((ch) => !usedByDevice.usedRelay[iotDeviceId]?.has(ch));
+    const nextGpio = GPIO_OPTIONS.find((pin) => !usedByDevice.usedGpio[iotDeviceId]?.has(pin));
+    setForm({ ...form, iotDeviceId, relayChannel: nextRelay ?? '', gpioPin: nextGpio ?? '' });
   };
 
   const save = async () => {
@@ -103,38 +140,51 @@ export default function DeveloperTablesPage() {
         <button className="btn-primary" onClick={openCreate}>+ Tambah Meja</button>
       </div>
 
-      <div className="text-sm text-slate-500">Urutan meja ditampilkan natural (Meja 1, 2, 3...10...) dan setiap meja wajib terhubung ke device + GPIO.</div>
-
       {showForm && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-xl border border-slate-200 w-full max-w-lg p-4 space-y-3">
             <h3 className="font-semibold">{editing ? 'Edit Meja' : 'Tambah Meja Baru'}</h3>
-            <input className="input" placeholder="Nama meja" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+            <div>
+              <label className="label">Nama Meja <span className="text-red-500">*</span></label>
+              <input className="input" placeholder="Nama meja" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+            </div>
 
             <div>
-              <label className="label">Device IoT</label>
-              <select className="input" value={form.iotDeviceId} onChange={(e) => setForm({ ...form, iotDeviceId: e.target.value })}>
-                {devices.map((d) => (
+              <label className="label">Device IoT <span className="text-red-500">*</span></label>
+              <select className="input" value={form.iotDeviceId} onChange={(e) => onChangeDevice(e.target.value)}>
+                {availableDevices.map((d) => (
                   <option key={d.id} value={d.id}>{d.name} ({d.id})</option>
                 ))}
               </select>
             </div>
 
             <div>
-              <label className="label">Relay Channel</label>
+              <label className="label">Relay Channel <span className="text-red-500">*</span></label>
               <select className="input" value={form.relayChannel} onChange={(e) => setForm({ ...form, relayChannel: Number(e.target.value) })}>
-                {RELAY_CHANNEL_OPTIONS.map((channel) => <option key={channel} value={channel}>{channel}</option>)}
+                {RELAY_CHANNEL_OPTIONS.map((channel) => (
+                  <option key={channel} value={channel} disabled={!!usedByDevice.usedRelay[form.iotDeviceId]?.has(channel)}>
+                    {channel}{usedByDevice.usedRelay[form.iotDeviceId]?.has(channel) ? ' (terpakai)' : ''}
+                  </option>
+                ))}
               </select>
             </div>
 
             <div>
-              <label className="label">GPIO Pin</label>
+              <label className="label">GPIO Pin <span className="text-red-500">*</span></label>
               <select className="input" value={form.gpioPin} onChange={(e) => setForm({ ...form, gpioPin: Number(e.target.value) })}>
-                {GPIO_OPTIONS.map((pin) => <option key={pin} value={pin}>{pin}</option>)}
+                {GPIO_OPTIONS.map((pin) => (
+                  <option key={pin} value={pin} disabled={!!usedByDevice.usedGpio[form.iotDeviceId]?.has(pin)}>
+                    {pin}{usedByDevice.usedGpio[form.iotDeviceId]?.has(pin) ? ' (terpakai)' : ''}
+                  </option>
+                ))}
               </select>
             </div>
 
-            <input type="number" className="input" placeholder="Harga per jam" value={form.hourlyRate} onChange={(e) => setForm({ ...form, hourlyRate: e.target.value })} />
+            <div>
+              <label className="label">Harga per Jam <span className="text-red-500">*</span></label>
+              <input type="number" className="input" placeholder="Harga per jam" value={form.hourlyRate} onChange={(e) => setForm({ ...form, hourlyRate: e.target.value })} />
+            </div>
+
             <div className="flex gap-2 justify-end">
               <button className="btn-secondary" onClick={() => setShowForm(false)}>Batal</button>
               <button className="btn-primary" onClick={save}>Simpan</button>
@@ -162,11 +212,12 @@ export default function DeveloperTablesPage() {
                   <td>{t.relayChannel}</td>
                   <td>{t.gpioPin}</td>
                   <td>{formatCurrency(Number(t.hourlyRate))}</td>
-                  <td>{t.isActive ? 'Aktif' : 'Nonaktif'}</td>
+                  <td>
+                    <button type="button" onClick={() => toggleActive(t)} className={`toggle-switch ${t.isActive ? 'active' : ''}`} title={t.isActive ? 'Aktif' : 'Nonaktif'} />
+                  </td>
                   <td>
                     <div className="flex gap-2">
                       <button className="text-xs px-2 py-1 bg-slate-100 rounded" onClick={() => openEdit(t)}>Edit</button>
-                      <button className="text-xs px-2 py-1 bg-slate-100 rounded" onClick={() => toggleActive(t)}>{t.isActive ? 'OFF' : 'ON'}</button>
                     </div>
                   </td>
                 </tr>

@@ -151,6 +151,7 @@ export const usersApi = {
 export const iotApi = {
   listDevices: () => api.get('/iot/devices').then((r) => r.data),
   createDevice: (name: string) => api.post('/iot/devices', { name }).then((r) => r.data),
+  updateDevice: (deviceId: string, data: any) => api.patch(`/iot/devices/${deviceId}`, data).then((r) => r.data),
   rotateToken: (deviceId: string) => api.post(`/iot/devices/${deviceId}/rotate-token`).then((r) => r.data),
   testConnection: (deviceId: string) =>
     api.post('/iot/test-connection', { deviceId }).then((r) => r.data),
