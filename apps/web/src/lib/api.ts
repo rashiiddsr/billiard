@@ -109,8 +109,6 @@ export const paymentsApi = {
     api.patch(`/payments/${id}/confirm`, { amountPaid }).then((r) => r.data),
   markPrinted: (id: string) => api.patch(`/payments/${id}/print`).then((r) => r.data),
   getReceipt: (id: string) => api.get(`/payments/${id}/receipt`).then((r) => r.data),
-  voidPayment: (id: string) => api.patch(`/payments/${id}/void`).then((r) => r.data),
-  deletePayment: (id: string) => api.patch(`/payments/${id}/delete`).then((r) => r.data),
 };
 
 // ─── Finance ─────────────────────────────────────────────────────────────────
