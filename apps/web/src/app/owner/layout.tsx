@@ -11,8 +11,7 @@ export default function OwnerLayout({ children }: { children: React.ReactNode })
 
   useEffect(() => {
     if (!loading && user && user.role !== 'OWNER') {
-      if (user.role === 'DEVELOPER') router.replace('/developer/dashboard');
-      else if (user.role === 'MANAGER') router.replace('/manager/dashboard');
+      if (user.role === 'MANAGER') router.replace('/manager/dashboard');
       else router.replace('/cashier/dashboard');
     }
   }, [user, loading, router]);
