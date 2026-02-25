@@ -1,118 +1,83 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { financeApi } from '@/lib/api';
 import { formatCurrency, formatDateShort } from '@/lib/utils';
 import toast from 'react-hot-toast';
 
-function toDateInputValue(date: Date) {
-  const tzOffset = date.getTimezoneOffset() * 60000;
-  return new Date(date.getTime() - tzOffset).toISOString().split('T')[0];
-}
-
 export default function FinancePage() {
-  const today = useMemo(() => toDateInputValue(new Date()), []);
-  const monthStart = useMemo(() => {
-    const now = new Date();
-    return toDateInputValue(new Date(now.getFullYear(), now.getMonth(), 1));
-  }, []);
-
-  const [startDate, setStartDate] = useState(monthStart);
+  const today = new Date().toISOString().split('T')[0];
+  const [startDate, setStartDate] = useState(today);
   const [endDate, setEndDate] = useState(today);
   const [report, setReport] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
   const [expenses, setExpenses] = useState<any[]>([]);
   const [expenseCategories, setExpenseCategories] = useState<string[]>([]);
-  const [loadingReport, setLoadingReport] = useState(true);
-  const [loadingExpenses, setLoadingExpenses] = useState(true);
 
+  // Expense form
   const [showExpenseForm, setShowExpenseForm] = useState(false);
-  const [editingExpense, setEditingExpense] = useState<any>(null);
   const [expCategory, setExpCategory] = useState('');
   const [expDate, setExpDate] = useState(today);
   const [expAmount, setExpAmount] = useState('');
   const [expNotes, setExpNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  const openCreateExpense = () => {
-    setEditingExpense(null);
-    setExpCategory('');
-    setExpDate(today);
-    setExpAmount('');
-    setExpNotes('');
-    setShowExpenseForm(true);
-  };
-
-  const openEditExpense = (expense: any) => {
-    setEditingExpense(expense);
-    setExpCategory(expense.category);
-    setExpDate(toDateInputValue(new Date(expense.date)));
-    setExpAmount(String(Number(expense.amount)));
-    setExpNotes(expense.notes || '');
-    setShowExpenseForm(true);
-  };
-
   const fetchReport = async () => {
-    setLoadingReport(true);
+    setLoading(true);
     try {
       const data = await financeApi.getReport(
-        new Date(`${startDate}T00:00:00`).toISOString(),
-        new Date(`${endDate}T23:59:59`).toISOString(),
+        new Date(startDate + 'T00:00:00').toISOString(),
+        new Date(endDate + 'T23:59:59').toISOString(),
       );
       setReport(data);
-    } catch {
+      setExpenses(data.expenses?.items || []);
+    } catch (e) {
       toast.error('Gagal memuat laporan');
     } finally {
-      setLoadingReport(false);
-    }
-  };
-
-  const fetchExpenses = async () => {
-    setLoadingExpenses(true);
-    try {
-      const data = await financeApi.listExpenses({
-        startDate: new Date(`${startDate}T00:00:00`).toISOString(),
-        endDate: new Date(`${endDate}T23:59:59`).toISOString(),
-        limit: 100,
-      });
-      setExpenses(data.data || []);
-    } catch {
-      toast.error('Gagal memuat daftar pengeluaran');
-    } finally {
-      setLoadingExpenses(false);
+      setLoading(false);
     }
   };
 
   useEffect(() => {
+    fetchReport();
     financeApi.expenseCategories().then(setExpenseCategories).catch(() => undefined);
   }, []);
 
-  useEffect(() => {
-    if (!startDate || !endDate) return;
-    fetchReport();
-    fetchExpenses();
-  }, [startDate, endDate]);
+  const setPreset = (preset: string) => {
+    const now = new Date();
+    let start: Date, end: Date;
+    if (preset === 'today') {
+      start = end = now;
+    } else if (preset === 'week') {
+      end = now;
+      start = new Date(now); start.setDate(now.getDate() - 7);
+    } else if (preset === 'month') {
+      start = new Date(now.getFullYear(), now.getMonth(), 1);
+      end = now;
+    } else {
+      return;
+    }
+    setStartDate(start.toISOString().split('T')[0]);
+    setEndDate(end.toISOString().split('T')[0]);
+  };
 
   const submitExpense = async () => {
-    if (!expCategory || !expAmount) { toast.error('Kategori dan jumlah wajib diisi'); return; }
+    if (!expCategory || !expAmount) { toast.error('Isi kategori dan jumlah'); return; }
     if (expCategory === 'Lainnya' && !expNotes.trim()) { toast.error('Catatan wajib untuk kategori Lainnya'); return; }
     setSubmitting(true);
     try {
-      const payload = {
+      await financeApi.createExpense({
         category: expCategory,
         date: expDate,
         amount: parseFloat(expAmount),
         notes: expNotes,
-      };
-      if (editingExpense) {
-        await financeApi.updateExpense(editingExpense.id, payload);
-        toast.success('Pengeluaran diperbarui');
-      } else {
-        await financeApi.createExpense(payload);
-        toast.success('Pengeluaran ditambahkan');
-      }
+      });
+      toast.success('Pengeluaran ditambahkan');
       setShowExpenseForm(false);
+      setExpCategory('');
+      setExpAmount('');
+      setExpNotes('');
       fetchReport();
-      fetchExpenses();
     } catch (e: any) {
       toast.error(e?.response?.data?.message || 'Gagal');
     } finally {
@@ -120,102 +85,90 @@ export default function FinancePage() {
     }
   };
 
-  const applyShortcut = (type: 'today' | 'last7' | 'last30' | 'month') => {
-    const now = new Date();
-    const end = toDateInputValue(now);
-    if (type === 'today') {
-      setStartDate(end);
-      setEndDate(end);
-      return;
-    }
-    if (type === 'last7') {
-      const start = new Date(now);
-      start.setDate(now.getDate() - 6);
-      setStartDate(toDateInputValue(start));
-      setEndDate(end);
-      return;
-    }
-    if (type === 'last30') {
-      const start = new Date(now);
-      start.setDate(now.getDate() - 29);
-      setStartDate(toDateInputValue(start));
-      setEndDate(end);
-      return;
-    }
-    setStartDate(toDateInputValue(new Date(now.getFullYear(), now.getMonth(), 1)));
-    setEndDate(end);
-  };
-
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Laporan Keuangan</h1>
-        <button onClick={openCreateExpense} className="btn-primary">+ Tambah Pengeluaran</button>
+        <button onClick={() => setShowExpenseForm(!showExpenseForm)} className="btn-secondary">
+          + Tambah Pengeluaran
+        </button>
       </div>
 
+      {/* Expense Form */}
       {showExpenseForm && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-white border border-slate-200 rounded-xl w-full max-w-md">
-            <div className="flex items-center justify-between p-4 border-b border-slate-200">
-              <h3 className="font-semibold">{editingExpense ? 'Edit Pengeluaran' : 'Tambah Pengeluaran'}</h3>
-              <button onClick={() => setShowExpenseForm(false)} className="text-slate-500 hover:text-slate-700">✕</button>
+        <div className="card border-blue-500/30">
+          <h3 className="font-semibold mb-4">Form Pengeluaran</h3>
+          <div className="grid grid-cols-2 gap-4 mb-4">
+            <div>
+              <label className="label">Kategori</label>
+              <select className="input" value={expCategory} onChange={(e) => setExpCategory(e.target.value)}><option value="">Pilih kategori</option>{expenseCategories.map((c) => <option key={c} value={c}>{c}</option>)}</select>
             </div>
-            <div className="p-4 space-y-4">
-              <div>
-                <label className="label">Kategori <span className="text-red-500">*</span></label>
-                <select className="input" value={expCategory} onChange={(e) => setExpCategory(e.target.value)}>
-                  <option value="">Pilih kategori</option>
-                  {expenseCategories.map((c) => <option key={c} value={c}>{c}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="label">Tanggal <span className="text-red-500">*</span></label>
-                <input type="date" className="input" value={expDate} onChange={(e) => setExpDate(e.target.value)} />
-              </div>
-              <div>
-                <label className="label">Jumlah (Rp) <span className="text-red-500">*</span></label>
-                <input type="number" className="input" placeholder="500000" value={expAmount} onChange={(e) => setExpAmount(e.target.value)} />
-              </div>
-              <div>
-                <label className="label">Catatan {expCategory === 'Lainnya' && <span className="text-red-500">*</span>}</label>
-                <textarea className="input resize-none" rows={2} placeholder="Keterangan..." value={expNotes} onChange={(e) => setExpNotes(e.target.value)} />
-              </div>
-              <div className="flex gap-2">
-                <button onClick={() => setShowExpenseForm(false)} className="btn-secondary flex-1">Batal</button>
-                <button onClick={submitExpense} className="btn-primary flex-1" disabled={submitting}>
-                  {submitting ? 'Menyimpan...' : 'Simpan'}
-                </button>
-              </div>
+            <div>
+              <label className="label">Tanggal</label>
+              <input type="date" className="input" value={expDate} onChange={(e) => setExpDate(e.target.value)} />
             </div>
+            <div>
+              <label className="label">Jumlah (Rp)</label>
+              <input type="number" className="input" placeholder="0" value={expAmount} onChange={(e) => setExpAmount(e.target.value)} />
+            </div>
+            <div>
+              <label className="label">Catatan {expCategory === 'Lainnya' ? '*' : ''}</label>
+              <input className="input" placeholder="Keterangan..." value={expNotes} onChange={(e) => setExpNotes(e.target.value)} />
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button onClick={() => setShowExpenseForm(false)} className="btn-secondary">Batal</button>
+            <button onClick={submitExpense} className="btn-primary" disabled={submitting}>
+              {submitting ? 'Menyimpan...' : 'Simpan'}
+            </button>
           </div>
         </div>
       )}
 
-      <div className="card p-4 space-y-3">
-        <div className="grid gap-3 md:grid-cols-[auto_1fr_auto_1fr] md:items-center">
-          <label className="text-sm text-slate-600">Rentang Tanggal</label>
-          <input type="date" className="input w-full" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
-          <span className="text-slate-500 text-center">s/d</span>
-          <input type="date" className="input w-full" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <button onClick={() => applyShortcut('today')} className="text-xs px-3 py-1.5 rounded bg-slate-100 text-slate-700 hover:bg-slate-200">Hari ini</button>
-          <button onClick={() => applyShortcut('last7')} className="text-xs px-3 py-1.5 rounded bg-slate-100 text-slate-700 hover:bg-slate-200">7 hari terakhir</button>
-          <button onClick={() => applyShortcut('last30')} className="text-xs px-3 py-1.5 rounded bg-slate-100 text-slate-700 hover:bg-slate-200">30 hari terakhir</button>
-          <button onClick={() => applyShortcut('month')} className="text-xs px-3 py-1.5 rounded bg-blue-100 text-blue-700 hover:bg-blue-200">Bulan ini</button>
+      {/* Date Filter */}
+      <div className="filter-bar">
+        <div className="flex items-center gap-4 flex-wrap">
+          <div className="flex gap-2">
+            {['today', 'week', 'month'].map((p) => (
+              <button key={p} onClick={() => setPreset(p)} className="btn-secondary text-sm py-1.5 px-3 capitalize">
+                {p === 'today' ? 'Hari Ini' : p === 'week' ? '7 Hari' : 'Bulan Ini'}
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center gap-2">
+            <input type="date" className="input text-sm" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+            <span className="text-slate-500">s/d</span>
+            <input type="date" className="input text-sm" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+            <button onClick={fetchReport} className="btn-primary text-sm py-2 px-4" disabled={loading}>
+              {loading ? '...' : 'Tampilkan'}
+            </button>
+          </div>
         </div>
       </div>
 
-      {report && !loadingReport && (
+      {/* Report Summary */}
+      {report && (
         <>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="card"><p className="text-slate-500 text-sm">Total Pendapatan</p><p className="text-2xl font-bold text-emerald-600 mt-1">{formatCurrency(report.revenue.total)}</p></div>
-            <div className="card"><p className="text-slate-500 text-sm">Billiard</p><p className="text-2xl font-bold text-blue-600 mt-1">{formatCurrency(report.revenue.billiard)}</p></div>
-            <div className="card"><p className="text-slate-500 text-sm">F&B</p><p className="text-2xl font-bold text-purple-600 mt-1">{formatCurrency(report.revenue.fnb)}</p></div>
-            <div className="card"><p className="text-slate-500 text-sm">Pengeluaran</p><p className="text-2xl font-bold text-red-600 mt-1">{formatCurrency(report.expenses.total)}</p></div>
+            <div className="card">
+              <p className="text-slate-500 text-sm">Total Pendapatan</p>
+              <p className="text-2xl font-bold text-emerald-600 mt-1">{formatCurrency(report.revenue.total)}</p>
+            </div>
+            <div className="card">
+              <p className="text-slate-500 text-sm">Billiard</p>
+              <p className="text-2xl font-bold text-blue-400 mt-1">{formatCurrency(report.revenue.billiard)}</p>
+            </div>
+            <div className="card">
+              <p className="text-slate-500 text-sm">F&B</p>
+              <p className="text-2xl font-bold text-purple-400 mt-1">{formatCurrency(report.revenue.fnb)}</p>
+            </div>
+            <div className="card">
+              <p className="text-slate-500 text-sm">Pengeluaran</p>
+              <p className="text-2xl font-bold text-red-600 mt-1">{formatCurrency(report.expenses.total)}</p>
+            </div>
           </div>
 
-          <div className="card border-green-200">
+          <div className="card border-green-500/30">
             <div className="flex justify-between items-center">
               <div>
                 <p className="text-slate-500">Profit Bersih</p>
@@ -225,50 +178,73 @@ export default function FinancePage() {
               </div>
               <div className="text-right">
                 {report.paymentMethods.map((p: any) => (
-                  <div key={p.method} className="text-sm text-slate-500">{p.method}: {formatCurrency(p.total)} ({p.count}x)</div>
+                  <div key={p.method} className="text-sm text-slate-500">
+                    {p.method}: {formatCurrency(p.total)} ({p.count}x)
+                  </div>
                 ))}
               </div>
             </div>
           </div>
+
+          {/* Per Table */}
+          {report.perTable.length > 0 && (
+            <div className="card">
+              <h3 className="font-semibold mb-3">Pendapatan Per Meja</h3>
+              <div className="table-wrapper">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Meja</th>
+                      <th>Jumlah Sesi</th>
+                      <th>Pendapatan</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {report.perTable.sort((a: any, b: any) => parseFloat(b.revenue) - parseFloat(a.revenue)).map((t: any) => (
+                      <tr key={t.tableId}>
+                        <td className="font-medium">{t.tableName}</td>
+                        <td>{t.sessions} sesi</td>
+                        <td className="font-bold text-emerald-600">{formatCurrency(t.revenue)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Expenses */}
+          {expenses.length > 0 && (
+            <div className="card">
+              <h3 className="font-semibold mb-3">Daftar Pengeluaran</h3>
+              <div className="table-wrapper">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Tanggal</th>
+                      <th>Kategori</th>
+                      <th>Jumlah</th>
+                      <th>Catatan</th>
+                      <th>Dibuat</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {expenses.map((e: any) => (
+                      <tr key={e.id}>
+                        <td>{formatDateShort(e.date)}</td>
+                        <td><span className="badge bg-slate-100 text-slate-700">{e.category}</span></td>
+                        <td className="font-medium text-red-600">{formatCurrency(e.amount)}</td>
+                        <td className="text-slate-500 text-sm">{e.notes || '-'}</td>
+                        <td className="text-slate-500 text-sm">{e.createdBy?.name}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </>
       )}
-
-      <div className="card p-0 overflow-hidden">
-        <div className="table-wrapper">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Tanggal</th>
-                <th>Kategori</th>
-                <th>Jumlah</th>
-                <th>Catatan</th>
-                <th>Dibuat Oleh</th>
-                <th>Aksi</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loadingExpenses ? (
-                <tr><td colSpan={6} className="text-center py-8 text-slate-500">Memuat...</td></tr>
-              ) : expenses.length === 0 ? (
-                <tr><td colSpan={6} className="text-center py-8 text-slate-500">Belum ada pengeluaran</td></tr>
-              ) : (
-                expenses.map((e) => (
-                  <tr key={e.id}>
-                    <td>{formatDateShort(e.date)}</td>
-                    <td><span className="badge bg-slate-100 text-slate-700">{e.category}</span></td>
-                    <td className="font-bold text-red-600">{formatCurrency(e.amount)}</td>
-                    <td className="text-slate-500 text-sm">{e.notes || '-'}</td>
-                    <td className="text-slate-500 text-sm">{e.createdBy?.name || '-'}</td>
-                    <td>
-                      <button onClick={() => openEditExpense(e)} className="text-xs px-2 py-1 rounded bg-amber-100 text-amber-700 hover:bg-amber-200">Edit</button>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
     </div>
   );
 }
