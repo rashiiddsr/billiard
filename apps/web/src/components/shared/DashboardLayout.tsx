@@ -8,7 +8,6 @@ import toast from 'react-hot-toast';
 
 const roleGreeting: Record<string, string> = {
   OWNER: 'Ringkasan performa bisnis hari ini',
-  DEVELOPER: 'Kelola konfigurasi IoT dan manajemen meja',
   MANAGER: 'Pantau operasional dan menu secara real-time',
   CASHIER: 'Semua kebutuhan transaksi ada di sini',
 };

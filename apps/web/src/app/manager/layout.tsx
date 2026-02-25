@@ -16,9 +16,6 @@ export default function ManagerLayout({ children }: { children: React.ReactNode 
     if (!loading && user && user.role === 'OWNER') {
       // Owner can access manager pages too
     }
-    if (!loading && user && user.role === 'DEVELOPER') {
-      router.replace('/developer/dashboard');
-    }
   }, [user, loading, router]);
 
   return <DashboardLayout>{children}</DashboardLayout>;
