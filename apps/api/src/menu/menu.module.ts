@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 import { Module } from '@nestjs/common';
-import { Controller, Get, Post, Patch, Param, Body, UseGuards, Query } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Param, Body, UseGuards, Query } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { IsString, IsNumber, IsBoolean, IsOptional, Min } from 'class-validator';
@@ -134,6 +134,27 @@ export class MenuService {
       afterData: payload,
     });
     return category;
+  }
+
+  async deleteCategory(id: string, userId: string) {
+    const existing = await this.prisma.menuCategory.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('Kategori tidak ditemukan');
+
+    if (existing.lastSkuNumber > 0) {
+      throw new BadRequestException('Kategori tidak bisa dihapus karena masih memiliki relasi produk');
+    }
+
+    await this.prisma.menuCategory.delete({ where: { id } });
+
+    await this.audit.log({
+      userId,
+      action: AuditAction.DELETE,
+      entity: 'MenuCategory',
+      entityId: id,
+      beforeData: existing,
+    });
+
+    return { success: true };
   }
 
   private buildSku(prefix: string, number: number) {
@@ -284,6 +305,12 @@ export class MenuController {
   @Roles('OWNER' as any, 'MANAGER' as any)
   updateCategory(@Param('id') id: string, @Body() dto: UpdateMenuCategoryDto, @CurrentUser() user: any) {
     return this.menuService.updateCategory(id, dto, user.id);
+  }
+
+  @Delete('categories/:id')
+  @Roles('OWNER' as any, 'MANAGER' as any)
+  deleteCategory(@Param('id') id: string, @CurrentUser() user: any) {
+    return this.menuService.deleteCategory(id, user.id);
   }
 
   @Get(':id')
