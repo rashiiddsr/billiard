@@ -13,9 +13,6 @@ export default function CashierLayout({ children }: { children: React.ReactNode 
     if (!loading && user && user.role === 'MANAGER') {
       router.replace('/manager/dashboard');
     }
-    if (!loading && user && user.role === 'DEVELOPER') {
-      router.replace('/developer/dashboard');
-    }
   }, [user, loading, router]);
 
   return <DashboardLayout>{children}</DashboardLayout>;
