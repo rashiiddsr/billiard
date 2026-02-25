@@ -144,12 +144,12 @@ export default function BillingPage() {
 
   return (
     <div className="space-y-6 p-4 sm:p-6">
-      <div className="card border border-sky-100 bg-gradient-to-r from-slate-800 via-slate-600 to-slate-500 text-white">
+      <div className="card bg-gradient-to-r from-slate-900/90 via-blue-900/30 to-cyan-900/30">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <p className="text-xs uppercase tracking-[0.2em] text-cyan-200">Live Control</p>
+            <p className="text-xs uppercase tracking-[0.2em] text-cyan-300">Live Control</p>
             <h1 className="mt-1 text-2xl font-bold">Billing Meja Interaktif</h1>
-            <p className="mt-1 text-sm text-slate-200">Pilih meja secara visual, mulai sesi, perpanjang waktu, dan monitor status real-time.</p>
+            <p className="mt-1 text-sm text-slate-300">Pilih meja secara visual, mulai sesi, perpanjang waktu, dan monitor status real-time.</p>
           </div>
           <div className="grid grid-cols-2 gap-3 text-sm sm:min-w-[260px]">
             <SummaryBox label="Sesi Aktif" value={occupiedCount.toString()} accent="text-amber-300" />
@@ -168,9 +168,9 @@ export default function BillingPage() {
           const device = table.iotDevice;
 
           return (
-            <div key={table.id} className="card border border-sky-100 bg-white/95 text-slate-800 transition-all hover:-translate-y-0.5 hover:border-cyan-300">
+            <div key={table.id} className="card transition-all hover:-translate-y-0.5 hover:border-cyan-400/40">
               <div className="mb-4 flex items-center justify-between">
-                <span className={`badge ${isOccupied ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                <span className={`badge ${isOccupied ? 'bg-amber-500/20 text-amber-300' : 'bg-emerald-500/20 text-emerald-300'}`}>
                   {isOccupied ? 'Sedang Main' : 'Siap Pakai'}
                 </span>
                 <span className={`h-2.5 w-2.5 rounded-full ${device?.isOnline ? 'bg-emerald-400' : 'bg-red-500'}`} title={device?.isOnline ? 'Online' : 'Offline'} />
@@ -184,9 +184,9 @@ export default function BillingPage() {
               <TablePreview occupied={isOccupied} warning={remaining?.isWarning} />
 
               {session && remaining && (
-                <div className="mb-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <div className="mb-3 rounded-xl border border-white/10 bg-slate-800/80 p-3">
                   <p className={`font-mono text-sm font-bold ${remaining.isWarning ? 'animate-pulse text-red-400' : 'text-emerald-400'}`}>{remaining.text}</p>
-                  <p className="mt-1 text-xs text-slate-500">Tagihan sementara: {formatCurrency(session.totalAmount)}</p>
+                  <p className="mt-1 text-xs text-slate-400">Tagihan sementara: {formatCurrency(session.totalAmount)}</p>
                 </div>
               )}
 
@@ -261,7 +261,7 @@ export default function BillingPage() {
                               setExtendMinutes(30);
                               setModal('extend');
                             }}
-                            className="rounded-lg bg-slate-200 px-2 py-1 text-xs text-slate-700 hover:bg-slate-300"
+                            className="rounded-lg bg-slate-700 px-2 py-1 text-xs hover:bg-slate-600"
                           >
                             +Waktu
                           </button>
@@ -287,7 +287,7 @@ export default function BillingPage() {
 
       {modal === 'reauth' && (
         <Modal title="Verifikasi Owner" onClose={() => setModal(null)}>
-          <p className="mb-4 text-sm text-slate-500">Masukkan PIN untuk memulai billing sebagai Owner.</p>
+          <p className="mb-4 text-sm text-slate-400">Masukkan PIN untuk memulai billing sebagai Owner.</p>
           <input
             type="password"
             className="input mb-4"
@@ -313,7 +313,7 @@ export default function BillingPage() {
               <label className="label">Durasi (menit)</label>
               <div className="mb-2 grid grid-cols-5 gap-2">
                 {[30, 60, 90, 120, 180].map((d) => (
-                  <button key={d} onClick={() => setDuration(d)} className={`rounded-lg py-1.5 text-xs ${duration === d ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>
+                  <button key={d} onClick={() => setDuration(d)} className={`rounded-lg py-1.5 text-xs ${duration === d ? 'bg-blue-600' : 'bg-slate-700 hover:bg-slate-600'}`}>
                     {d}m
                   </button>
                 ))}
@@ -323,10 +323,10 @@ export default function BillingPage() {
             <div>
               <label className="label">Tipe Rate</label>
               <div className="flex gap-2">
-                <button onClick={() => setRateType('HOURLY')} className={`flex-1 rounded-lg py-2 text-sm ${rateType === 'HOURLY' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>
+                <button onClick={() => setRateType('HOURLY')} className={`flex-1 rounded-lg py-2 text-sm ${rateType === 'HOURLY' ? 'bg-blue-600' : 'bg-slate-700'}`}>
                   Per Jam ({formatCurrency(selectedTable.hourlyRate)})
                 </button>
-                <button onClick={() => setRateType('MANUAL')} className={`flex-1 rounded-lg py-2 text-sm ${rateType === 'MANUAL' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>
+                <button onClick={() => setRateType('MANUAL')} className={`flex-1 rounded-lg py-2 text-sm ${rateType === 'MANUAL' ? 'bg-blue-600' : 'bg-slate-700'}`}>
                   Manual
                 </button>
               </div>
@@ -337,13 +337,13 @@ export default function BillingPage() {
                 <input type="number" className="input" placeholder="30000" value={manualRate} onChange={(e) => setManualRate(e.target.value)} />
               </div>
             )}
-            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+            <div className="rounded-lg border border-white/10 bg-slate-800/80 p-3">
               <div className="flex justify-between text-sm">
-                <span className="text-slate-500">Durasi</span>
+                <span className="text-slate-400">Durasi</span>
                 <span>{duration} menit</span>
               </div>
               <div className="mt-1 flex justify-between font-bold">
-                <span className="text-slate-600">Estimasi Total</span>
+                <span className="text-slate-400">Estimasi Total</span>
                 <span className="text-emerald-400">{formatCurrency(estimatedCost())}</span>
               </div>
             </div>
@@ -364,16 +364,16 @@ export default function BillingPage() {
               <label className="label">Tambah Waktu (menit)</label>
               <div className="mb-2 flex gap-2">
                 {[15, 30, 60, 90].map((d) => (
-                  <button key={d} onClick={() => setExtendMinutes(d)} className={`flex-1 rounded-lg py-1.5 text-xs ${extendMinutes === d ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>
+                  <button key={d} onClick={() => setExtendMinutes(d)} className={`flex-1 rounded-lg py-1.5 text-xs ${extendMinutes === d ? 'bg-blue-600' : 'bg-slate-700 hover:bg-slate-600'}`}>
                     +{d}m
                   </button>
                 ))}
               </div>
               <input type="number" className="input" value={extendMinutes} onChange={(e) => setExtendMinutes(parseInt(e.target.value) || 30)} min={15} step={15} />
             </div>
-            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
+            <div className="rounded-lg border border-white/10 bg-slate-800/80 p-3 text-sm">
               <div className="flex justify-between">
-                <span className="text-slate-600">Biaya tambahan</span>
+                <span className="text-slate-400">Biaya tambahan</span>
                 <span>{formatCurrency(Math.ceil(parseFloat(selectedSession.ratePerHour) * extendMinutes / 60))}</span>
               </div>
             </div>
@@ -389,7 +389,7 @@ export default function BillingPage() {
 
       {modal === 'stop' && selectedSession && (
         <Modal title="Hentikan Sesi?" onClose={() => setModal(null)}>
-          <p className="mb-4 text-slate-600">
+          <p className="mb-4 text-slate-300">
             Yakin hentikan sesi <span className="font-bold">{selectedSession.table?.name}</span>? Biaya akan dihitung berdasarkan waktu aktual.
           </p>
           <div className="flex gap-2">
@@ -406,8 +406,8 @@ export default function BillingPage() {
 
 function SummaryBox({ label, value, accent, mono }: { label: string; value: string; accent: string; mono?: boolean }) {
   return (
-    <div className="rounded-xl border border-white/20 bg-white/20 p-3 backdrop-blur">
-      <p className="text-xs text-slate-200">{label}</p>
+    <div className="rounded-xl border border-white/10 bg-slate-800/70 p-3">
+      <p className="text-xs text-slate-400">{label}</p>
       <p className={`text-base font-semibold ${accent} ${mono ? 'font-mono text-sm' : ''}`}>{value}</p>
     </div>
   );
@@ -415,7 +415,7 @@ function SummaryBox({ label, value, accent, mono }: { label: string; value: stri
 
 function TablePreview({ occupied, warning }: { occupied: boolean; warning?: boolean }) {
   return (
-    <div className="mb-4 rounded-2xl border border-sky-100 bg-gradient-to-br from-slate-900 to-slate-700 p-4">
+    <div className="mb-4 rounded-2xl border border-white/10 bg-gradient-to-br from-slate-900 to-slate-800 p-4">
       <div className="relative mx-auto h-24 w-36">
         <div className={`absolute left-5 top-6 h-12 w-24 rounded-xl border-2 ${occupied ? 'border-amber-400 bg-amber-400/10' : 'border-cyan-400 bg-cyan-400/10'}`} />
         <div className="absolute left-0 top-2 h-5 w-5 rounded-full border border-slate-500 bg-slate-700" />
@@ -423,18 +423,18 @@ function TablePreview({ occupied, warning }: { occupied: boolean; warning?: bool
         <div className="absolute bottom-0 left-0 h-5 w-5 rounded-full border border-slate-500 bg-slate-700" />
         <div className="absolute bottom-0 right-0 h-5 w-5 rounded-full border border-slate-500 bg-slate-700" />
       </div>
-      <p className={`mt-2 text-center text-xs ${warning ? 'text-red-500' : 'text-slate-500'}`}>{occupied ? 'Meja sedang digunakan' : 'Meja siap dimainkan'}</p>
+      <p className={`mt-2 text-center text-xs ${warning ? 'text-red-400' : 'text-slate-400'}`}>{occupied ? 'Meja sedang digunakan' : 'Meja siap dimainkan'}</p>
     </div>
   );
 }
 
 function Modal({ title, children, onClose }: { title: string; children: React.ReactNode; onClose: () => void }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/45 p-4">
-      <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white shadow-2xl">
-        <div className="flex items-center justify-between border-b border-slate-200 p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+      <div className="w-full max-w-md rounded-2xl border border-white/10 bg-slate-900/95 shadow-2xl shadow-black/60">
+        <div className="flex items-center justify-between border-b border-white/10 p-4">
           <h3 className="font-semibold">{title}</h3>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-700">✕</button>
+          <button onClick={onClose} className="text-slate-400 hover:text-white">✕</button>
         </div>
         <div className="p-4">{children}</div>
       </div>

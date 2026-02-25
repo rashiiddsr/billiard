@@ -142,30 +142,30 @@ function CheckoutContent() {
           <div className="text-center mb-4">
             <div className="text-4xl mb-2">🧾</div>
             <h2 className="text-xl font-bold">Struk Pembayaran</h2>
-            <p className="font-medium text-emerald-600">LUNAS</p>
+            <p className="text-green-400 font-medium">LUNAS</p>
           </div>
 
-          <div className="border-t border-dashed border-slate-200 py-3 space-y-1 text-sm">
+          <div className="border-t border-dashed border-slate-600 py-3 space-y-1 text-sm">
             <div className="flex justify-between">
-              <span className="text-slate-500">No. Pembayaran</span>
+              <span className="text-slate-400">No. Pembayaran</span>
               <span className="font-mono text-xs">{receipt.paymentNumber}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-slate-500">Kasir</span>
+              <span className="text-slate-400">Kasir</span>
               <span>{receipt.cashier}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-slate-500">Meja</span>
+              <span className="text-slate-400">Meja</span>
               <span>{receipt.table}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-slate-500">Waktu</span>
+              <span className="text-slate-400">Waktu</span>
               <span>{formatDate(receipt.paidAt)}</span>
             </div>
           </div>
 
           {receipt.billingSession && (
-            <div className="border-t border-dashed border-slate-200 py-3">
+            <div className="border-t border-dashed border-slate-600 py-3">
               <p className="text-slate-400 text-xs mb-2 uppercase tracking-wide">Sesi Billiard</p>
               <div className="flex justify-between text-sm">
                 <span>Billiard ({receipt.billingSession.duration}m)</span>
@@ -175,7 +175,7 @@ function CheckoutContent() {
           )}
 
           {receipt.fnbItems?.length > 0 && (
-            <div className="border-t border-dashed border-slate-200 py-3">
+            <div className="border-t border-dashed border-slate-600 py-3">
               <p className="text-slate-400 text-xs mb-2 uppercase tracking-wide">F&B</p>
               {receipt.fnbItems.map((item: any, i: number) => (
                 <div key={i} className="flex justify-between text-sm mb-1">
@@ -186,9 +186,9 @@ function CheckoutContent() {
             </div>
           )}
 
-          <div className="border-t border-dashed border-slate-200 py-3 space-y-1 text-sm">
+          <div className="border-t border-dashed border-slate-600 py-3 space-y-1 text-sm">
             <div className="flex justify-between">
-              <span className="text-slate-500">Subtotal</span>
+              <span className="text-slate-400">Subtotal</span>
               <span>{formatCurrency(receipt.subtotal)}</span>
             </div>
             {parseFloat(receipt.discount) > 0 && (
@@ -203,18 +203,18 @@ function CheckoutContent() {
                 <span>{formatCurrency(receipt.tax)}</span>
               </div>
             )}
-            <div className="mt-2 flex justify-between border-t border-slate-200 pt-2 text-base font-bold">
+            <div className="flex justify-between font-bold text-base border-t border-slate-600 pt-2 mt-2">
               <span>TOTAL</span>
-              <span className="text-emerald-600">{formatCurrency(receipt.total)}</span>
+              <span className="text-green-400">{formatCurrency(receipt.total)}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-slate-500">Dibayar ({receipt.method})</span>
+              <span className="text-slate-400">Dibayar ({receipt.method})</span>
               <span>{formatCurrency(receipt.amountPaid)}</span>
             </div>
             {parseFloat(receipt.change || '0') > 0 && (
               <div className="flex justify-between font-bold">
                 <span>Kembalian</span>
-                <span className="text-blue-600">{formatCurrency(receipt.change)}</span>
+                <span className="text-blue-400">{formatCurrency(receipt.change)}</span>
               </div>
             )}
           </div>
@@ -231,7 +231,7 @@ function CheckoutContent() {
           </div>
 
           {currentPayment.isPrinted && (
-            <p className="mt-2 text-center text-xs text-slate-500">✓ Sudah dicetak</p>
+            <p className="text-center text-xs text-slate-400 mt-2">✓ Sudah dicetak</p>
           )}
         </div>
       </div>
@@ -248,15 +248,15 @@ function CheckoutContent() {
           <h3 className="font-semibold mb-3">Ringkasan</h3>
           <div className="space-y-2 text-sm">
             <div className="flex justify-between">
-              <span className="text-slate-500">No. Pembayaran</span>
+              <span className="text-slate-400">No. Pembayaran</span>
               <span className="font-mono">{currentPayment.paymentNumber}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-slate-500">Billiard</span>
+              <span className="text-slate-400">Billiard</span>
               <span>{formatCurrency(currentPayment.billingAmount)}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-slate-500">F&B</span>
+              <span className="text-slate-400">F&B</span>
               <span>{formatCurrency(currentPayment.fnbAmount)}</span>
             </div>
             {parseFloat(currentPayment.discountAmount) > 0 && (
@@ -271,9 +271,9 @@ function CheckoutContent() {
                 <span>{formatCurrency(currentPayment.taxAmount)}</span>
               </div>
             )}
-            <div className="flex justify-between border-t border-slate-200 pt-2 text-lg font-bold">
+            <div className="flex justify-between font-bold text-lg border-t border-slate-600 pt-2">
               <span>TOTAL</span>
-              <span className="text-emerald-600">{formatCurrency(currentPayment.totalAmount)}</span>
+              <span className="text-green-400">{formatCurrency(currentPayment.totalAmount)}</span>
             </div>
           </div>
         </div>
@@ -296,15 +296,15 @@ function CheckoutContent() {
               <button
                 key={amt}
                 onClick={() => setAmountPaid(String(amt))}
-                className="rounded bg-slate-100 px-2 py-1 text-xs text-slate-700 hover:bg-slate-200"
+                className="text-xs px-2 py-1 bg-slate-700 hover:bg-slate-600 rounded"
               >
                 {formatCurrency(amt)}
               </button>
             ))}
           </div>
           {parseFloat(amountPaid) > 0 && (
-            <div className="mt-3 flex justify-between rounded-lg bg-slate-100 p-2">
-              <span className="text-slate-500">Kembalian</span>
+            <div className="mt-3 p-2 bg-slate-700 rounded-lg flex justify-between">
+              <span className="text-slate-400">Kembalian</span>
               <span className={`font-bold ${change >= 0 ? 'text-green-400' : 'text-red-400'}`}>
                 {formatCurrency(Math.max(0, change))}
               </span>
@@ -333,13 +333,13 @@ function CheckoutContent() {
 
       {/* Pending Payments */}
       {pendingPayments.length > 0 && (
-        <div className="card border border-amber-200 bg-amber-50/60">
-          <h3 className="mb-3 font-semibold text-amber-700">⏳ Menunggu Konfirmasi</h3>
+        <div className="card border-yellow-500/30">
+          <h3 className="font-semibold text-yellow-400 mb-3">⏳ Menunggu Konfirmasi</h3>
           {pendingPayments.map((p) => (
-            <div key={p.id} className="mb-2 flex items-center justify-between rounded-lg bg-white p-2">
+            <div key={p.id} className="flex items-center justify-between p-2 bg-slate-700 rounded-lg mb-2">
               <div>
                 <p className="text-sm font-medium">{p.paymentNumber}</p>
-                <p className="text-xs text-slate-500">{p.method} • {formatCurrency(p.totalAmount)}</p>
+                <p className="text-xs text-slate-400">{p.method} • {formatCurrency(p.totalAmount)}</p>
               </div>
               <button onClick={() => setCurrentPayment(p)} className="btn-primary text-xs py-1 px-3">
                 Konfirmasi
@@ -365,7 +365,7 @@ function CheckoutContent() {
             ))}
           </select>
           {selectedSessionData && (
-            <p className="mt-1 text-sm text-emerald-600">
+            <p className="text-sm text-green-400 mt-1">
               Biaya Billiard: {formatCurrency(selectedSessionData.totalAmount)}
             </p>
           )}
@@ -377,7 +377,7 @@ function CheckoutContent() {
             <label className="label">Pesanan F&B (pilih yang ingin digabung)</label>
             <div className="space-y-2 max-h-40 overflow-y-auto">
               {pendingOrders.map((o) => (
-                <label key={o.id} className="flex cursor-pointer items-center gap-3 rounded-lg border border-slate-200 bg-white p-2">
+                <label key={o.id} className="flex items-center gap-3 p-2 bg-slate-700 rounded-lg cursor-pointer">
                   <input
                     type="checkbox"
                     checked={selectedOrders.includes(o.id)}
@@ -389,7 +389,7 @@ function CheckoutContent() {
                   />
                   <div className="flex-1 text-sm">
                     <p className="font-medium">{o.orderNumber}</p>
-                    <p className="text-slate-500">{o.items?.length || 0} item • {formatCurrency(o.total)}</p>
+                    <p className="text-slate-400">{o.items?.length || 0} item • {formatCurrency(o.total)}</p>
                   </div>
                 </label>
               ))}
@@ -405,7 +405,7 @@ function CheckoutContent() {
               <button
                 key={m}
                 onClick={() => setMethod(m)}
-                className={`flex-1 rounded-lg py-2 text-sm font-medium ${method === m ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
+                className={`flex-1 py-2 rounded-lg text-sm font-medium ${method === m ? 'bg-blue-600' : 'bg-slate-700 hover:bg-slate-600'}`}
               >
                 {m}
               </button>
@@ -452,13 +452,13 @@ function CheckoutContent() {
         </div>
 
         {/* Summary */}
-        <div className="mb-4 space-y-1 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
+        <div className="p-3 bg-slate-700 rounded-lg mb-4 text-sm space-y-1">
           <div className="flex justify-between">
-            <span className="text-slate-500">Billiard</span>
+            <span className="text-slate-400">Billiard</span>
             <span>{formatCurrency(billingAmt)}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-slate-500">F&B</span>
+            <span className="text-slate-400">F&B</span>
             <span>{formatCurrency(fnbAmt)}</span>
           </div>
           {discountAmt > 0 && (
@@ -473,9 +473,9 @@ function CheckoutContent() {
               <span>{formatCurrency(taxAmt)}</span>
             </div>
           )}
-          <div className="mt-2 flex justify-between border-t border-slate-200 pt-2 text-base font-bold">
+          <div className="flex justify-between font-bold text-base border-t border-slate-600 pt-2 mt-2">
             <span>TOTAL</span>
-            <span className="text-emerald-600">{formatCurrency(total)}</span>
+            <span className="text-green-400">{formatCurrency(total)}</span>
           </div>
         </div>
 
