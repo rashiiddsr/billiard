@@ -7,11 +7,10 @@ import {
   Headers,
   UseGuards,
   Param,
-  Patch,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
-import { IsString, IsOptional, IsBoolean } from 'class-validator';
+import { IsString } from 'class-validator';
 import { IotService } from './iot.service';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -24,14 +23,6 @@ class CreateDeviceDto {
 class DeviceActionDto {
   @IsString()
   deviceId: string;
-}
-
-class UpdateDeviceDto {
-  @IsOptional() @IsString()
-  name?: string;
-
-  @IsOptional() @IsBoolean()
-  isActive?: boolean;
 }
 
 @ApiTags('IoT')
@@ -100,14 +91,6 @@ export class IotController {
   @Roles('DEVELOPER' as any)
   createDevice(@Body() dto: CreateDeviceDto) {
     return this.iotService.createDevice(dto.name);
-  }
-
-  @Patch('devices/:deviceId')
-  @ApiBearerAuth()
-  @UseGuards(AuthGuard('jwt'), RolesGuard)
-  @Roles('DEVELOPER' as any)
-  updateDevice(@Param('deviceId') deviceId: string, @Body() dto: UpdateDeviceDto) {
-    return this.iotService.updateDevice(deviceId, dto);
   }
 
   @Post('devices/:deviceId/rotate-token')

@@ -57,7 +57,6 @@ export class IotService {
 
     const device = await this.prisma.iotDevice.findUnique({ where: { id: deviceId } });
     if (!device) throw new UnauthorizedException('Device not found');
-    if (!device.isActive) throw new UnauthorizedException('Device dinonaktifkan oleh developer');
 
     const tokenValid = await bcrypt.compare(token, device.deviceToken);
     if (!tokenValid) throw new UnauthorizedException('Invalid device token');
@@ -172,7 +171,6 @@ export class IotService {
         id: device.id,
         name: device.name,
         isOnline: true,
-        isActive: device.isActive,
       },
       relayChannels: IotService.ALLOWED_RELAY_CHANNELS,
       gpioPins: IotService.ALLOWED_GPIO_PINS,
@@ -202,34 +200,15 @@ export class IotService {
     });
   }
 
-  async assertTableReadyForBilling(tableId: string) {
+  async sendCommand(tableId: string, commandType: IoTCommandType | string) {
     const table = await this.prisma.table.findUnique({
       where: { id: tableId },
       include: { iotDevice: true },
     });
-
     if (!table) throw new NotFoundException('Table not found');
 
-    if (!table.iotDevice.isActive) {
-      throw new BadRequestException('ESP untuk meja ini sedang nonaktif. Hubungi developer.');
-    }
-
-    const isOnline = !!table.iotDevice.isOnline
-      && !!table.iotDevice.lastSeen
-      && Date.now() - table.iotDevice.lastSeen.getTime() <= 5 * 60 * 1000;
-
-    if (!isOnline) {
-      throw new BadRequestException('ESP untuk meja ini tidak terhubung. Hubungi developer.');
-    }
-
-    return table;
-  }
-
-  async sendCommand(tableId: string, commandType: IoTCommandType | string) {
-    const table = await this.assertTableReadyForBilling(tableId);
-
     const nonce = uuidv4();
-    return this.prisma.iotCommand.create({
+    const command = await this.prisma.iotCommand.create({
       data: {
         deviceId: table.iotDeviceId,
         command: commandType as IoTCommandType,
@@ -243,6 +222,12 @@ export class IotService {
         },
       },
     });
+
+    if (!table.iotDevice.isOnline || !table.iotDevice.lastSeen || Date.now() - table.iotDevice.lastSeen.getTime() > 5 * 60 * 1000) {
+      console.warn(`IoT device ${table.iotDevice.id} appears offline, command ${commandType} queued`);
+    }
+
+    return command;
   }
 
   async listDevices() {
@@ -264,7 +249,6 @@ export class IotService {
         name,
         deviceToken: tokenHash,
         isOnline: false,
-        isActive: true,
       },
       include: { _count: { select: { tables: true } } },
     });
@@ -276,26 +260,6 @@ export class IotService {
       gpioPins: IotService.ALLOWED_GPIO_PINS,
       note: 'Simpan private token ini sekarang. Token tidak bisa dilihat lagi.',
     };
-  }
-
-  async updateDevice(deviceId: string, dto: { name?: string; isActive?: boolean }) {
-    const device = await this.prisma.iotDevice.findUnique({ where: { id: deviceId } });
-    if (!device) throw new NotFoundException('Device not found');
-
-    if (dto.name !== undefined && dto.name !== device.name) {
-      const exists = await this.prisma.iotDevice.findUnique({ where: { name: dto.name } });
-      if (exists) throw new ConflictException('Nama device sudah dipakai');
-    }
-
-    return this.prisma.iotDevice.update({
-      where: { id: deviceId },
-      data: {
-        ...(dto.name !== undefined ? { name: dto.name } : {}),
-        ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
-        ...(dto.isActive === false ? { isOnline: false } : {}),
-      },
-      include: { _count: { select: { tables: true } } },
-    });
   }
 
   async rotateDeviceToken(deviceId: string) {
