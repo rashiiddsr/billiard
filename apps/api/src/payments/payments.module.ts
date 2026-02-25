@@ -1,5 +1,5 @@
 import {
-  Injectable, NotFoundException, BadRequestException, ForbiddenException,
+  Injectable, NotFoundException, BadRequestException,
 } from '@nestjs/common';
 import { Module } from '@nestjs/common';
 import { Controller, Get, Post, Patch, Param, Body, UseGuards, Query } from '@nestjs/common';
@@ -13,7 +13,7 @@ import { AuditService } from '../common/audit/audit.service';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
-import { AuditAction, PaymentMethod } from '@prisma/client';
+import { AuditAction, PaymentMethod, PaymentStatus } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
 
 export class CreateCheckoutDto {
@@ -24,13 +24,12 @@ export class CreateCheckoutDto {
   @IsOptional() @IsString() discountReason?: string;
   @IsOptional() @IsString() discountApprovedById?: string;
   @IsOptional() @IsString() reference?: string; // for QRIS/TRANSFER
+  @IsOptional() @IsNumber() @Min(0) amountPaid?: number;
 }
 
 export class ConfirmPaymentDto {
   @IsNumber() @Min(0) amountPaid: number;
 }
-
-let paymentCounter = 1;
 
 @Injectable()
 export class PaymentsService {
@@ -41,7 +40,17 @@ export class PaymentsService {
 
   private generatePaymentNumber() {
     const now = new Date();
-    return `PAY-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}-${String(paymentCounter++).padStart(4, '0')}`;
+    const datePart = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+    const timePart = `${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`;
+    const randPart = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
+    return `PAY-${datePart}-${timePart}${randPart}`;
+  }
+
+  private normalizePaymentStatus(status?: string): PaymentStatus | undefined {
+    if (!status) return undefined;
+    if (status === 'PENDING') return 'PENDING_PAYMENT';
+    if (status === 'PENDING_PAYMENT' || status === 'PAID' || status === 'REFUNDED') return status;
+    return undefined;
   }
 
   async createCheckout(dto: CreateCheckoutDto, userId: string) {
@@ -76,27 +85,44 @@ export class PaymentsService {
       throw new BadRequestException('Discount cannot exceed total amount');
     }
 
-    const payment = await this.prisma.payment.create({
-      data: {
-        paymentNumber: this.generatePaymentNumber(),
-        billingSessionId: dto.billingSessionId,
-        method: dto.method,
-        status: 'PENDING_PAYMENT',
-        billingAmount: billingAmount.toFixed(2),
-        fnbAmount: fnbAmount.toFixed(2),
-        subtotal: subtotal.toFixed(2),
-        discountAmount: discount.toFixed(2),
-        discountReason: dto.discountReason,
-        discountApprovedById: dto.discountApprovedById,
-        taxAmount: taxAmount.toFixed(2),
-        totalAmount: totalAmount.toFixed(2),
-        reference: dto.reference,
-        // Link orders
-        ...(dto.orderIds && dto.orderIds.length > 0 ? {
-          orderId: dto.orderIds[0], // Primary order link
-        } : {}),
-      },
-    });
+    let payment: any = null;
+    for (let i = 0; i < 5; i += 1) {
+      try {
+        payment = await this.prisma.payment.create({
+          data: {
+            paymentNumber: this.generatePaymentNumber(),
+            billingSessionId: dto.billingSessionId,
+            method: dto.method,
+            status: 'PAID',
+            billingAmount: billingAmount.toFixed(2),
+            fnbAmount: fnbAmount.toFixed(2),
+            subtotal: subtotal.toFixed(2),
+            discountAmount: discount.toFixed(2),
+            discountReason: dto.discountReason,
+            discountApprovedById: dto.discountApprovedById,
+            taxAmount: taxAmount.toFixed(2),
+            totalAmount: totalAmount.toFixed(2),
+            reference: dto.reference,
+            amountPaid: (dto.amountPaid || totalAmount).toFixed(2),
+            changeAmount: new Decimal(dto.amountPaid || totalAmount).minus(totalAmount).toFixed(2),
+            paidById: userId,
+            paidAt: new Date(),
+            ...(dto.orderIds && dto.orderIds.length > 0 ? {
+              orderId: dto.orderIds[0],
+            } : {}),
+          },
+        });
+        break;
+      } catch (error: any) {
+        if (error?.code !== 'P2002') {
+          throw error;
+        }
+      }
+    }
+
+    if (!payment) {
+      throw new BadRequestException('Gagal membuat nomor transaksi unik, silakan coba lagi');
+    }
 
     // Also link all orders to this payment by updating them
     if (dto.orderIds) {
@@ -105,6 +131,7 @@ export class PaymentsService {
           where: { id: orderId },
           data: { status: 'CONFIRMED' },
         });
+        await this.deductStock(orderId, userId);
       }
     }
 
@@ -189,6 +216,35 @@ export class PaymentsService {
       },
     });
 
+    let billingBreakdown = null;
+    if (fullPayment.billingSessionId) {
+      const extensionLogs = await this.prisma.auditLog.findMany({
+        where: {
+          entity: 'BillingSession',
+          entityId: fullPayment.billingSessionId,
+          action: 'EXTEND_BILLING',
+        },
+        orderBy: { createdAt: 'asc' },
+        select: { id: true, createdAt: true, afterData: true },
+      });
+
+      const extensions = extensionLogs.map((log: any, index: number) => ({
+        id: log.id,
+        order: index + 1,
+        createdAt: log.createdAt,
+        additionalMinutes: Number((log.afterData as any)?.additionalMinutes || 0),
+        additionalAmount: Number((log.afterData as any)?.additionalAmount || 0),
+      }));
+      const extensionTotal = extensions.reduce((sum, item) => sum + item.additionalAmount, 0);
+      const billed = Number(fullPayment.billingAmount || 0);
+
+      billingBreakdown = {
+        baseAmount: Math.max(0, billed - extensionTotal),
+        extensionTotal,
+        extensions,
+      };
+    }
+
     return {
       paymentNumber: fullPayment.paymentNumber,
       printedAt: new Date().toISOString(),
@@ -200,6 +256,7 @@ export class PaymentsService {
         duration: fullPayment.billingSession.durationMinutes,
         rate: fullPayment.billingSession.ratePerHour,
         amount: fullPayment.billingAmount,
+        breakdown: billingBreakdown,
       } : null,
       fnbItems: fullPayment.order?.items?.map((item: any) => ({
         name: item.menuItem.name,
@@ -249,9 +306,28 @@ export class PaymentsService {
     }
   }
 
-  async findAll(filters: { status?: string; page?: number; limit?: number; startDate?: Date; endDate?: Date }) {
+  async voidPayment(paymentId: string, userId: string) {
+    const payment = await this.prisma.payment.findUnique({ where: { id: paymentId } });
+    if (!payment) throw new NotFoundException('Payment not found');
+    if (payment.status !== 'PAID') throw new BadRequestException('Hanya transaksi lunas yang bisa di-void');
+    return this.prisma.payment.update({ where: { id: paymentId }, data: { status: 'REFUNDED' } });
+  }
+
+  async deletePayment(paymentId: string) {
+    const payment = await this.prisma.payment.findUnique({ where: { id: paymentId } });
+    if (!payment) throw new NotFoundException('Payment not found');
+    await this.prisma.payment.delete({ where: { id: paymentId } });
+    return { success: true };
+  }
+
+  async findAll(filters: { status?: string; page?: number; limit?: number; startDate?: Date; endDate?: Date; paidById?: string }) {
     const where: any = {};
-    if (filters.status) where.status = filters.status;
+    const normalizedStatus = this.normalizePaymentStatus(filters.status);
+    if (filters.status && !normalizedStatus) {
+      throw new BadRequestException('Status pembayaran tidak valid');
+    }
+    if (normalizedStatus) where.status = normalizedStatus;
+    if (filters.paidById) where.paidById = filters.paidById;
     if (filters.startDate || filters.endDate) {
       where.createdAt = {};
       if (filters.startDate) where.createdAt.gte = filters.startDate;
@@ -288,16 +364,19 @@ export class PaymentsController {
 
   @Get()
   findAll(
+    @CurrentUser() user: any,
     @Query('status') status?: string,
     @Query('page') page?: number,
     @Query('limit') limit?: number,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
+    @Query('paidById') paidById?: string,
   ) {
     return this.paymentsService.findAll({
       status,
       page,
       limit,
+      paidById: user.role === 'CASHIER' ? user.id : paidById,
       startDate: startDate ? new Date(startDate) : undefined,
       endDate: endDate ? new Date(endDate) : undefined,
     });
@@ -319,6 +398,12 @@ export class PaymentsController {
     return this.paymentsService.confirmPayment(id, dto, user.id);
   }
 
+  @Patch(':id/void')
+  @Roles('MANAGER' as any, 'OWNER' as any)
+  voidPayment(@Param('id') id: string, @CurrentUser() user: any) {
+    return this.paymentsService.voidPayment(id, user.id);
+  }
+
   @Patch(':id/print')
   @Roles('OWNER' as any, 'CASHIER' as any)
   markPrinted(@Param('id') id: string, @CurrentUser() user: any) {
@@ -329,6 +414,12 @@ export class PaymentsController {
   @Roles('OWNER' as any, 'CASHIER' as any)
   getReceipt(@Param('id') id: string) {
     return this.paymentsService.getReceiptData(id);
+  }
+
+  @Patch(':id/delete')
+  @Roles('OWNER' as any)
+  deletePayment(@Param('id') id: string) {
+    return this.paymentsService.deletePayment(id);
   }
 }
 
