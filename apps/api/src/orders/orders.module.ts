@@ -47,8 +47,36 @@ export class OrdersService {
     return `ORD-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}-${String(orderCounter++).padStart(4, '0')}`;
   }
 
+  private async deductStockForOrder(orderId: string, userId: string) {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: { items: { include: { menuItem: { include: { stock: true } } } } },
+    });
+
+    if (!order) return;
+
+    for (const item of order.items) {
+      if (item.menuItem.stock?.trackStock) {
+        await this.prisma.stockFnb.update({
+          where: { menuItemId: item.menuItemId },
+          data: { qtyOnHand: { decrement: item.quantity } },
+        });
+        await this.prisma.stockAdjustment.create({
+          data: {
+            stockFnbId: item.menuItem.stock.id,
+            actionType: 'SALE_DEDUCTION',
+            quantityDelta: -item.quantity,
+            notes: `Sale from owner-locked order ${orderId}`,
+            performedById: userId,
+          },
+        });
+      }
+    }
+  }
+
   async createOrder(dto: CreateOrderDto, userId: string) {
     // Validate billing session exists
+    let ownerLockedSession = false;
     if (dto.billingSessionId) {
       const session = await this.prisma.billingSession.findUnique({
         where: { id: dto.billingSessionId },
@@ -57,6 +85,7 @@ export class OrdersService {
       if (session.status !== 'ACTIVE') {
         throw new BadRequestException('Billing session is not active');
       }
+      ownerLockedSession = session.rateType === 'OWNER_LOCK';
     }
 
     // Calculate totals
@@ -108,7 +137,7 @@ export class OrdersService {
         taxAmount: taxAmount.toFixed(2),
         total: total.toFixed(2),
         createdById: userId,
-        status: 'DRAFT',
+        status: ownerLockedSession ? 'CONFIRMED' : 'DRAFT',
         items: {
           create: itemsData,
         },
@@ -118,6 +147,10 @@ export class OrdersService {
         createdBy: { select: { id: true, name: true } },
       },
     });
+
+    if (ownerLockedSession) {
+      await this.deductStockForOrder(order.id, userId);
+    }
 
     await this.audit.log({
       userId,
