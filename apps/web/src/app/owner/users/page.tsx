@@ -18,7 +18,6 @@ export default function UsersPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<Role>('CASHIER');
-  const [pin, setPin] = useState('');
 
   useEffect(() => { fetchUsers(); }, []);
 
@@ -36,14 +35,13 @@ export default function UsersPage() {
 
   const openCreate = () => {
     setEditUser(null);
-    setName(''); setEmail(''); setPassword(''); setRole('CASHIER'); setPin('');
+    setName(''); setEmail(''); setPassword(''); setRole('CASHIER');
     setShowForm(true);
   };
 
   const openEdit = (user: any) => {
     setEditUser(user);
     setName(user.name); setEmail(user.email); setPassword(''); setRole(user.role);
-    setPin('');
     setShowForm(true);
   };
 
@@ -54,7 +52,6 @@ export default function UsersPage() {
     try {
       const data: any = { name, email, role };
       if (password) data.password = password;
-      if (pin) data.pin = pin;
 
       if (editUser) {
         await usersApi.update(editUser.id, data);
@@ -124,12 +121,6 @@ export default function UsersPage() {
                   <option value="MANAGER">MANAGER</option>
                 </select>
               </div>
-              {role === 'MANAGER' && (
-                <div>
-                  <label className="label">PIN (opsional)</label>
-                  <input type="password" className="input" maxLength={6} placeholder="123456" value={pin} onChange={(e) => setPin(e.target.value)} />
-                </div>
-              )}
               <div className="flex gap-2 pt-2">
                 <button onClick={() => setShowForm(false)} className="btn-secondary flex-1">Batal</button>
                 <button onClick={submit} className="btn-primary flex-1" disabled={submitting}>

@@ -1,4 +1,9 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ConflictException,
+  BadRequestException,
+} from '@nestjs/common';
 import { Module } from '@nestjs/common';
 import { Controller, Get, Post, Patch, Param, Body, UseGuards, Delete } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
@@ -56,8 +61,12 @@ export class UsersService {
     const existing = await this.prisma.user.findUnique({ where: { email: dto.email } });
     if (existing) throw new ConflictException('Email already exists');
 
+    if (dto.pin && dto.role !== Role.OWNER) {
+      throw new BadRequestException('PIN hanya boleh untuk role OWNER');
+    }
+
     const passwordHash = await bcrypt.hash(dto.password, 12);
-    const pinHash = dto.pin ? await bcrypt.hash(dto.pin, 12) : undefined;
+    const pinHash = dto.role === Role.OWNER && dto.pin ? await bcrypt.hash(dto.pin, 12) : undefined;
 
     const user = await this.prisma.user.create({
       data: {
@@ -90,6 +99,11 @@ export class UsersService {
       if (emailExists) throw new ConflictException('Email already exists');
     }
 
+    const nextRole = dto.role ?? existing.role;
+    if (dto.pin && nextRole !== Role.OWNER) {
+      throw new BadRequestException('PIN hanya boleh untuk role OWNER');
+    }
+
     const data: any = { ...dto };
     if (dto.password) {
       data.passwordHash = await bcrypt.hash(dto.password, 12);
@@ -97,6 +111,9 @@ export class UsersService {
     }
     if (dto.pin) {
       data.pin = await bcrypt.hash(dto.pin, 12);
+    }
+    if (nextRole !== Role.OWNER) {
+      data.pin = null;
     }
 
     const updated = await this.prisma.user.update({
