@@ -64,13 +64,15 @@ export default function LoginPage() {
               <p className="mt-2 text-sm text-slate-500">Gunakan akun resmi yang tersedia dari seed data sistem.</p>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-4" autoComplete="on">
               <div>
                 <label className="label">Email</label>
                 <input
                   type="email"
+                  name="email"
                   className="input"
                   placeholder="email@contoh.com"
+                  autoComplete="username email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
@@ -80,8 +82,10 @@ export default function LoginPage() {
                 <label className="label">Password</label>
                 <input
                   type="password"
+                  name="password"
                   className="input"
                   placeholder="••••••••"
+                  autoComplete="current-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
