@@ -11,6 +11,7 @@ import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
 
+// In-memory nonce store (use Redis in production)
 const usedNonces = new Map<string, Date>();
 
 type RelayRoute = { relayChannel: number; gpioPin: number | null };
@@ -18,16 +19,18 @@ type RelayRoute = { relayChannel: number; gpioPin: number | null };
 @Injectable()
 export class IotService {
   private gatewayDeviceOverrideId: string | null = null;
+  private relayRouteOverrides = new Map<string, RelayRoute>();
 
   constructor(
     private prisma: PrismaService,
     private config: ConfigService,
   ) {
+    // Clean up old nonces every minute
     setInterval(() => this.cleanupNonces(), 60 * 1000);
   }
 
   private cleanupNonces() {
-    const windowMs = parseInt(this.config.get('IOT_NONCE_WINDOW_SECONDS') || '300') * 1000;
+    const windowMs = (parseInt(this.config.get('IOT_NONCE_WINDOW_SECONDS') || '300')) * 1000;
     const cutoff = new Date(Date.now() - windowMs);
     for (const [nonce, time] of usedNonces.entries()) {
       if (time < cutoff) usedNonces.delete(nonce);
@@ -38,26 +41,52 @@ export class IotService {
     return this.gatewayDeviceOverrideId || this.config.get<string>('IOT_GATEWAY_DEVICE_ID') || null;
   }
 
-  private async buildRelayRoutes() {
-    const tables = await this.prisma.table.findMany({ orderBy: { name: 'asc' } });
-
-    return tables.map((t) => ({
-      tableId: t.id,
-      tableName: t.name,
-      relayChannel: t.relayChannel,
-      gpioPin: t.gpioPin,
-      fromOverride: false,
-    }));
+  private getGpioMapFromEnv() {
+    const raw = this.config.get<string>('IOT_RELAY_GPIO_MAP') || '';
+    if (!raw.trim()) return [] as number[];
+    return raw.split(',').map((v) => parseInt(v.trim(), 10)).filter((n) => !Number.isNaN(n));
   }
 
-  private async getRouteForTable(tableId: string): Promise<{ table: any } & RelayRoute> {
+  private async buildRelayRoutes() {
+    const tables = await this.prisma.table.findMany({ orderBy: { name: 'asc' } });
+    const gpioMap = this.getGpioMapFromEnv();
+
+    return tables.map((t, index) => {
+      const override = this.relayRouteOverrides.get(t.id);
+      const relayChannel = override?.relayChannel ?? index;
+      const gpioPin = override?.gpioPin ?? gpioMap[relayChannel] ?? null;
+      return {
+        tableId: t.id,
+        tableName: t.name,
+        relayChannel,
+        gpioPin,
+        fromOverride: !!override,
+      };
+    });
+  }
+
+  private async getRouteForTable(tableId: string) {
     const table = await this.prisma.table.findUnique({ where: { id: tableId } });
     if (!table) throw new NotFoundException('Table not found');
 
+    const override = this.relayRouteOverrides.get(tableId);
+    if (override) {
+      return {
+        table,
+        relayChannel: override.relayChannel,
+        gpioPin: override.gpioPin,
+      };
+    }
+
+    const tables = await this.prisma.table.findMany({ orderBy: { name: 'asc' } });
+    const idx = tables.findIndex((t) => t.id === tableId);
+    if (idx === -1) throw new NotFoundException('Table not found');
+
+    const gpioMap = this.getGpioMapFromEnv();
     return {
       table,
-      relayChannel: table.relayChannel,
-      gpioPin: table.gpioPin,
+      relayChannel: idx,
+      gpioPin: gpioMap[idx] ?? null,
     };
   }
 
@@ -72,20 +101,24 @@ export class IotService {
     const device = await this.prisma.iotDevice.findUnique({ where: { id: deviceId } });
     if (!device) throw new UnauthorizedException('Device not found');
 
+    // Verify token
     const tokenValid = await bcrypt.compare(token, device.deviceToken);
     if (!tokenValid) throw new UnauthorizedException('Invalid device token');
 
-    const ts = parseInt(timestamp, 10);
-    const windowSec = parseInt(this.config.get('IOT_NONCE_WINDOW_SECONDS') || '300', 10);
+    // Verify timestamp window
+    const ts = parseInt(timestamp);
+    const windowSec = parseInt(this.config.get('IOT_NONCE_WINDOW_SECONDS') || '300');
     const now = Math.floor(Date.now() / 1000);
     if (Math.abs(now - ts) > windowSec) {
       throw new BadRequestException('Request timestamp out of window');
     }
 
+    // Check nonce
     if (usedNonces.has(nonce)) {
       throw new BadRequestException('Nonce already used (replay attack detected)');
     }
 
+    // Verify HMAC
     const secret = this.config.get('IOT_HMAC_SECRET');
     const message = `${deviceId}:${timestamp}:${nonce}:${body || ''}`;
     const expectedSig = crypto.createHmac('sha256', secret).update(message).digest('hex');
@@ -93,6 +126,7 @@ export class IotService {
       throw new UnauthorizedException('Invalid HMAC signature');
     }
 
+    // Mark nonce as used
     usedNonces.set(nonce, new Date());
 
     return device;
@@ -127,6 +161,7 @@ export class IotService {
   ) {
     await this.verifyDeviceRequest(deviceId, token, timestamp, nonce, signature);
 
+    // Get latest PENDING command
     const command = await this.prisma.iotCommand.findFirst({
       where: { deviceId, status: IoTCommandStatus.PENDING },
       orderBy: { createdAt: 'desc' },
@@ -134,11 +169,13 @@ export class IotService {
 
     if (!command) return { command: null };
 
+    // Mark as SENT
     await this.prisma.iotCommand.update({
       where: { id: command.id },
       data: { status: IoTCommandStatus.SENT, sentAt: new Date() },
     });
 
+    // Update device last seen
     await this.prisma.iotDevice.update({
       where: { id: deviceId },
       data: { lastSeen: new Date(), isOnline: true },
@@ -182,7 +219,7 @@ export class IotService {
   private async resolveCommandTargetDevice() {
     const gatewayDeviceId = this.getGatewayDeviceId();
     if (!gatewayDeviceId) {
-      throw new BadRequestException('IOT_GATEWAY_DEVICE_ID is not configured. Set it in Developer > IoT Configurated');
+      throw new BadRequestException('IOT_GATEWAY_DEVICE_ID is not configured. Set it in Owner > IoT Settings');
     }
 
     const gateway = await this.prisma.iotDevice.findUnique({ where: { id: gatewayDeviceId } });
@@ -193,6 +230,7 @@ export class IotService {
     return gateway;
   }
 
+  // Internal: single ESP gateway mode only
   async sendCommand(tableId: string, commandType: IoTCommandType | string) {
     const device = await this.resolveCommandTargetDevice();
     const route = await this.getRouteForTable(tableId);
@@ -213,7 +251,8 @@ export class IotService {
       },
     });
 
-    if (!device.isOnline || !device.lastSeen || Date.now() - device.lastSeen.getTime() > 5 * 60 * 1000) {
+    if (!device.isOnline || !device.lastSeen ||
+        Date.now() - device.lastSeen.getTime() > 5 * 60 * 1000) {
       console.warn(`Gateway device ${device.id} appears offline, command ${commandType} queued`);
     }
 
@@ -223,7 +262,9 @@ export class IotService {
   async getGatewaySettings() {
     const gatewayDeviceId = this.getGatewayDeviceId();
     const gatewayDevice = gatewayDeviceId
-      ? await this.prisma.iotDevice.findUnique({ where: { id: gatewayDeviceId } })
+      ? await this.prisma.iotDevice.findUnique({
+          where: { id: gatewayDeviceId },
+        })
       : null;
 
     const relayRoutes = await this.buildRelayRoutes();
@@ -234,7 +275,7 @@ export class IotService {
       hasOverride: !!this.gatewayDeviceOverrideId,
       gatewayDevice,
       relayRoutes,
-      gpioMapFromEnv: [],
+      gpioMapFromEnv: this.getGpioMapFromEnv(),
     };
   }
 
@@ -259,26 +300,16 @@ export class IotService {
     const table = await this.prisma.table.findUnique({ where: { id: tableId } });
     if (!table) throw new NotFoundException('Table not found');
 
-    const nextGpio = gpioPin ?? table.gpioPin;
-
-    const usedRelay = await this.prisma.table.findUnique({ where: { relayChannel } });
-    if (usedRelay && usedRelay.id !== tableId) throw new BadRequestException('Relay channel already used');
-
-    const usedGpio = await this.prisma.table.findUnique({ where: { gpioPin: nextGpio } });
-    if (usedGpio && usedGpio.id !== tableId) throw new BadRequestException('GPIO pin already used');
-
-    await this.prisma.table.update({
-      where: { id: tableId },
-      data: { relayChannel, gpioPin: nextGpio },
+    this.relayRouteOverrides.set(tableId, {
+      relayChannel,
+      gpioPin: gpioPin ?? null,
     });
 
     return this.getGatewaySettings();
   }
 
   async clearRelayRoute(tableId: string) {
-    const table = await this.prisma.table.findUnique({ where: { id: tableId } });
-    if (!table) throw new NotFoundException('Table not found');
-
+    this.relayRouteOverrides.delete(tableId);
     return this.getGatewaySettings();
   }
 
@@ -286,20 +317,5 @@ export class IotService {
     return this.prisma.iotDevice.findMany({
       orderBy: { createdAt: 'asc' },
     });
-  }
-
-  async testConnection(deviceId: string) {
-    const device = await this.prisma.iotDevice.findUnique({ where: { id: deviceId } });
-    if (!device) throw new NotFoundException('Device not found');
-
-    const online = !!device.isOnline && !!device.lastSeen && Date.now() - device.lastSeen.getTime() <= 5 * 60 * 1000;
-
-    return {
-      deviceId,
-      online,
-      lastSeen: device.lastSeen,
-      signalStrength: device.signalStrength,
-      message: online ? 'Perangkat IoT terhubung' : 'Perangkat IoT masih offline/tidak heartbeat',
-    };
   }
 }
