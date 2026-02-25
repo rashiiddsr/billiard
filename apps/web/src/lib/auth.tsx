@@ -8,7 +8,7 @@ export interface User {
   id: string;
   name: string;
   email: string;
-  role: 'OWNER' | 'MANAGER' | 'CASHIER';
+  role: 'OWNER' | 'DEVELOPER' | 'MANAGER' | 'CASHIER';
 }
 
 interface AuthContextType {
@@ -17,6 +17,7 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   isOwner: boolean;
+  isDeveloper: boolean;
   isManager: boolean;
   isCashier: boolean;
 }
@@ -56,6 +57,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     <AuthContext.Provider value={{
       user, loading, login, logout,
       isOwner: user?.role === 'OWNER',
+      isDeveloper: user?.role === 'DEVELOPER',
       isManager: user?.role === 'MANAGER',
       isCashier: user?.role === 'CASHIER',
     }}>
