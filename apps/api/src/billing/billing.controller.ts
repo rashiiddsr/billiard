@@ -62,12 +62,12 @@ export class BillingController {
     @Body() dto: ExtendBillingSessionDto,
     @CurrentUser() user: any,
   ) {
-    return this.billingService.extendSession(id, dto, user.id);
+    return this.billingService.extendSession(id, dto, user.id, user.role);
   }
 
   @Patch('sessions/:id/stop')
   @Roles('OWNER' as any, 'CASHIER' as any)
   stopSession(@Param('id') id: string, @CurrentUser() user: any) {
-    return this.billingService.stopSession(id, user.id);
+    return this.billingService.stopSession(id, user.id, user.role);
   }
 }

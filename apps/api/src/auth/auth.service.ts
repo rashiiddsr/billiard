@@ -111,8 +111,8 @@ export class AuthService {
 
     // Return short-lived re-auth token
     const token = this.jwtService.sign(
-      { sub: userId, reAuth: true, exp: Math.floor(Date.now() / 1000) + 300 },
-      { secret: this.config.get('JWT_SECRET') },
+      { sub: userId, reAuth: true },
+      { secret: this.config.get('JWT_SECRET'), expiresIn: '5m' },
     );
 
     return { reAuthToken: token, expiresIn: 300 };
