@@ -81,7 +81,7 @@ export class OrdersService {
 
       const unitPrice = new Decimal(menuItem.price.toString());
       const itemSubtotal = unitPrice.mul(item.quantity);
-      const itemTax = menuItem.taxFlag ? itemSubtotal.mul(menuItem.taxRate.toString()) : new Decimal(0);
+      const itemTax = new Decimal(0);
 
       subtotal = subtotal.plus(itemSubtotal);
       taxAmount = taxAmount.plus(itemTax);

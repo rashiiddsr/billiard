@@ -22,13 +22,11 @@ export class UpdateMenuCategoryDto {
 }
 
 export class CreateMenuItemDto {
-  @IsOptional() @IsString() sku?: string;
   @IsString() name: string;
   @IsOptional() @IsString() category?: string;
   @IsOptional() @IsString() categoryId?: string;
   @IsNumber() @Min(0) price: number;
   @IsOptional() @IsNumber() cost?: number;
-  @IsOptional() @IsBoolean() taxFlag?: boolean;
   @IsOptional() @IsString() description?: string;
   @IsOptional() @IsString() imageUrl?: string;
   @IsOptional() @IsNumber() initialStock?: number;
@@ -36,12 +34,12 @@ export class CreateMenuItemDto {
 }
 
 export class UpdateMenuItemDto {
+  @IsOptional() @IsString() sku?: string;
   @IsOptional() @IsString() name?: string;
   @IsOptional() @IsString() category?: string;
   @IsOptional() @IsString() categoryId?: string;
   @IsOptional() @IsNumber() @Min(0) price?: number;
   @IsOptional() @IsNumber() cost?: number;
-  @IsOptional() @IsBoolean() taxFlag?: boolean;
   @IsOptional() @IsBoolean() isActive?: boolean;
   @IsOptional() @IsString() description?: string;
   @IsOptional() @IsString() imageUrl?: string;
@@ -161,6 +159,15 @@ export class MenuService {
     return `${prefix}-${number.toString().padStart(3, '0')}`;
   }
 
+  private async reserveNextSku(categoryId: string) {
+    const next = await this.prisma.menuCategory.update({
+      where: { id: categoryId },
+      data: { lastSkuNumber: { increment: 1 } },
+    });
+
+    return this.buildSku(next.skuPrefix, next.lastSkuNumber);
+  }
+
   async getNextSku(categoryId: string) {
     const category = await this.prisma.menuCategory.findUnique({ where: { id: categoryId } });
     if (!category) throw new NotFoundException('Kategori tidak ditemukan');
@@ -182,18 +189,7 @@ export class MenuService {
 
   async create(dto: CreateMenuItemDto, userId: string) {
     const category = await this.resolveCategory(dto.categoryId, dto.category);
-
-    let sku = dto.sku?.trim().toUpperCase();
-    if (!sku) {
-      const next = await this.prisma.menuCategory.update({
-        where: { id: category.id },
-        data: { lastSkuNumber: { increment: 1 } },
-      });
-      sku = this.buildSku(next.skuPrefix, next.lastSkuNumber);
-    }
-
-    const existing = await this.prisma.menuItem.findUnique({ where: { sku } });
-    if (existing) throw new ConflictException('SKU already exists');
+    const sku = await this.reserveNextSku(category.id);
 
     const item = await this.prisma.menuItem.create({
       data: {
@@ -202,7 +198,6 @@ export class MenuService {
         category: category.name,
         price: dto.price,
         cost: dto.cost,
-        taxFlag: dto.taxFlag || false,
         description: dto.description,
         imageUrl: dto.imageUrl,
         changedById: userId,
@@ -222,7 +217,7 @@ export class MenuService {
       action: AuditAction.CREATE,
       entity: 'MenuItem',
       entityId: item.id,
-      afterData: dto,
+      afterData: { ...dto, sku },
     });
 
     return item;
@@ -233,15 +228,35 @@ export class MenuService {
     if (!existing) throw new NotFoundException('Menu item not found');
 
     let categoryName = dto.category;
+    let resolvedCategoryId = dto.categoryId;
+
     if (dto.categoryId) {
       const category = await this.resolveCategory(dto.categoryId);
       categoryName = category.name;
+      resolvedCategoryId = category.id;
+    }
+
+    const categoryChanged = !!resolvedCategoryId && categoryName !== existing.category;
+    let nextSku = dto.sku;
+
+    if (categoryChanged && resolvedCategoryId) {
+      nextSku = await this.reserveNextSku(resolvedCategoryId);
+    } else if (dto.sku && dto.sku !== existing.sku) {
+      const sku = dto.sku.trim().toUpperCase();
+      const skuOwner = await this.prisma.menuItem.findUnique({ where: { sku } });
+      if (skuOwner && skuOwner.id !== id) throw new ConflictException('SKU already exists');
+      nextSku = sku;
     }
 
     const { categoryId, ...restDto } = dto;
     const updated = await this.prisma.menuItem.update({
       where: { id },
-      data: { ...restDto, category: categoryName, changedById: userId },
+      data: {
+        ...restDto,
+        sku: nextSku,
+        category: categoryName,
+        changedById: userId,
+      },
     });
 
     await this.audit.log({
@@ -250,7 +265,7 @@ export class MenuService {
       entity: 'MenuItem',
       entityId: id,
       beforeData: existing,
-      afterData: dto,
+      afterData: { ...dto, sku: nextSku },
     });
 
     return updated;
