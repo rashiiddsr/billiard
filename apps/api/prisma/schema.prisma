@@ -12,7 +12,6 @@ datasource db {
 
 enum Role {
   OWNER
-  DEVELOPER
   MANAGER
   CASHIER
 }
@@ -123,10 +122,6 @@ model Table {
   id          String      @id @default(cuid())
   name        String      @unique
   description String?
-  iotDeviceId String
-  iotDevice   IotDevice   @relation(fields: [iotDeviceId], references: [id])
-  relayChannel Int
-  gpioPin     Int
   status      TableStatus @default(AVAILABLE)
   hourlyRate  Decimal     @db.Decimal(12, 2)
   isActive    Boolean     @default(true)
@@ -136,14 +131,11 @@ model Table {
   // Relations
   billingSessions BillingSession[]
 
-  @@unique([iotDeviceId, gpioPin])
-  @@unique([iotDeviceId, relayChannel])
   @@map("tables")
 }
 
 model IotDevice {
   id             String   @id @default(cuid())
-  name           String   @unique
   deviceToken    String   @unique // hashed
   lastSeen       DateTime?
   signalStrength Int?
@@ -152,7 +144,6 @@ model IotDevice {
   updatedAt      DateTime @updatedAt
 
   commands IotCommand[]
-  tables   Table[]
 
   @@map("iot_devices")
 }
