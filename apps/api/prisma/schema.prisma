@@ -145,7 +145,6 @@ model IotDevice {
   id             String   @id @default(cuid())
   name           String   @unique
   deviceToken    String   @unique // hashed
-  isActive       Boolean  @default(true)
   lastSeen       DateTime?
   signalStrength Int?
   isOnline       Boolean  @default(false)

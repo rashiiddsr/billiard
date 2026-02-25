@@ -51,19 +51,6 @@ export default function BillingPage() {
   const getSessionForTable = (tableId: string) => activeSessions.find((s) => s.tableId === tableId);
 
   const openStartModal = (table: any) => {
-    const device = table.iotDevice;
-    const isOnline = !!device?.isOnline && !!device?.lastSeen && Date.now() - new Date(device.lastSeen).getTime() <= 5 * 60 * 1000;
-
-    if (device && device.isActive === false) {
-      toast.error('ESP meja ini sedang nonaktif. Hubungi developer.');
-      return;
-    }
-
-    if (device && !isOnline) {
-      toast.error('ESP meja ini tidak terhubung. Hubungi developer.');
-      return;
-    }
-
     setSelectedTable(table);
     setDuration(60);
     setRateType('HOURLY');

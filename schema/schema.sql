@@ -45,7 +45,6 @@ CREATE TABLE `tables` (
 CREATE TABLE `iot_devices` (
     `id` VARCHAR(191) NOT NULL,
     `deviceToken` VARCHAR(191) NOT NULL,
-    `isActive` BOOLEAN NOT NULL DEFAULT true,
     `lastSeen` DATETIME(3) NULL,
     `signalStrength` INTEGER NULL,
     `isOnline` BOOLEAN NOT NULL DEFAULT false,
