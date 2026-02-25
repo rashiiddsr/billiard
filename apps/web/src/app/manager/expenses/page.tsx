@@ -1,9 +1,14 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { financeApi } from '@/lib/api';
 import { formatCurrency, formatDateShort } from '@/lib/utils';
 import toast from 'react-hot-toast';
+
+function toDateInputValue(date: Date) {
+  const tzOffset = date.getTimezoneOffset() * 60000;
+  return new Date(date.getTime() - tzOffset).toISOString().split('T')[0];
+}
 
 export default function ExpensesPage() {
   const [expenses, setExpenses] = useState<any[]>([]);
@@ -13,22 +18,27 @@ export default function ExpensesPage() {
   const [submitting, setSubmitting] = useState(false);
   const [expenseCategories, setExpenseCategories] = useState<string[]>([]);
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = useMemo(() => toDateInputValue(new Date()), []);
+  const monthStart = useMemo(() => {
+    const now = new Date();
+    return toDateInputValue(new Date(now.getFullYear(), now.getMonth(), 1));
+  }, []);
+
   const [category, setCategory] = useState('');
   const [date, setDate] = useState(today);
   const [amount, setAmount] = useState('');
   const [notes, setNotes] = useState('');
 
-  const [filterStart, setFilterStart] = useState('');
-  const [filterEnd, setFilterEnd] = useState('');
+  const [filterStart, setFilterStart] = useState(monthStart);
+  const [filterEnd, setFilterEnd] = useState(today);
 
   const fetchExpenses = async () => {
     setLoading(true);
     try {
       const [data, categories] = await Promise.all([
         financeApi.listExpenses({
-          startDate: filterStart ? new Date(filterStart + 'T00:00:00').toISOString() : undefined,
-          endDate: filterEnd ? new Date(filterEnd + 'T23:59:59').toISOString() : undefined,
+          startDate: new Date(`${filterStart}T00:00:00`).toISOString(),
+          endDate: new Date(`${filterEnd}T23:59:59`).toISOString(),
           limit: 100,
         }),
         financeApi.expenseCategories(),
@@ -43,7 +53,10 @@ export default function ExpensesPage() {
     }
   };
 
-  useEffect(() => { fetchExpenses(); }, []);
+  useEffect(() => {
+    if (!filterStart || !filterEnd) return;
+    fetchExpenses();
+  }, [filterStart, filterEnd]);
 
   const submit = async () => {
     if (!category || !amount) { toast.error('Kategori dan jumlah wajib diisi'); return; }
@@ -60,6 +73,36 @@ export default function ExpensesPage() {
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const applyShortcut = (type: 'today' | 'last7' | 'last30' | 'month') => {
+    const now = new Date();
+    const end = toDateInputValue(now);
+
+    if (type === 'today') {
+      setFilterStart(end);
+      setFilterEnd(end);
+      return;
+    }
+
+    if (type === 'last7') {
+      const start = new Date(now);
+      start.setDate(now.getDate() - 6);
+      setFilterStart(toDateInputValue(start));
+      setFilterEnd(end);
+      return;
+    }
+
+    if (type === 'last30') {
+      const start = new Date(now);
+      start.setDate(now.getDate() - 29);
+      setFilterStart(toDateInputValue(start));
+      setFilterEnd(end);
+      return;
+    }
+
+    setFilterStart(toDateInputValue(new Date(now.getFullYear(), now.getMonth(), 1)));
+    setFilterEnd(end);
   };
 
   return (
@@ -96,11 +139,19 @@ export default function ExpensesPage() {
         </div>
       )}
 
-      <div className="filter-bar">
-        <input type="date" className="input w-44" value={filterStart} onChange={(e) => setFilterStart(e.target.value)} />
-        <span className="text-slate-500">s/d</span>
-        <input type="date" className="input w-44" value={filterEnd} onChange={(e) => setFilterEnd(e.target.value)} />
-        <button onClick={fetchExpenses} className="btn-secondary text-sm py-2 px-4">Filter</button>
+      <div className="card p-4 space-y-3">
+        <div className="grid gap-3 md:grid-cols-[auto_1fr_auto_1fr] md:items-center">
+          <label className="text-sm text-slate-600">Rentang Tanggal</label>
+          <input type="date" className="input w-full" value={filterStart} onChange={(e) => setFilterStart(e.target.value)} />
+          <span className="text-slate-500 text-center">s/d</span>
+          <input type="date" className="input w-full" value={filterEnd} onChange={(e) => setFilterEnd(e.target.value)} />
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button onClick={() => applyShortcut('today')} className="text-xs px-3 py-1.5 rounded bg-slate-100 text-slate-700 hover:bg-slate-200">Hari ini</button>
+          <button onClick={() => applyShortcut('last7')} className="text-xs px-3 py-1.5 rounded bg-slate-100 text-slate-700 hover:bg-slate-200">7 hari terakhir</button>
+          <button onClick={() => applyShortcut('last30')} className="text-xs px-3 py-1.5 rounded bg-slate-100 text-slate-700 hover:bg-slate-200">30 hari terakhir</button>
+          <button onClick={() => applyShortcut('month')} className="text-xs px-3 py-1.5 rounded bg-blue-100 text-blue-700 hover:bg-blue-200">Bulan ini</button>
+        </div>
       </div>
 
       <div className="card"><div className="flex justify-between items-center"><span className="text-slate-500">Total Pengeluaran</span><span className="text-2xl font-bold text-red-600">{formatCurrency(total)}</span></div></div>

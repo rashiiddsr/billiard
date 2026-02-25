@@ -62,20 +62,34 @@ export class StockService {
 
     const before = { qtyOnHand: stock.qtyOnHand };
 
-    const updated = await this.prisma.stockFnb.update({
-      where: { menuItemId },
-      data: { qtyOnHand: { increment: dto.quantityDelta } },
-      include: { menuItem: true },
-    });
+    const nextQty = stock.qtyOnHand + dto.quantityDelta;
 
-    await this.prisma.stockAdjustment.create({
-      data: {
-        stockFnbId: stock.id,
-        actionType: dto.actionType,
-        quantityDelta: dto.quantityDelta,
-        notes: dto.notes,
-        performedById: userId,
-      },
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const updatedStock = await tx.stockFnb.update({
+        where: { menuItemId },
+        data: { qtyOnHand: { increment: dto.quantityDelta } },
+        include: { menuItem: true },
+      });
+
+      if (nextQty <= 0) {
+        await tx.menuItem.update({
+          where: { id: menuItemId },
+          data: { isActive: false, changedById: userId },
+        });
+        updatedStock.menuItem.isActive = false;
+      }
+
+      await tx.stockAdjustment.create({
+        data: {
+          stockFnbId: stock.id,
+          actionType: dto.actionType,
+          quantityDelta: dto.quantityDelta,
+          notes: dto.notes,
+          performedById: userId,
+        },
+      });
+
+      return updatedStock;
     });
 
     await this.audit.log({
