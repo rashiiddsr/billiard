@@ -30,13 +30,8 @@ const navByRole: Record<string, NavItem[]> = {
     { label: 'Billing Meja', href: '/owner/billing', icon: <BilliardIcon /> },
     { label: 'Laporan Keuangan', href: '/owner/finance', icon: <ChartIcon /> },
     { label: 'Manajemen User', href: '/owner/users', icon: <UserIcon /> },
-    { label: 'Manajemen Meja', href: '/owner/tables', icon: <BilliardIcon /> },
+    { label: 'IoT Settings', href: '/owner/iot', icon: <ChipIcon /> },
     { label: 'Audit Log', href: '/owner/audit', icon: <LogIcon /> },
-  ],
-  DEVELOPER: [
-    { label: 'Dashboard', href: '/developer/dashboard', icon: <HomeIcon /> },
-    { label: 'Manajemen Meja', href: '/developer/tables', icon: <BilliardIcon /> },
-    { label: 'IoT Configurated', href: '/developer/iot', icon: <ChipIcon /> },
   ],
   MANAGER: [
     { label: 'Dashboard', href: '/manager/dashboard', icon: <HomeIcon /> },

@@ -15,7 +15,6 @@ export default function HomePage() {
       return;
     }
     if (user.role === 'OWNER') router.replace('/owner/dashboard');
-    else if (user.role === 'DEVELOPER') router.replace('/developer/dashboard');
     else if (user.role === 'MANAGER') router.replace('/manager/dashboard');
     else router.replace('/cashier/dashboard');
   }, [user, loading, router]);

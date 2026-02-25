@@ -5,8 +5,6 @@ import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { TablesService, CreateTableDto, UpdateTableDto } from './tables.service';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { CurrentUser } from '../common/decorators/current-user.decorator';
-import { IotModule } from '../iot/iot.module';
 
 @ApiTags('Tables')
 @ApiBearerAuth()
@@ -26,20 +24,19 @@ export class TablesController {
   }
 
   @Post()
-  @Roles('DEVELOPER' as any)
+  @Roles('OWNER' as any, 'MANAGER' as any)
   create(@Body() dto: CreateTableDto) {
     return this.tablesService.create(dto);
   }
 
   @Patch(':id')
-  @Roles('OWNER' as any, 'DEVELOPER' as any)
-  update(@Param('id') id: string, @Body() dto: UpdateTableDto, @CurrentUser() user: any) {
-    return this.tablesService.update(id, dto, user.role);
+  @Roles('OWNER' as any, 'MANAGER' as any)
+  update(@Param('id') id: string, @Body() dto: UpdateTableDto) {
+    return this.tablesService.update(id, dto);
   }
 }
 
 @Module({
-  imports: [IotModule],
   controllers: [TablesController],
   providers: [TablesService],
   exports: [TablesService],
