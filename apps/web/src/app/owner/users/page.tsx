@@ -5,7 +5,7 @@ import { usersApi } from '@/lib/api';
 import { formatDate } from '@/lib/utils';
 import toast from 'react-hot-toast';
 
-type Role = 'OWNER' | 'MANAGER' | 'CASHIER';
+type Role = 'OWNER' | 'DEVELOPER' | 'MANAGER' | 'CASHIER';
 
 export default function UsersPage() {
   const [users, setUsers] = useState<any[]>([]);
@@ -85,6 +85,7 @@ export default function UsersPage() {
 
   const roleColor: Record<Role, string> = {
     OWNER: 'bg-amber-100 text-amber-700',
+    DEVELOPER: 'bg-indigo-100 text-indigo-700',
     MANAGER: 'bg-blue-100 text-blue-700',
     CASHIER: 'bg-emerald-100 text-emerald-700',
   };
@@ -122,6 +123,7 @@ export default function UsersPage() {
                 <select className="input" value={role} onChange={(e) => setRole(e.target.value as Role)}>
                   <option value="CASHIER">CASHIER</option>
                   <option value="MANAGER">MANAGER</option>
+                  <option value="DEVELOPER">DEVELOPER</option>
                   <option value="OWNER">OWNER</option>
                 </select>
               </div>

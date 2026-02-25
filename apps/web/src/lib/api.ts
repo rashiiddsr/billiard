@@ -158,4 +158,6 @@ export const iotApi = {
     api.patch('/iot/settings/routes', { tableId, relayChannel, gpioPin }).then((r) => r.data),
   clearRoute: (tableId: string) =>
     api.delete(`/iot/settings/routes/${tableId}`).then((r) => r.data),
+  testConnection: (deviceId: string) =>
+    api.post('/iot/test-connection', { deviceId }).then((r) => r.data),
 };

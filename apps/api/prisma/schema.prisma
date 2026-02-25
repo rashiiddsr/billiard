@@ -12,6 +12,7 @@ datasource db {
 
 enum Role {
   OWNER
+  DEVELOPER
   MANAGER
   CASHIER
 }
@@ -122,6 +123,8 @@ model Table {
   id          String      @id @default(cuid())
   name        String      @unique
   description String?
+  relayChannel Int         @unique
+  gpioPin      Int         @unique
   status      TableStatus @default(AVAILABLE)
   hourlyRate  Decimal     @db.Decimal(12, 2)
   isActive    Boolean     @default(true)
