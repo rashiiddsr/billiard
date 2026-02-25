@@ -37,7 +37,7 @@ const navByRole: Record<string, NavItem[]> = {
     { label: 'Dashboard', href: '/manager/dashboard', icon: <HomeIcon /> },
     { label: 'Manajemen Menu', href: '/manager/menu', icon: <MenuIcon /> },
     { label: 'Manajemen Kategori', href: '/manager/menu-categories', icon: <TagIcon /> },
-    { label: 'Stok Operasional', href: '/manager/stock', icon: <BoxIcon /> },
+    { label: 'Manajemen Aset', href: '/manager/stock', icon: <BoxIcon /> },
     { label: 'Pengeluaran', href: '/manager/expenses', icon: <WalletIcon /> },
   ],
 };
