@@ -57,13 +57,18 @@ export class BillingService {
 
     await this.iot.assertTableReadyForBilling(dto.tableId);
 
-    const ratePerHour = dto.rateType === 'MANUAL' && dto.manualRatePerHour
+    const isOwnerLock = userRole === Role.OWNER;
+    const ratePerHour = isOwnerLock
+      ? new Decimal(0)
+      : dto.rateType === 'MANUAL' && dto.manualRatePerHour
       ? new Decimal(dto.manualRatePerHour)
       : new Decimal(table.hourlyRate.toString());
 
     const startTime = new Date();
     const endTime = new Date(startTime.getTime() + dto.durationMinutes * 60 * 1000);
-    const totalAmount = ratePerHour.mul(dto.durationMinutes).div(60).toDecimalPlaces(0);
+    const totalAmount = isOwnerLock
+      ? new Decimal(0)
+      : ratePerHour.mul(dto.durationMinutes).div(60).toDecimalPlaces(0);
 
     const session = await this.prisma.billingSession.create({
       data: {
@@ -71,7 +76,7 @@ export class BillingService {
         startTime,
         endTime,
         durationMinutes: dto.durationMinutes,
-        rateType: dto.rateType || 'HOURLY',
+        rateType: isOwnerLock ? 'OWNER_LOCK' : (dto.rateType || 'HOURLY'),
         ratePerHour: ratePerHour.toFixed(2),
         totalAmount: totalAmount.toFixed(2),
         createdById: userId,
@@ -100,7 +105,7 @@ export class BillingService {
     return session;
   }
 
-  async extendSession(sessionId: string, dto: ExtendBillingSessionDto, userId: string) {
+  async extendSession(sessionId: string, dto: ExtendBillingSessionDto, userId: string, userRole: Role) {
     const session = await this.prisma.billingSession.findUnique({
       where: { id: sessionId },
       include: { table: true },
@@ -109,6 +114,12 @@ export class BillingService {
     if (!session) throw new NotFoundException('Session not found');
     if (session.status !== SessionStatus.ACTIVE) {
       throw new BadRequestException('Session is not active');
+    }
+    if (session.rateType === 'OWNER_LOCK') {
+      throw new ForbiddenException('Sesi owner lock tidak bisa diperpanjang');
+    }
+    if (session.rateType === 'OWNER_LOCK' && userRole !== Role.OWNER) {
+      throw new ForbiddenException('Kasir tidak dapat memodifikasi sesi owner');
     }
 
     const additionalMs = dto.additionalMinutes * 60 * 1000;
@@ -138,36 +149,43 @@ export class BillingService {
       entity: 'BillingSession',
       entityId: sessionId,
       beforeData: { endTime: session.endTime, totalAmount: session.totalAmount },
-      afterData: { endTime: newEndTime, totalAmount: newTotal },
+      afterData: {
+        endTime: newEndTime,
+        totalAmount: newTotal,
+        additionalMinutes: dto.additionalMinutes,
+        additionalAmount,
+      },
     });
 
     return updated;
   }
 
-  async stopSession(sessionId: string, userId: string) {
+  async stopSession(sessionId: string, userId: string, userRole: Role) {
     const session = await this.prisma.billingSession.findUnique({
       where: { id: sessionId },
-      include: { table: true },
+      include: { table: true, payments: { where: { status: 'PAID' } } },
     });
 
     if (!session) throw new NotFoundException('Session not found');
     if (session.status !== SessionStatus.ACTIVE) {
       throw new BadRequestException('Session is not active');
     }
+    if (session.rateType === 'OWNER_LOCK' && userRole !== Role.OWNER) {
+      throw new ForbiddenException('Kasir tidak dapat menghentikan sesi owner');
+    }
 
     const now = new Date();
     const actualMinutes = Math.ceil((now.getTime() - session.startTime.getTime()) / 60000);
-    const actualAmount = new Decimal(session.ratePerHour.toString())
-      .mul(actualMinutes)
-      .div(60)
-      .toDecimalPlaces(0);
+    const finalAmount = session.rateType === 'OWNER_LOCK'
+      ? new Decimal(0)
+      : new Decimal(session.totalAmount.toString());
 
     const updated = await this.prisma.billingSession.update({
       where: { id: sessionId },
       data: {
         status: SessionStatus.COMPLETED,
         actualEndTime: now,
-        totalAmount: actualAmount.toFixed(2),
+        totalAmount: finalAmount.toFixed(2),
       },
     });
 
@@ -183,7 +201,12 @@ export class BillingService {
       action: AuditAction.STOP_BILLING,
       entity: 'BillingSession',
       entityId: sessionId,
-      afterData: { actualMinutes, actualAmount, stoppedEarly: now < session.endTime },
+      afterData: {
+        actualMinutes,
+        finalAmount,
+        stoppedEarly: now < session.endTime,
+        alreadyPaid: session.payments.length > 0,
+      },
     });
 
     return updated;
@@ -203,6 +226,7 @@ export class BillingService {
           where: { status: { not: 'CANCELLED' } },
           include: { items: true },
         },
+        payments: { where: { status: 'PAID' } },
       },
       orderBy: { startTime: 'asc' },
     });
@@ -229,7 +253,39 @@ export class BillingService {
     });
     if (!session) throw new NotFoundException('Session not found');
 
-    return session;
+    const extensionLogs = await this.prisma.auditLog.findMany({
+      where: {
+        entity: 'BillingSession',
+        entityId: sessionId,
+        action: AuditAction.EXTEND_BILLING,
+      },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true, createdAt: true, afterData: true },
+    });
+
+    const extensionItems = extensionLogs.map((log: any, index: number) => {
+      const data = (log.afterData || {}) as any;
+      return {
+        id: log.id,
+        order: index + 1,
+        createdAt: log.createdAt,
+        additionalMinutes: Number(data.additionalMinutes || 0),
+        additionalAmount: Number(data.additionalAmount || 0),
+      };
+    });
+
+    const extensionTotal = extensionItems.reduce((sum, item) => sum + item.additionalAmount, 0);
+    const sessionTotal = Number(session.totalAmount || 0);
+    const baseAmount = Math.max(0, sessionTotal - extensionTotal);
+
+    return {
+      ...session,
+      billingBreakdown: {
+        baseAmount,
+        extensionTotal,
+        extensions: extensionItems,
+      },
+    };
   }
 
   async listSessions(filters: {
