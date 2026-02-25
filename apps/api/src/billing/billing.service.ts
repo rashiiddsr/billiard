@@ -57,18 +57,13 @@ export class BillingService {
 
     await this.iot.assertTableReadyForBilling(dto.tableId);
 
-    const isOwnerLock = userRole === Role.OWNER;
-    const ratePerHour = isOwnerLock
-      ? new Decimal(0)
-      : dto.rateType === 'MANUAL' && dto.manualRatePerHour
+    const ratePerHour = dto.rateType === 'MANUAL' && dto.manualRatePerHour
       ? new Decimal(dto.manualRatePerHour)
       : new Decimal(table.hourlyRate.toString());
 
     const startTime = new Date();
     const endTime = new Date(startTime.getTime() + dto.durationMinutes * 60 * 1000);
-    const totalAmount = isOwnerLock
-      ? new Decimal(0)
-      : ratePerHour.mul(dto.durationMinutes).div(60).toDecimalPlaces(0);
+    const totalAmount = ratePerHour.mul(dto.durationMinutes).div(60).toDecimalPlaces(0);
 
     const session = await this.prisma.billingSession.create({
       data: {
@@ -76,7 +71,7 @@ export class BillingService {
         startTime,
         endTime,
         durationMinutes: dto.durationMinutes,
-        rateType: isOwnerLock ? 'OWNER_LOCK' : (dto.rateType || 'HOURLY'),
+        rateType: dto.rateType || 'HOURLY',
         ratePerHour: ratePerHour.toFixed(2),
         totalAmount: totalAmount.toFixed(2),
         createdById: userId,
@@ -105,7 +100,7 @@ export class BillingService {
     return session;
   }
 
-  async extendSession(sessionId: string, dto: ExtendBillingSessionDto, userId: string, userRole: Role) {
+  async extendSession(sessionId: string, dto: ExtendBillingSessionDto, userId: string) {
     const session = await this.prisma.billingSession.findUnique({
       where: { id: sessionId },
       include: { table: true },
@@ -114,12 +109,6 @@ export class BillingService {
     if (!session) throw new NotFoundException('Session not found');
     if (session.status !== SessionStatus.ACTIVE) {
       throw new BadRequestException('Session is not active');
-    }
-    if (session.rateType === 'OWNER_LOCK') {
-      throw new ForbiddenException('Sesi owner lock tidak bisa diperpanjang');
-    }
-    if (session.rateType === 'OWNER_LOCK' && userRole !== Role.OWNER) {
-      throw new ForbiddenException('Kasir tidak dapat memodifikasi sesi owner');
     }
 
     const additionalMs = dto.additionalMinutes * 60 * 1000;
@@ -155,7 +144,7 @@ export class BillingService {
     return updated;
   }
 
-  async stopSession(sessionId: string, userId: string, userRole: Role) {
+  async stopSession(sessionId: string, userId: string) {
     const session = await this.prisma.billingSession.findUnique({
       where: { id: sessionId },
       include: { table: true },
@@ -165,15 +154,10 @@ export class BillingService {
     if (session.status !== SessionStatus.ACTIVE) {
       throw new BadRequestException('Session is not active');
     }
-    if (session.rateType === 'OWNER_LOCK' && userRole !== Role.OWNER) {
-      throw new ForbiddenException('Kasir tidak dapat menghentikan sesi owner');
-    }
 
     const now = new Date();
     const actualMinutes = Math.ceil((now.getTime() - session.startTime.getTime()) / 60000);
-    const actualAmount = session.rateType === 'OWNER_LOCK'
-      ? new Decimal(0)
-      : new Decimal(session.ratePerHour.toString())
+    const actualAmount = new Decimal(session.ratePerHour.toString())
       .mul(actualMinutes)
       .div(60)
       .toDecimalPlaces(0);

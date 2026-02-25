@@ -199,7 +199,7 @@ export default function BillingPage() {
               {session && remaining && (
                 <div className="mb-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
                   <p className={`font-mono text-sm font-bold ${remaining.isWarning ? 'animate-pulse text-red-500' : 'text-emerald-600'}`}>{remaining.text}</p>
-                  <p className="mt-1 text-xs text-slate-500">{session.rateType === 'OWNER_LOCK' ? 'Sesi owner (tanpa tagihan)' : `Tagihan sementara: ${formatCurrency(session.totalAmount)}`}</p>
+                  <p className="mt-1 text-xs text-slate-500">Tagihan sementara: {formatCurrency(session.totalAmount)}</p>
                 </div>
               )}
 
@@ -210,21 +210,16 @@ export default function BillingPage() {
                   </button>
                 ) : (
                   <>
-                    {session.rateType !== 'OWNER_LOCK' && (
-                      <button
-                        onClick={() => {
-                          setSelectedSession(session);
-                          setExtendMinutes(30);
-                          setModal('extend');
-                        }}
-                        className="btn-secondary py-2 text-sm"
-                      >
-                        Perpanjang Waktu
-                      </button>
-                    )}
-                    {session.rateType !== 'OWNER_LOCK' && (
-                      <a href={`/cashier/orders?sessionId=${session.id}`} className="btn-primary py-2 text-center text-sm">Tambah F&B</a>
-                    )}
+                    <button
+                      onClick={() => {
+                        setSelectedSession(session);
+                        setExtendMinutes(30);
+                        setModal('extend');
+                      }}
+                      className="btn-secondary py-2 text-sm"
+                    >
+                      Perpanjang Waktu
+                    </button>
                     <button
                       onClick={() => {
                         setSelectedSession(session);
@@ -243,10 +238,10 @@ export default function BillingPage() {
       </div>
 
       {activeSessions.length > 0 && (
-        <div className="card border border-slate-200 bg-white shadow-sm">
-          <h2 className="mb-4 text-lg font-semibold text-slate-800">Ringkasan Sesi Aktif</h2>
+        <div className="card">
+          <h2 className="mb-4 font-semibold">Ringkasan Sesi Aktif</h2>
           <div className="table-wrapper">
-            <table className="data-table bg-white">
+            <table className="data-table">
               <thead>
                 <tr>
                   <th>Meja</th>
@@ -273,19 +268,16 @@ export default function BillingPage() {
                       <td className="text-sm text-slate-400">{s.createdBy?.name}</td>
                       <td>
                         <div className="flex gap-2">
-                          {s.rateType !== 'OWNER_LOCK' && (
-                            <button
-                              onClick={() => {
-                                setSelectedSession(s);
-                                setExtendMinutes(30);
-                                setModal('extend');
-                              }}
-                              className="rounded-lg bg-slate-200 px-2 py-1 text-xs text-slate-700 hover:bg-slate-300"
-                            >
-                              +Waktu
-                            </button>
-                          )}
-                          {s.rateType !== 'OWNER_LOCK' && <a href={`/cashier/orders?sessionId=${s.id}`} className="rounded-lg bg-blue-100 px-2 py-1 text-xs text-blue-700 hover:bg-blue-200">+F&B</a>}
+                          <button
+                            onClick={() => {
+                              setSelectedSession(s);
+                              setExtendMinutes(30);
+                              setModal('extend');
+                            }}
+                            className="rounded-lg bg-slate-200 px-2 py-1 text-xs text-slate-700 hover:bg-slate-300"
+                          >
+                            +Waktu
+                          </button>
                           <button
                             onClick={() => {
                               setSelectedSession(s);
