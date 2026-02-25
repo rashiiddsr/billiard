@@ -9,11 +9,11 @@
 #include <time.h>
 
 /**
- * ESP32 Gateway 15 Meja
- * - 1 ESP32 menerima command dari API backend (/iot/commands/pull)
- * - Relay dikontrol LANGSUNG dari GPIO ESP32
- * - Push button dibaca via MCP23X17 (I2C input expander)
- * - Command server membawa payload.tableId (dan bisa relayChannel/gpioPin)
+ * ESP32 Gateway Dynamic (max 16 meja per ESP)
+ * - Mapping meja dibaca dinamis dari API: GET /iot/devices/config
+ * - 1 ESP = relay channel 0..15 + GPIO relay bawaan
+ * - Tombol manual MCP23X17 pakai pin 0..15 (1:1 ke relay channel)
+ * - table-01 idealnya relay CH 0, table-02 -> CH1, dst (diatur dari backend)
  */
 
 // =========================
@@ -31,8 +31,9 @@ static const char* HMAC_SECRET = "YOUR_IOT_HMAC_SECRET";
 // Timing
 // =========================
 static const uint32_t HEARTBEAT_INTERVAL_MS = 30000;
-static const uint32_t PULL_INTERVAL_MS = 5000;
+static const uint32_t PULL_INTERVAL_MS = 700;
 static const uint32_t BUTTON_SCAN_INTERVAL_MS = 20;
+static const uint32_t CONFIG_REFRESH_INTERVAL_MS = 60000;
 
 // =========================
 // Hardware config
@@ -63,29 +64,23 @@ static const int RELAY_GPIO_PINS[16] = {
 };
 
 // =========================
-// Mapping meja -> relay channel ESP + button input channel
+// Mapping meja dinamis dari backend -> relay channel + gpio + button channel
 // =========================
 struct TableConfig {
-  const char* tableId;
+  String tableId;
+  String tableName;
   uint8_t relayChannel;   // 0..15 (index ke RELAY_GPIO_PINS)
+  uint8_t gpioPin;
   uint8_t buttonChannel;  // 0..15 (pin MCP atau index BUTTON_GPIO_PINS)
 };
 
-// ID tabel dari phpMyAdmin user (saat ini 10 meja)
-TableConfig TABLES[] = {
-  {"cmlzdgfo60003kqbmjflzka01", 0, 0},  // Meja 1
-  {"cmlzdgfoa0004kqbmdf5pfuuf", 1, 1},  // Meja 2
-  {"cmlzdgfoc0005kqbmf004hwk9", 2, 2},  // Meja 3
-  {"cmlzdgfof0006kqbm5ffnxs0", 3, 3},   // Meja 4
-  {"cmlzdgfoh0007kqbmxtikli5j", 4, 4},  // Meja 5
-  {"cmlzdgfoj0008kqbmu91qjuz", 5, 5},   // Meja 6
-  {"cmlzdgfom0009kqbmtvck1i8g", 6, 6},  // Meja 7
-  {"cmlzdgfoo000akqbm9cmkk8x1", 7, 7},  // Meja 8
-  {"cmlzdgfoq000bkqbmzxb5d33f", 8, 8},  // Meja 9
-  {"cmlzdgfos000ckqbm7xn5lpt9", 9, 9},  // Meja 10
-};
+TableConfig TABLES[16];
+uint8_t TABLE_COUNT = 0;
 
-static const uint8_t TABLE_COUNT = sizeof(TABLES) / sizeof(TABLES[0]);
+static const uint8_t MCP_BTN_PINS[16] = {
+  0, 1, 2, 3, 4, 5, 6, 7,
+  8, 9, 10, 11, 12, 13, 14, 15,
+};
 
 Adafruit_MCP23X17 mcp;
 
@@ -100,6 +95,7 @@ uint32_t btnLastChangeMs[16];
 uint32_t lastHeartbeatAt = 0;
 uint32_t lastPullAt = 0;
 uint32_t lastButtonScanAt = 0;
+uint32_t lastConfigRefreshAt = 0;
 
 struct ApiResponse {
   int statusCode;
@@ -255,7 +251,15 @@ void printMappingTable() {
     const uint8_t relayCh = TABLES[i].relayChannel;
     const uint8_t btnCh = TABLES[i].buttonChannel;
     const int relayGpio = (relayCh <= 15) ? RELAY_GPIO_PINS[relayCh] : -1;
-    Serial.printf("MejaIndex=%d | tableId=%s | relayCH=%d | relayGPIO=%d | buttonInput=%d\n", i + 1, TABLES[i].tableId, relayCh, relayGpio, btnCh);
+    Serial.printf(
+      "MejaIndex=%d | tableId=%s | name=%s | relayCH=%d | relayGPIO=%d | buttonInput=%d\n",
+      i + 1,
+      TABLES[i].tableId.c_str(),
+      TABLES[i].tableName.c_str(),
+      relayCh,
+      relayGpio,
+      btnCh
+    );
   }
   Serial.println("=================================================================");
 }
@@ -299,6 +303,86 @@ bool sendAck(const String& commandId, bool success) {
   ApiResponse res = apiRequest("POST", path, body, sig, ts, nonce, true);
   Serial.printf("[ACK] cmd=%s success=%d code=%d resp=%s\n", commandId.c_str(), success, res.statusCode, res.body.c_str());
   return res.ok;
+}
+
+
+bool fetchDeviceConfig() {
+  if (!ensureWifi()) return false;
+
+  String ts = nowTs();
+  String nonce = genNonce();
+  String message = String(DEVICE_ID) + ":" + ts + ":" + nonce + ":";
+  String sig = hmacSha256(message, HMAC_SECRET);
+
+  String path = String(API_BASE) + "/iot/devices/config?deviceId=" + DEVICE_ID;
+  ApiResponse res = apiRequest("GET", path, "", sig, ts, nonce, false);
+  if (!res.ok) {
+    Serial.printf("[Config] code=%d err=%s\n", res.statusCode, res.body.c_str());
+    return false;
+  }
+
+  StaticJsonDocument<8192> root;
+  DeserializationError de = deserializeJson(root, res.body);
+  if (de) {
+    Serial.printf("[Config] JSON parse error: %s\n", de.c_str());
+    return false;
+  }
+
+  JsonArray tables = root["tables"].as<JsonArray>();
+  if (tables.isNull()) {
+    Serial.println("[Config] tables null");
+    TABLE_COUNT = 0;
+    return false;
+  }
+
+  struct TempTable {
+    String id;
+    String name;
+    int relay;
+    int gpio;
+  } temp[16];
+
+  int count = 0;
+  for (JsonObject t : tables) {
+    if (count >= 16) break;
+    temp[count].id = String((const char*)t["id"]);
+    temp[count].name = String((const char*)t["name"]);
+    temp[count].relay = t["relayChannel"] | -1;
+    temp[count].gpio = t["gpioPin"] | -1;
+    count++;
+  }
+
+  for (int i = 0; i < count - 1; i++) {
+    for (int j = i + 1; j < count; j++) {
+      if (temp[i].relay > temp[j].relay) {
+        TempTable x = temp[i];
+        temp[i] = temp[j];
+        temp[j] = x;
+      }
+    }
+  }
+
+  TABLE_COUNT = 0;
+  for (int i = 0; i < count; i++) {
+    if (temp[i].relay < 0 || temp[i].relay > 15) continue;
+    if (temp[i].gpio < 0) continue;
+
+    TABLES[TABLE_COUNT].tableId = temp[i].id;
+    TABLES[TABLE_COUNT].tableName = temp[i].name;
+    TABLES[TABLE_COUNT].relayChannel = (uint8_t)temp[i].relay;
+    TABLES[TABLE_COUNT].gpioPin = (uint8_t)temp[i].gpio;
+    TABLES[TABLE_COUNT].buttonChannel = MCP_BTN_PINS[TABLES[TABLE_COUNT].relayChannel];
+    TABLE_COUNT++;
+    if (TABLE_COUNT >= 16) break;
+  }
+
+  for (int i = 0; i < TABLE_COUNT; i++) {
+    lampState[i] = false;
+  }
+
+  Serial.printf("[Config] loaded tables=%d\n", TABLE_COUNT);
+  printMappingTable();
+  return TABLE_COUNT > 0;
 }
 
 void pullAndExecuteCommand() {
@@ -393,9 +477,14 @@ void initButtonsInput() {
       while (true) delay(1000);
     }
 
+    // aktifkan seluruh pin MCP 0..15 supaya siap untuk maksimal 16 meja
+    for (int i = 0; i < 16; i++) {
+      const uint8_t btnCh = MCP_BTN_PINS[i];
+      mcp.pinMode(btnCh, INPUT_PULLUP);
+    }
+
     for (int i = 0; i < TABLE_COUNT; i++) {
       const uint8_t btnCh = TABLES[i].buttonChannel;
-      mcp.pinMode(btnCh, INPUT_PULLUP);
 
       bool r = mcp.digitalRead(btnCh);
       btnStable[i] = r;
@@ -475,11 +564,16 @@ void setup() {
   delay(1000);
 
   initEspRelayOutputs();
-  initButtonsInput();
 
   WiFi.mode(WIFI_STA);
   ensureWifi();
   syncNtpTime();
+
+  // load mapping dinamis (1 ESP max 16 meja)
+  fetchDeviceConfig();
+
+  // button mapping mengikuti relay channel (CH0->BTN0 ... CH15->BTN15)
+  initButtonsInput();
 
   printMappingTable();
 
@@ -487,6 +581,7 @@ void setup() {
   sendHeartbeat();
   lastHeartbeatAt = millis();
   lastPullAt = millis();
+  lastConfigRefreshAt = millis();
 
   Serial.printf("[System] ESP32 gateway ready, table_count=%d\n", TABLE_COUNT);
 }
@@ -504,5 +599,10 @@ void loop() {
   if (now - lastPullAt >= PULL_INTERVAL_MS) {
     pullAndExecuteCommand();
     lastPullAt = now;
+  }
+
+  if (now - lastConfigRefreshAt >= CONFIG_REFRESH_INTERVAL_MS) {
+    fetchDeviceConfig();
+    lastConfigRefreshAt = now;
   }
 }
