@@ -5,7 +5,7 @@ import { usersApi } from '@/lib/api';
 import { formatDate } from '@/lib/utils';
 import toast from 'react-hot-toast';
 
-type Role = 'OWNER' | 'DEVELOPER' | 'MANAGER' | 'CASHIER';
+type Role = 'MANAGER' | 'CASHIER';
 
 export default function UsersPage() {
   const [users, setUsers] = useState<any[]>([]);
@@ -19,7 +19,6 @@ export default function UsersPage() {
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<Role>('CASHIER');
   const [pin, setPin] = useState('');
-  const [isActive, setIsActive] = useState(true);
 
   useEffect(() => { fetchUsers(); }, []);
 
@@ -37,14 +36,14 @@ export default function UsersPage() {
 
   const openCreate = () => {
     setEditUser(null);
-    setName(''); setEmail(''); setPassword(''); setRole('CASHIER'); setPin(''); setIsActive(true);
+    setName(''); setEmail(''); setPassword(''); setRole('CASHIER'); setPin('');
     setShowForm(true);
   };
 
   const openEdit = (user: any) => {
     setEditUser(user);
     setName(user.name); setEmail(user.email); setPassword(''); setRole(user.role);
-    setPin(''); setIsActive(user.isActive);
+    setPin('');
     setShowForm(true);
   };
 
@@ -53,7 +52,7 @@ export default function UsersPage() {
     if (!editUser && !password) { toast.error('Password wajib untuk user baru'); return; }
     setSubmitting(true);
     try {
-      const data: any = { name, email, role, isActive };
+      const data: any = { name, email, role };
       if (password) data.password = password;
       if (pin) data.pin = pin;
 
@@ -84,11 +83,11 @@ export default function UsersPage() {
   };
 
   const roleColor: Record<Role, string> = {
-    OWNER: 'bg-amber-100 text-amber-700',
-    DEVELOPER: 'bg-indigo-100 text-indigo-700',
     MANAGER: 'bg-blue-100 text-blue-700',
     CASHIER: 'bg-emerald-100 text-emerald-700',
   };
+
+  const filteredUsers = users.filter((user) => user.role === 'MANAGER' || user.role === 'CASHIER');
 
   return (
     <div className="p-6 space-y-6">
@@ -107,36 +106,28 @@ export default function UsersPage() {
             </div>
             <div className="p-4 space-y-4">
               <div>
-                <label className="label">Nama</label>
+                <label className="label">Nama <span className="text-red-500">*</span></label>
                 <input className="input" value={name} onChange={(e) => setName(e.target.value)} />
               </div>
               <div>
-                <label className="label">Email</label>
+                <label className="label">Email <span className="text-red-500">*</span></label>
                 <input type="email" className="input" value={email} onChange={(e) => setEmail(e.target.value)} />
               </div>
               <div>
-                <label className="label">Password {editUser && '(kosongkan jika tidak diubah)'}</label>
+                <label className="label">Password {!editUser && <span className="text-red-500">*</span>} {editUser && '(kosongkan jika tidak diubah)'}</label>
                 <input type="password" className="input" value={password} onChange={(e) => setPassword(e.target.value)} />
               </div>
               <div>
-                <label className="label">Role</label>
+                <label className="label">Role <span className="text-red-500">*</span></label>
                 <select className="input" value={role} onChange={(e) => setRole(e.target.value as Role)}>
                   <option value="CASHIER">CASHIER</option>
                   <option value="MANAGER">MANAGER</option>
-                  <option value="DEVELOPER">DEVELOPER</option>
-                  <option value="OWNER">OWNER</option>
                 </select>
               </div>
-              {role === 'OWNER' && (
+              {role === 'MANAGER' && (
                 <div>
-                  <label className="label">PIN (6 digit, untuk re-auth billing)</label>
+                  <label className="label">PIN (opsional)</label>
                   <input type="password" className="input" maxLength={6} placeholder="123456" value={pin} onChange={(e) => setPin(e.target.value)} />
-                </div>
-              )}
-              {editUser && (
-                <div className="flex items-center gap-3">
-                  <input type="checkbox" id="isActive" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} />
-                  <label htmlFor="isActive" className="text-sm">Aktif</label>
                 </div>
               )}
               <div className="flex gap-2 pt-2">
@@ -167,10 +158,10 @@ export default function UsersPage() {
             <tbody>
               {loading ? (
                 <tr><td colSpan={6} className="text-center py-8 text-slate-500">Memuat...</td></tr>
-              ) : users.length === 0 ? (
+              ) : filteredUsers.length === 0 ? (
                 <tr><td colSpan={6} className="text-center py-8 text-slate-500">Tidak ada user</td></tr>
               ) : (
-                users.map((user) => (
+                filteredUsers.map((user) => (
                   <tr key={user.id}>
                     <td className="font-medium">{user.name}</td>
                     <td className="text-slate-500">{user.email}</td>
@@ -178,18 +169,13 @@ export default function UsersPage() {
                       <span className={`badge ${roleColor[user.role as Role]}`}>{user.role}</span>
                     </td>
                     <td>
-                      <span className={`badge ${user.isActive ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
-                        {user.isActive ? 'Aktif' : 'Nonaktif'}
-                      </span>
+                      <button type="button" onClick={() => toggleActive(user)} className={`toggle-switch ${user.isActive ? 'active' : ''}`} title={user.isActive ? 'Aktif' : 'Nonaktif'} />
                     </td>
                     <td className="text-slate-500 text-sm">{formatDate(user.createdAt)}</td>
                     <td>
                       <div className="flex gap-2">
                         <button onClick={() => openEdit(user)} className="text-xs px-2 py-1 bg-slate-100 hover:bg-slate-200 rounded">
                           Edit
-                        </button>
-                        <button onClick={() => toggleActive(user)} className={`text-xs px-2 py-1 rounded ${user.isActive ? 'bg-red-600/20 hover:bg-red-600/40 text-red-600' : 'bg-green-600/20 hover:bg-green-600/40 text-emerald-600'}`}>
-                          {user.isActive ? 'Nonaktifkan' : 'Aktifkan'}
                         </button>
                       </div>
                     </td>

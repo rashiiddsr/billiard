@@ -1,6 +1,6 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { Module } from '@nestjs/common';
-import { Controller, Get, Post, Patch, Param, Body, UseGuards, Query } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Param, Body, UseGuards, Query } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { IsString, IsNumber, IsOptional, IsDateString, Min, IsIn } from 'class-validator';
@@ -18,6 +18,14 @@ export class CreateExpenseDto {
   @IsString() @IsIn(EXPENSE_CATEGORIES as unknown as string[]) category: string;
   @IsDateString() date: string;
   @IsNumber() @Min(0) amount: number;
+  @IsOptional() @IsString() notes?: string;
+  @IsOptional() @IsString() proofUrl?: string;
+}
+
+export class UpdateExpenseDto {
+  @IsOptional() @IsString() @IsIn(EXPENSE_CATEGORIES as unknown as string[]) category?: string;
+  @IsOptional() @IsDateString() date?: string;
+  @IsOptional() @IsNumber() @Min(0) amount?: number;
   @IsOptional() @IsString() notes?: string;
   @IsOptional() @IsString() proofUrl?: string;
 }
@@ -154,6 +162,63 @@ export class FinanceService {
     return expense;
   }
 
+
+  async updateExpense(expenseId: string, dto: UpdateExpenseDto, userId: string) {
+    if (dto.category === 'Lainnya' && !dto.notes?.trim()) {
+      throw new BadRequestException('Catatan wajib diisi untuk kategori Lainnya');
+    }
+
+    const existing = await this.prisma.expense.findUnique({ where: { id: expenseId } });
+    if (!existing) throw new BadRequestException('Pengeluaran tidak ditemukan');
+
+    const nextCategory = dto.category ?? existing.category;
+    const nextNotes = dto.notes ?? existing.notes ?? '';
+    if (nextCategory === 'Lainnya' && !nextNotes.trim()) {
+      throw new BadRequestException('Catatan wajib diisi untuk kategori Lainnya');
+    }
+
+    const expense = await this.prisma.expense.update({
+      where: { id: expenseId },
+      data: {
+        category: dto.category,
+        date: dto.date ? new Date(dto.date) : undefined,
+        amount: dto.amount,
+        notes: dto.notes,
+        proofUrl: dto.proofUrl,
+      },
+      include: { createdBy: { select: { id: true, name: true } } },
+    });
+
+    await this.audit.log({
+      userId,
+      action: AuditAction.UPDATE,
+      entity: 'Expense',
+      entityId: expense.id,
+      beforeData: existing,
+      afterData: dto,
+    });
+
+    return expense;
+  }
+
+
+  async deleteExpense(expenseId: string, userId: string) {
+    const existing = await this.prisma.expense.findUnique({ where: { id: expenseId } });
+    if (!existing) throw new BadRequestException('Pengeluaran tidak ditemukan');
+
+    await this.prisma.expense.delete({ where: { id: expenseId } });
+
+    await this.audit.log({
+      userId,
+      action: AuditAction.DELETE,
+      entity: 'Expense',
+      entityId: expenseId,
+      beforeData: existing,
+    });
+
+    return { success: true };
+  }
+
   async listExpenses(filters: {
     startDate?: Date;
     endDate?: Date;
@@ -219,6 +284,27 @@ export class FinanceController {
   @Roles('OWNER' as any, 'MANAGER' as any)
   createExpense(@Body() dto: CreateExpenseDto, @CurrentUser() user: any) {
     return this.financeService.createExpense(dto, user.id);
+  }
+
+
+  @Patch('expenses/:id')
+  @Roles('OWNER' as any, 'MANAGER' as any)
+  updateExpense(
+    @Param('id') id: string,
+    @Body() dto: UpdateExpenseDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.financeService.updateExpense(id, dto, user.id);
+  }
+
+
+  @Delete('expenses/:id')
+  @Roles('OWNER' as any)
+  deleteExpense(
+    @Param('id') id: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.financeService.deleteExpense(id, user.id);
   }
 
   @Get('expenses')

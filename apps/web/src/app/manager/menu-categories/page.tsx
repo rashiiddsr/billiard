@@ -136,11 +136,11 @@ export default function MenuCategoriesPage() {
             </div>
             <div className="p-4 space-y-4">
               <div>
-                <label className="label">Nama Kategori</label>
+                <label className="label">Nama Kategori <span className="text-red-500">*</span></label>
                 <input className="input" placeholder="Nama kategori" value={name} onChange={(e) => setName(e.target.value)} />
               </div>
               <div>
-                <label className="label">SKU Prefix</label>
+                <label className="label">SKU Prefix <span className="text-red-500">*</span></label>
                 <input className="input" placeholder="SKU Prefix (contoh: BEV)" value={skuPrefix} onChange={(e) => setSkuPrefix(e.target.value.toUpperCase())} />
               </div>
               <div className="flex gap-2 pt-1">

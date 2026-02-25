@@ -118,6 +118,8 @@ export const financeApi = {
   getDailyReport: (date?: string) =>
     api.get('/finance/report/daily', { params: { date } }).then((r) => r.data),
   createExpense: (data: any) => api.post('/finance/expenses', data).then((r) => r.data),
+  updateExpense: (id: string, data: any) => api.patch(`/finance/expenses/${id}`, data).then((r) => r.data),
+  deleteExpense: (id: string) => api.delete(`/finance/expenses/${id}`).then((r) => r.data),
   listExpenses: (params?: any) => api.get('/finance/expenses', { params }).then((r) => r.data),
   expenseCategories: () => api.get('/finance/expenses/categories').then((r) => r.data),
 };

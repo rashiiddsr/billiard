@@ -110,11 +110,11 @@ export default function StockPage() {
             <div className="p-4 space-y-4">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="label text-green-400">Kondisi Baik</label>
+                  <label className="label text-green-500">Kondisi Baik <span className="text-red-500">*</span></label>
                   <input type="number" className="input" value={assetGood} onChange={(e) => setAssetGood(e.target.value)} min={0} />
                 </div>
                 <div>
-                  <label className="label text-red-400">Kondisi Rusak</label>
+                  <label className="label text-red-500">Kondisi Rusak <span className="text-red-500">*</span></label>
                   <input type="number" className="input" value={assetBad} onChange={(e) => setAssetBad(e.target.value)} min={0} />
                 </div>
               </div>
