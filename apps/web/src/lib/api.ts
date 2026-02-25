@@ -8,6 +8,8 @@ export const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
+let refreshPromise: Promise<{ accessToken: string; refreshToken: string }> | null = null;
+
 // Request interceptor - add access token
 api.interceptors.request.use((config) => {
   const token = Cookies.get('accessToken');
@@ -25,13 +27,25 @@ api.interceptors.response.use(
     if (error.response?.status === 401 && !original._retry) {
       original._retry = true;
       try {
-        const refreshToken = Cookies.get('refreshToken');
-        if (!refreshToken) throw new Error('No refresh token');
+        if (!refreshPromise) {
+          const currentRefreshToken = Cookies.get('refreshToken');
+          if (!currentRefreshToken) throw new Error('No refresh token');
 
-        const { data } = await axios.post(`${API_URL}/auth/refresh`, { refreshToken });
-        Cookies.set('accessToken', data.accessToken, { expires: 1 / 96 }); // 15 min
-        Cookies.set('refreshToken', data.refreshToken, { expires: 7 });
-        original.headers.Authorization = `Bearer ${data.accessToken}`;
+          refreshPromise = axios
+            .post(`${API_URL}/auth/refresh`, { refreshToken: currentRefreshToken })
+            .then((response) => {
+              const data = response.data;
+              Cookies.set('accessToken', data.accessToken, { expires: 1 / 96 }); // 15 min
+              Cookies.set('refreshToken', data.refreshToken, { expires: 7 });
+              return data;
+            })
+            .finally(() => {
+              refreshPromise = null;
+            });
+        }
+
+        const tokens = await refreshPromise;
+        original.headers.Authorization = `Bearer ${tokens.accessToken}`;
         return api(original);
       } catch {
         // Redirect to login
