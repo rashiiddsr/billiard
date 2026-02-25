@@ -55,6 +55,8 @@ export class BillingService {
       throw new BadRequestException('Table already has an active session');
     }
 
+    await this.iot.assertTableReadyForBilling(dto.tableId);
+
     const ratePerHour = dto.rateType === 'MANUAL' && dto.manualRatePerHour
       ? new Decimal(dto.manualRatePerHour)
       : new Decimal(table.hourlyRate.toString());
@@ -188,12 +190,14 @@ export class BillingService {
   }
 
   async getActiveSessions() {
-    const gateway = await this.prisma.iotDevice.findFirst({ orderBy: { createdAt: 'asc' } });
-
-    const sessions = await this.prisma.billingSession.findMany({
+    return this.prisma.billingSession.findMany({
       where: { status: SessionStatus.ACTIVE },
       include: {
-        table: true,
+        table: {
+          include: {
+            iotDevice: { select: { id: true, name: true, isOnline: true, isActive: true, lastSeen: true } },
+          },
+        },
         createdBy: { select: { id: true, name: true } },
         orders: {
           where: { status: { not: 'CANCELLED' } },
@@ -202,23 +206,17 @@ export class BillingService {
       },
       orderBy: { startTime: 'asc' },
     });
-
-    return sessions.map((session) => ({
-      ...session,
-      table: {
-        ...session.table,
-        iotDevice: gateway,
-      },
-    }));
   }
 
   async getSession(sessionId: string) {
-    const gateway = await this.prisma.iotDevice.findFirst({ orderBy: { createdAt: 'asc' } });
-
     const session = await this.prisma.billingSession.findUnique({
       where: { id: sessionId },
       include: {
-        table: true,
+        table: {
+          include: {
+            iotDevice: { select: { id: true, name: true, isOnline: true, isActive: true, lastSeen: true } },
+          },
+        },
         createdBy: { select: { id: true, name: true } },
         orders: {
           where: { status: { not: 'CANCELLED' } },
@@ -231,13 +229,7 @@ export class BillingService {
     });
     if (!session) throw new NotFoundException('Session not found');
 
-    return {
-      ...session,
-      table: {
-        ...session.table,
-        iotDevice: gateway,
-      },
-    };
+    return session;
   }
 
   async listSessions(filters: {
