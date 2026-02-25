@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
 import Sidebar from '@/components/shared/Sidebar';
@@ -19,12 +19,41 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [mobileOpen, setMobileOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const notifRef = useRef<HTMLDivElement>(null);
+  const profileRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!loading && !user) {
       router.replace('/login');
     }
   }, [user, loading, router]);
+
+  useEffect(() => {
+    const handleOutsideClick = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (notifRef.current && !notifRef.current.contains(target)) {
+        setNotifOpen(false);
+      }
+      if (profileRef.current && !profileRef.current.contains(target)) {
+        setProfileOpen(false);
+      }
+    };
+
+    const handleEsc = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setNotifOpen(false);
+        setProfileOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleOutsideClick);
+    document.addEventListener('keydown', handleEsc);
+
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+      document.removeEventListener('keydown', handleEsc);
+    };
+  }, []);
 
   const notifications = useMemo(
     () => [
@@ -72,7 +101,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </div>
 
             <div className="relative flex items-center gap-2">
-              <div className="relative">
+              <div className="relative" ref={notifRef}>
                 <button
                   onClick={() => {
                     setNotifOpen((v) => !v);
@@ -97,7 +126,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 )}
               </div>
 
-              <div className="relative">
+              <div className="relative" ref={profileRef}>
                 <button
                   onClick={() => {
                     setProfileOpen((v) => !v);
