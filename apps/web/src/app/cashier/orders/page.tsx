@@ -13,9 +13,15 @@ interface CartItem {
   notes?: string;
 }
 
+interface MenuCategory {
+  id: string;
+  name: string;
+  skuPrefix?: string;
+}
+
 export default function OrdersPage() {
   const [menuItems, setMenuItems] = useState<any[]>([]);
-  const [categories, setCategories] = useState<string[]>([]);
+  const [categories, setCategories] = useState<MenuCategory[]>([]);
   const [activeSessions, setActiveSessions] = useState<any[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [selectedCategory, setSelectedCategory] = useState('');
@@ -32,8 +38,19 @@ export default function OrdersPage() {
         menuApi.categories(),
         billingApi.getActiveSessions(),
       ]);
-      setMenuItems(menuData.data || menuData);
-      setCategories(catData);
+      const normalizedMenu = (menuData.data || menuData || []).map((item: any) => ({
+        ...item,
+        stock: item.stock || {
+          trackStock: !!item.trackStock,
+          qtyOnHand: item.qtyOnHand ?? 0,
+          lowStockThreshold: item.lowStockThreshold ?? 0,
+        },
+      }));
+
+      setMenuItems(normalizedMenu);
+      setCategories((catData || []).map((cat: any) => (typeof cat === 'string'
+        ? { id: cat, name: cat }
+        : { id: cat.id, name: cat.name, skuPrefix: cat.skuPrefix })));
       setActiveSessions(sessions);
     } catch (e) {
       console.error(e);
@@ -47,7 +64,7 @@ export default function OrdersPage() {
   const filteredItems = menuItems.filter((item) => {
     const matchCat = !selectedCategory || item.category === selectedCategory;
     const matchSearch = !search || item.name.toLowerCase().includes(search.toLowerCase()) ||
-      item.sku.toLowerCase().includes(search.toLowerCase());
+      (item.sku || '').toLowerCase().includes(search.toLowerCase());
     return matchCat && matchSearch;
   });
 
@@ -125,7 +142,7 @@ export default function OrdersPage() {
             onChange={(e) => setSelectedCategory(e.target.value)}
           >
             <option value="">Semua</option>
-            {categories.map((c) => <option key={c} value={c}>{c}</option>)}
+            {categories.map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
           </select>
         </div>
 
@@ -139,11 +156,11 @@ export default function OrdersPage() {
           </button>
           {categories.map((c) => (
             <button
-              key={c}
-              onClick={() => setSelectedCategory(c)}
-              className={`whitespace-nowrap px-3 py-1.5 rounded-lg text-sm ${selectedCategory === c ? 'bg-blue-600' : 'bg-slate-700 hover:bg-slate-600'}`}
+              key={c.id}
+              onClick={() => setSelectedCategory(c.name)}
+              className={`whitespace-nowrap px-3 py-1.5 rounded-lg text-sm ${selectedCategory === c.name ? 'bg-blue-600' : 'bg-slate-700 hover:bg-slate-600'}`}
             >
-              {c}
+              {c.name}
             </button>
           ))}
         </div>
