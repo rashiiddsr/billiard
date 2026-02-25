@@ -24,14 +24,11 @@ const navByRole: Record<string, NavItem[]> = {
     { label: 'Billing Meja', href: '/cashier/billing', icon: <BilliardIcon /> },
     { label: 'Pesanan F&B', href: '/cashier/orders', icon: <CartIcon /> },
     { label: 'Checkout', href: '/cashier/checkout', icon: <CashIcon /> },
-    { label: 'Daftar Transaksi', href: '/cashier/transactions', icon: <LogIcon /> },
   ],
   OWNER: [
     { label: 'Dashboard', href: '/owner/dashboard', icon: <HomeIcon /> },
     { label: 'Billing Meja', href: '/owner/billing', icon: <BilliardIcon /> },
     { label: 'Laporan Keuangan', href: '/owner/finance', icon: <ChartIcon /> },
-    { label: 'Daftar Transaksi', href: '/owner/transactions', icon: <LogIcon /> },
-    { label: 'Histori Owner', href: '/owner/history', icon: <LogIcon /> },
     { label: 'Manajemen User', href: '/owner/users', icon: <UserIcon /> },
     { label: 'Manajemen Meja', href: '/owner/tables', icon: <BilliardIcon /> },
     { label: 'Audit Log', href: '/owner/audit', icon: <LogIcon /> },
@@ -47,7 +44,6 @@ const navByRole: Record<string, NavItem[]> = {
     { label: 'Manajemen Kategori', href: '/manager/menu-categories', icon: <TagIcon /> },
     { label: 'Manajemen Aset', href: '/manager/stock', icon: <BoxIcon /> },
     { label: 'Pengeluaran', href: '/manager/expenses', icon: <WalletIcon /> },
-    { label: 'Daftar Transaksi', href: '/manager/transactions', icon: <LogIcon /> },
   ],
 };
 
