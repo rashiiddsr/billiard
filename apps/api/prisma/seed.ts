@@ -10,19 +10,12 @@ async function main() {
   // ─── Users ────────────────────────────────────────────────────────────────
   const ownerHash = await bcrypt.hash('owner123', 12);
   const ownerPin = await bcrypt.hash('123456', 12);
-  const developerHash = await bcrypt.hash('developer123', 12);
   const managerHash = await bcrypt.hash('manager123', 12);
   const cashierHash = await bcrypt.hash('cashier123', 12);
 
-  await prisma.user.upsert({
+  const owner = await prisma.user.upsert({
     where: { email: 'owner@billiard.com' },
-    update: {
-      name: 'Ahmad Owner',
-      passwordHash: ownerHash,
-      pin: ownerPin,
-      role: Role.OWNER,
-      isActive: true,
-    },
+    update: {},
     create: {
       name: 'Ahmad Owner',
       email: 'owner@billiard.com',
@@ -32,30 +25,9 @@ async function main() {
     },
   });
 
-  await prisma.user.upsert({
-    where: { email: 'developer@billiard.com' },
-    update: {
-      name: 'Danu Developer',
-      passwordHash: developerHash,
-      role: Role.DEVELOPER,
-      isActive: true,
-    },
-    create: {
-      name: 'Danu Developer',
-      email: 'developer@billiard.com',
-      passwordHash: developerHash,
-      role: Role.DEVELOPER,
-    },
-  });
-
   const manager = await prisma.user.upsert({
     where: { email: 'manager@billiard.com' },
-    update: {
-      name: 'Budi Manager',
-      passwordHash: managerHash,
-      role: Role.MANAGER,
-      isActive: true,
-    },
+    update: {},
     create: {
       name: 'Budi Manager',
       email: 'manager@billiard.com',
@@ -64,14 +36,9 @@ async function main() {
     },
   });
 
-  await prisma.user.upsert({
+  const cashier = await prisma.user.upsert({
     where: { email: 'cashier@billiard.com' },
-    update: {
-      name: 'Citra Kasir',
-      passwordHash: cashierHash,
-      role: Role.CASHIER,
-      isActive: true,
-    },
+    update: {},
     create: {
       name: 'Citra Kasir',
       email: 'cashier@billiard.com',
@@ -80,61 +47,42 @@ async function main() {
     },
   });
 
-  console.log('✅ Users seeded');
+  console.log('✅ Users created');
 
-  // ─── Tables (stable IDs, default 15) ──────────────────────────────────────
-  for (let i = 1; i <= 15; i++) {
-    const relay = i - 1;
-    await prisma.table.upsert({
-      where: { id: `table-${String(i).padStart(2, '0')}` },
-      update: {
-        name: `Meja ${i}`,
-        description: `Billiard Table ${i}`,
-        hourlyRate: 30000,
-        relayChannel: relay,
-        gpioPin: relay,
-      },
+  // ─── Tables ───────────────────────────────────────────────────────────────
+  const tables = [];
+  for (let i = 1; i <= 10; i++) {
+    const table = await prisma.table.upsert({
+      where: { name: `Meja ${i}` },
+      update: {},
       create: {
-        id: `table-${String(i).padStart(2, '0')}`,
         name: `Meja ${i}`,
         description: `Billiard Table ${i}`,
-        hourlyRate: 30000,
-        relayChannel: relay,
-        gpioPin: relay,
+        hourlyRate: i <= 5 ? 30000 : 40000,
       },
     });
+    tables.push(table);
   }
-  console.log('✅ 15 default tables seeded (ID stabil)');
+  console.log('✅ 10 Tables created');
 
-  // ─── IoT Single Gateway Device (stable ID, token rotated) ─────────────────
+  // ─── IoT Single Gateway Device ────────────────────────────────────────────
+  // New architecture: one ESP gateway controls all table relays.
+  // Seed enforces a single IoT device and rotates gateway token on every seed run.
   await prisma.iotCommand.deleteMany();
+  await prisma.iotDevice.deleteMany();
 
-  const gatewayDeviceId = 'iot-gateway-01';
   const rawToken = `iot-gateway-secret-${crypto.randomBytes(8).toString('hex')}`;
   const tokenHash = await bcrypt.hash(rawToken, 10);
 
-  await prisma.iotDevice.upsert({
-    where: { id: gatewayDeviceId },
-    update: {
+  const gatewayDevice = await prisma.iotDevice.create({
+    data: {
       deviceToken: tokenHash,
-      isOnline: false,
-      signalStrength: null,
-    },
-    create: {
-      id: gatewayDeviceId,
-      deviceToken: tokenHash,
-      isOnline: false,
     },
   });
 
-  // cleanup other historical devices so only stable gateway remains
-  await prisma.iotDevice.deleteMany({
-    where: { id: { not: gatewayDeviceId } },
-  });
-
-  console.log(`📱 IoT Gateway Device ID (stabil): ${gatewayDeviceId}`);
-  console.log(`🔐 IoT Gateway raw token baru (save this!): ${rawToken}`);
-  console.log('✅ Single IoT gateway seeded');
+  console.log(`📱 IoT Gateway Device ID: ${gatewayDevice.id}`);
+  console.log(`🔐 IoT Gateway raw token (save this!): ${rawToken}`);
+  console.log('✅ Single IoT gateway device created');
 
   // ─── Menu Items ───────────────────────────────────────────────────────────
   const defaultCategories = [
@@ -192,6 +140,7 @@ async function main() {
         changedById: manager.id,
       },
     });
+    // Create stock record
     await prisma.stockFnb.upsert({
       where: { menuItemId: menuItem.id },
       update: {},
@@ -207,7 +156,7 @@ async function main() {
 
   // ─── Operational Assets ───────────────────────────────────────────────────
   const assets = [
-    { name: 'Meja Billiard', category: 'Meja', qtyGood: 15, qtyBad: 0 },
+    { name: 'Meja Billiard', category: 'Meja', qtyGood: 10, qtyBad: 0 },
     { name: 'Stik Billiard', category: 'Stik', qtyGood: 28, qtyBad: 4 },
     { name: 'Bola Billiard Set', category: 'Bola', qtyGood: 9, qtyBad: 1 },
     { name: 'Segitiga (Rack)', category: 'Aksesoris', qtyGood: 10, qtyBad: 2 },
@@ -225,10 +174,9 @@ async function main() {
 
   console.log('\n🎉 Seed complete!');
   console.log('\n📋 Default credentials:');
-  console.log('  Owner:     owner@billiard.com     / owner123     (PIN: 123456)');
-  console.log('  Developer: developer@billiard.com / developer123');
-  console.log('  Manager:   manager@billiard.com   / manager123');
-  console.log('  Cashier:   cashier@billiard.com   / cashier123');
+  console.log('  Owner:   owner@billiard.com   / owner123   (PIN: 123456)');
+  console.log('  Manager: manager@billiard.com / manager123');
+  console.log('  Cashier: cashier@billiard.com / cashier123');
 }
 
 main()

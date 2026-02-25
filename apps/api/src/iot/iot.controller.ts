@@ -8,7 +8,7 @@ import {
   UseGuards,
   Patch,
   Delete,
-  Param,
+  Param
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
@@ -39,6 +39,7 @@ class RelayRouteDto {
 export class IotController {
   constructor(private iotService: IotService) {}
 
+  // Device endpoints (auth via HMAC, not JWT)
   @Post('devices/heartbeat')
   async heartbeat(
     @Headers('x-device-id') deviceId: string,
@@ -73,21 +74,16 @@ export class IotController {
   ) {
     const rawBody = JSON.stringify(body);
     return this.iotService.ackCommand(
-      deviceId,
-      token,
-      timestamp,
-      nonce,
-      signature,
-      body.commandId,
-      body.success,
-      rawBody,
+      deviceId, token, timestamp, nonce, signature,
+      body.commandId, body.success, rawBody,
     );
   }
 
+  // Owner IoT settings (single ESP gateway)
   @Get('settings')
   @ApiBearerAuth()
   @UseGuards(AuthGuard('jwt'), RolesGuard)
-  @Roles('DEVELOPER' as any)
+  @Roles('OWNER' as any)
   getSettings() {
     return this.iotService.getGatewaySettings();
   }
@@ -95,7 +91,7 @@ export class IotController {
   @Patch('settings/gateway')
   @ApiBearerAuth()
   @UseGuards(AuthGuard('jwt'), RolesGuard)
-  @Roles('DEVELOPER' as any)
+  @Roles('OWNER' as any)
   setGateway(@Body() dto: GatewaySettingsDto) {
     return this.iotService.setGatewayDevice(dto.deviceId);
   }
@@ -103,7 +99,7 @@ export class IotController {
   @Delete('settings/gateway')
   @ApiBearerAuth()
   @UseGuards(AuthGuard('jwt'), RolesGuard)
-  @Roles('DEVELOPER' as any)
+  @Roles('OWNER' as any)
   clearGatewayOverride() {
     return this.iotService.clearGatewayOverride();
   }
@@ -111,7 +107,7 @@ export class IotController {
   @Patch('settings/routes')
   @ApiBearerAuth()
   @UseGuards(AuthGuard('jwt'), RolesGuard)
-  @Roles('DEVELOPER' as any)
+  @Roles('OWNER' as any)
   setRoute(@Body() dto: RelayRouteDto) {
     return this.iotService.setRelayRoute(dto.tableId, dto.relayChannel, dto.gpioPin);
   }
@@ -119,7 +115,7 @@ export class IotController {
   @Delete('settings/routes/:tableId')
   @ApiBearerAuth()
   @UseGuards(AuthGuard('jwt'), RolesGuard)
-  @Roles('DEVELOPER' as any)
+  @Roles('OWNER' as any)
   clearRoute(@Param('tableId') tableId: string) {
     return this.iotService.clearRelayRoute(tableId);
   }
@@ -127,16 +123,8 @@ export class IotController {
   @Get('devices')
   @ApiBearerAuth()
   @UseGuards(AuthGuard('jwt'), RolesGuard)
-  @Roles('DEVELOPER' as any)
+  @Roles('OWNER' as any)
   listDevices() {
     return this.iotService.listDevices();
-  }
-
-  @Post('test-connection')
-  @ApiBearerAuth()
-  @UseGuards(AuthGuard('jwt'), RolesGuard)
-  @Roles('DEVELOPER' as any)
-  testConnection(@Body() dto: GatewaySettingsDto) {
-    return this.iotService.testConnection(dto.deviceId);
   }
 }
