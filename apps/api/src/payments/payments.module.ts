@@ -24,6 +24,7 @@ export class CreateCheckoutDto {
   @IsOptional() @IsString() discountReason?: string;
   @IsOptional() @IsString() discountApprovedById?: string;
   @IsOptional() @IsString() reference?: string; // for QRIS/TRANSFER
+  @IsOptional() @IsNumber() @Min(0) amountPaid?: number;
 }
 
 export class ConfirmPaymentDto {
@@ -81,7 +82,7 @@ export class PaymentsService {
         paymentNumber: this.generatePaymentNumber(),
         billingSessionId: dto.billingSessionId,
         method: dto.method,
-        status: 'PENDING_PAYMENT',
+        status: 'PAID',
         billingAmount: billingAmount.toFixed(2),
         fnbAmount: fnbAmount.toFixed(2),
         subtotal: subtotal.toFixed(2),
@@ -91,6 +92,10 @@ export class PaymentsService {
         taxAmount: taxAmount.toFixed(2),
         totalAmount: totalAmount.toFixed(2),
         reference: dto.reference,
+        amountPaid: (dto.amountPaid || totalAmount).toFixed(2),
+        changeAmount: new Decimal(dto.amountPaid || totalAmount).minus(totalAmount).toFixed(2),
+        paidById: userId,
+        paidAt: new Date(),
         // Link orders
         ...(dto.orderIds && dto.orderIds.length > 0 ? {
           orderId: dto.orderIds[0], // Primary order link
@@ -105,6 +110,7 @@ export class PaymentsService {
           where: { id: orderId },
           data: { status: 'CONFIRMED' },
         });
+        await this.deductStock(orderId, userId);
       }
     }
 
@@ -249,9 +255,24 @@ export class PaymentsService {
     }
   }
 
-  async findAll(filters: { status?: string; page?: number; limit?: number; startDate?: Date; endDate?: Date }) {
+  async voidPayment(paymentId: string, userId: string) {
+    const payment = await this.prisma.payment.findUnique({ where: { id: paymentId } });
+    if (!payment) throw new NotFoundException('Payment not found');
+    if (payment.status !== 'PAID') throw new BadRequestException('Hanya transaksi lunas yang bisa di-void');
+    return this.prisma.payment.update({ where: { id: paymentId }, data: { status: 'REFUNDED' } });
+  }
+
+  async deletePayment(paymentId: string) {
+    const payment = await this.prisma.payment.findUnique({ where: { id: paymentId } });
+    if (!payment) throw new NotFoundException('Payment not found');
+    await this.prisma.payment.delete({ where: { id: paymentId } });
+    return { success: true };
+  }
+
+  async findAll(filters: { status?: string; page?: number; limit?: number; startDate?: Date; endDate?: Date; paidById?: string }) {
     const where: any = {};
     if (filters.status) where.status = filters.status;
+    if (filters.paidById) where.paidById = filters.paidById;
     if (filters.startDate || filters.endDate) {
       where.createdAt = {};
       if (filters.startDate) where.createdAt.gte = filters.startDate;
@@ -288,16 +309,19 @@ export class PaymentsController {
 
   @Get()
   findAll(
+    @CurrentUser() user: any,
     @Query('status') status?: string,
     @Query('page') page?: number,
     @Query('limit') limit?: number,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
+    @Query('paidById') paidById?: string,
   ) {
     return this.paymentsService.findAll({
       status,
       page,
       limit,
+      paidById: user.role === 'CASHIER' ? user.id : paidById,
       startDate: startDate ? new Date(startDate) : undefined,
       endDate: endDate ? new Date(endDate) : undefined,
     });
@@ -319,6 +343,12 @@ export class PaymentsController {
     return this.paymentsService.confirmPayment(id, dto, user.id);
   }
 
+  @Patch(':id/void')
+  @Roles('MANAGER' as any, 'OWNER' as any)
+  voidPayment(@Param('id') id: string, @CurrentUser() user: any) {
+    return this.paymentsService.voidPayment(id, user.id);
+  }
+
   @Patch(':id/print')
   @Roles('OWNER' as any, 'CASHIER' as any)
   markPrinted(@Param('id') id: string, @CurrentUser() user: any) {
@@ -329,6 +359,12 @@ export class PaymentsController {
   @Roles('OWNER' as any, 'CASHIER' as any)
   getReceipt(@Param('id') id: string) {
     return this.paymentsService.getReceiptData(id);
+  }
+
+  @Patch(':id/delete')
+  @Roles('OWNER' as any)
+  deletePayment(@Param('id') id: string) {
+    return this.paymentsService.deletePayment(id);
   }
 }
 
