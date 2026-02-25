@@ -208,8 +208,6 @@ model MenuItem {
   category        String
   price           Decimal  @db.Decimal(12, 2)
   cost            Decimal? @db.Decimal(12, 2)
-  taxFlag         Boolean  @default(false)
-  taxRate         Decimal  @db.Decimal(5, 4) @default(0.11)
   isActive        Boolean  @default(true)
   imageUrl        String?
   description     String?

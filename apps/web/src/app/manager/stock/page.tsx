@@ -30,11 +30,22 @@ export default function StockPage() {
 
   const submitAssetUpdate = async () => {
     if (!assetGood && !assetBad) { toast.error('Masukkan jumlah'); return; }
+
+    const nextGood = assetGood ? parseInt(assetGood, 10) : undefined;
+    const nextBad = assetBad ? parseInt(assetBad, 10) : undefined;
+    const changed = (nextGood !== undefined && nextGood !== assetModal.qtyGood)
+      || (nextBad !== undefined && nextBad !== assetModal.qtyBad);
+
+    if (!changed) {
+      toast('Tidak ada perubahan stok aset');
+      return;
+    }
+
     setSubmitting(true);
     try {
       await stockApi.updateAsset(assetModal.id, {
-        qtyGood: assetGood ? parseInt(assetGood) : undefined,
-        qtyBad: assetBad ? parseInt(assetBad) : undefined,
+        qtyGood: nextGood,
+        qtyBad: nextBad,
         notes: assetNotes || undefined,
       });
       toast.success('Aset diperbarui');

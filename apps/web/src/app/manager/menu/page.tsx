@@ -14,6 +14,7 @@ export default function MenuManagementPage() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editItem, setEditItem] = useState<any>(null);
+  const [detailItem, setDetailItem] = useState<any>(null);
   const [submitting, setSubmitting] = useState(false);
 
   const [stockModal, setStockModal] = useState<any>(null);
@@ -26,7 +27,6 @@ export default function MenuManagementPage() {
   const [categoryId, setCategoryId] = useState('');
   const [price, setPrice] = useState('');
   const [cost, setCost] = useState('');
-  const [taxFlag, setTaxFlag] = useState(false);
   const [description, setDescription] = useState('');
   const [initStock, setInitStock] = useState('0');
   const [stockThreshold, setStockThreshold] = useState('5');
@@ -63,25 +63,46 @@ export default function MenuManagementPage() {
 
   const openCreate = () => {
     setEditItem(null);
-    setSku(''); setName(''); setCategoryId(''); setPrice(''); setCost('');
-    setTaxFlag(false); setDescription('');
-    setInitStock('50'); setStockThreshold('5');
+    setSku('');
+    setName('');
+    setCategoryId('');
+    setPrice('');
+    setCost('');
+    setDescription('');
+    setInitStock('50');
+    setStockThreshold('5');
     setShowForm(true);
   };
 
   const openEdit = (item: any) => {
     const foundCategory = categories.find((c) => c.name === item.category);
     setEditItem(item);
-    setSku(item.sku); setName(item.name); setCategoryId(foundCategory?.id || '');
-    setPrice(item.price); setCost(item.cost || ''); setTaxFlag(item.taxFlag);
+    setSku(item.sku || '');
+    setName(item.name || '');
+    setCategoryId(foundCategory?.id || '');
+    setPrice(item.price?.toString() || '');
+    setCost(item.cost?.toString() || '');
     setDescription(item.description || '');
-    setInitStock(''); setStockThreshold(item.stock?.lowStockThreshold?.toString() || '5');
+    setInitStock('');
+    setStockThreshold(item.stock?.lowStockThreshold?.toString() || '5');
     setShowForm(true);
   };
 
   const onSelectCategory = async (nextCategoryId: string) => {
     setCategoryId(nextCategoryId);
-    if (editItem || !nextCategoryId) return;
+    if (!nextCategoryId) {
+      setSku('');
+      return;
+    }
+
+    if (editItem) {
+      const currentCategory = categories.find((c) => c.name === editItem.category);
+      if (currentCategory?.id === nextCategoryId) {
+        setSku(editItem.sku);
+        return;
+      }
+    }
+
     try {
       const nextSku = await menuApi.getNextSku(nextCategoryId);
       setSku(nextSku.sku);
@@ -95,27 +116,31 @@ export default function MenuManagementPage() {
       toast.error('Kategori, nama, dan harga wajib diisi');
       return;
     }
+
     setSubmitting(true);
     try {
-      const data = {
-        sku: editItem ? undefined : sku,
-        name,
-        categoryId,
-        price: parseFloat(price),
-        cost: cost ? parseFloat(cost) : undefined,
-        taxFlag,
-        description: description || undefined,
-        initialStock: initStock ? parseInt(initStock, 10) : undefined,
-        lowStockThreshold: stockThreshold ? parseInt(stockThreshold, 10) : 5,
-      };
-
       if (editItem) {
-        await menuApi.update(editItem.id, data);
+        await menuApi.update(editItem.id, {
+          name,
+          categoryId,
+          price: parseFloat(price),
+          cost: cost ? parseFloat(cost) : undefined,
+          description: description || undefined,
+        });
         toast.success('Menu diperbarui');
       } else {
-        await menuApi.create(data);
+        await menuApi.create({
+          name,
+          categoryId,
+          price: parseFloat(price),
+          cost: cost ? parseFloat(cost) : undefined,
+          description: description || undefined,
+          initialStock: initStock ? parseInt(initStock, 10) : undefined,
+          lowStockThreshold: stockThreshold ? parseInt(stockThreshold, 10) : 5,
+        });
         toast.success('Menu ditambahkan');
       }
+
       setShowForm(false);
       fetchData();
     } catch (e: any) {
@@ -239,16 +264,12 @@ export default function MenuManagementPage() {
                 )}
                 <div className="col-span-5">
                   <label className="label">Batas Stok Rendah</label>
-                  <input type="number" className="input" value={stockThreshold} onChange={(e) => setStockThreshold(e.target.value)} />
+                  <input type="number" className="input" value={stockThreshold} onChange={(e) => setStockThreshold(e.target.value)} disabled={!!editItem} />
                 </div>
               </div>
               <div>
                 <label className="label">Deskripsi</label>
                 <textarea className="input resize-none" rows={2} value={description} onChange={(e) => setDescription(e.target.value)} />
-              </div>
-              <div className="flex items-center gap-2">
-                <button type="button" onClick={() => setTaxFlag(!taxFlag)} className={`toggle-switch ${taxFlag ? 'active' : ''}`} />
-                <span className="text-sm">Kena Pajak (11%)</span>
               </div>
               <div className="flex gap-2 pt-2">
                 <button onClick={() => setShowForm(false)} className="btn-secondary flex-1">Batal</button>
@@ -298,6 +319,29 @@ export default function MenuManagementPage() {
         </div>
       )}
 
+      {detailItem && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-white border border-slate-200 rounded-xl w-full max-w-md">
+            <div className="flex items-center justify-between p-4 border-b border-slate-200">
+              <h3 className="font-semibold">Detail Menu</h3>
+              <button onClick={() => setDetailItem(null)} className="text-slate-500 hover:text-slate-700">✕</button>
+            </div>
+            <div className="p-4 space-y-3 text-sm">
+              <div className="flex justify-between"><span className="text-slate-500">SKU</span><span className="font-mono">{detailItem.sku}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500">Nama</span><span className="font-medium">{detailItem.name}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500">Kategori</span><span>{detailItem.category}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500">Harga</span><span>{formatCurrency(detailItem.price)}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500">HPP</span><span>{detailItem.cost ? formatCurrency(detailItem.cost) : '-'}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500">Stok</span><span>{detailItem.stock?.qtyOnHand ?? '-'}</span></div>
+              <div>
+                <p className="text-slate-500">Deskripsi</p>
+                <p className="mt-1">{detailItem.description || '-'}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="card p-0 overflow-hidden">
         <div className="table-wrapper">
           <table className="data-table">
@@ -309,13 +353,12 @@ export default function MenuManagementPage() {
                 <th>Harga</th>
                 <th>HPP</th>
                 <th>Stok</th>
-                <th>Pajak</th>
                 <th>Status</th>
                 <th>Aksi</th>
               </tr>
             </thead>
             <tbody>
-              {loading ? <tr><td colSpan={9} className="text-center py-8 text-slate-500">Memuat...</td></tr> : items.length === 0 ? <tr><td colSpan={9} className="text-center py-8 text-slate-500">Tidak ada item</td></tr> : items.map((item) => {
+              {loading ? <tr><td colSpan={8} className="text-center py-8 text-slate-500">Memuat...</td></tr> : items.length === 0 ? <tr><td colSpan={8} className="text-center py-8 text-slate-500">Tidak ada item</td></tr> : items.map((item) => {
                 const trackStock = !!item.stock?.trackStock;
                 const qtyOnHand = item.stock?.qtyOnHand;
                 const lowStockThreshold = item.stock?.lowStockThreshold;
@@ -333,7 +376,6 @@ export default function MenuManagementPage() {
                     <td className="font-medium">{formatCurrency(item.price)}</td>
                     <td className="text-slate-500">{item.cost ? formatCurrency(item.cost) : '-'}</td>
                     <td><span className={`font-semibold ${stockClass}`}>{qtyOnHand ?? '-'}</span></td>
-                    <td>{item.taxFlag ? <span className="badge bg-amber-100 text-amber-700">11%</span> : '-'}</td>
                     <td>
                       <div className="flex items-center gap-2">
                         <button type="button" onClick={() => toggleActive(item)} className={`toggle-switch ${item.isActive ? 'active' : ''}`} />
@@ -341,7 +383,8 @@ export default function MenuManagementPage() {
                     </td>
                     <td>
                       <div className="flex flex-wrap gap-2">
-                        <button onClick={() => openEdit(item)} className="text-xs px-2 py-1 bg-slate-100 hover:bg-slate-200 rounded">Edit</button>
+                        <button onClick={() => setDetailItem(item)} className="text-xs px-2 py-1 bg-violet-100 text-violet-700 hover:bg-violet-200 rounded">Detail</button>
+                        <button onClick={() => openEdit(item)} className="text-xs px-2 py-1 bg-amber-100 text-amber-700 hover:bg-amber-200 rounded">Edit</button>
                         <button onClick={() => openStockModal(item)} className="text-xs px-2 py-1 bg-blue-100 text-blue-700 hover:bg-blue-200 rounded">Perbarui Stok</button>
                       </div>
                     </td>

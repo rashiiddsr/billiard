@@ -101,8 +101,6 @@ CREATE TABLE `menu_items` (
     `category` VARCHAR(191) NOT NULL,
     `price` DECIMAL(12, 2) NOT NULL,
     `cost` DECIMAL(12, 2) NULL,
-    `taxFlag` BOOLEAN NOT NULL DEFAULT false,
-    `taxRate` DECIMAL(5, 4) NOT NULL DEFAULT 0.11,
     `isActive` BOOLEAN NOT NULL DEFAULT true,
     `imageUrl` VARCHAR(191) NULL,
     `description` VARCHAR(191) NULL,

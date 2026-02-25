@@ -138,6 +138,14 @@ export class StockService {
     const asset = await this.prisma.operationalAsset.findUnique({ where: { id } });
     if (!asset) throw new NotFoundException('Asset not found');
 
+    const qtyGoodChanged = dto.qtyGood !== undefined && dto.qtyGood !== asset.qtyGood;
+    const qtyBadChanged = dto.qtyBad !== undefined && dto.qtyBad !== asset.qtyBad;
+    const hasStockChange = qtyGoodChanged || qtyBadChanged;
+
+    if (!hasStockChange) {
+      return asset;
+    }
+
     const updated = await this.prisma.operationalAsset.update({
       where: { id },
       data: { ...dto, updatedAt: new Date() },
@@ -149,7 +157,7 @@ export class StockService {
       entity: 'OperationalAsset',
       entityId: id,
       beforeData: { qtyGood: asset.qtyGood, qtyBad: asset.qtyBad },
-      afterData: dto,
+      afterData: { qtyGood: updated.qtyGood, qtyBad: updated.qtyBad },
     });
 
     return updated;
