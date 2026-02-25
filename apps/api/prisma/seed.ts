@@ -1,90 +1,45 @@
 import { PrismaClient, Role } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
-import * as crypto from 'crypto';
 
 const prisma = new PrismaClient();
 
 async function main() {
   console.log('🌱 Seeding database...');
 
-  // ─── Users ────────────────────────────────────────────────────────────────
   const ownerHash = await bcrypt.hash('owner123', 12);
   const ownerPin = await bcrypt.hash('123456', 12);
+  const developerHash = await bcrypt.hash('developer123', 12);
   const managerHash = await bcrypt.hash('manager123', 12);
   const cashierHash = await bcrypt.hash('cashier123', 12);
 
-  const owner = await prisma.user.upsert({
+  await prisma.user.upsert({
     where: { email: 'owner@billiard.com' },
-    update: {},
-    create: {
-      name: 'Ahmad Owner',
-      email: 'owner@billiard.com',
-      passwordHash: ownerHash,
-      pin: ownerPin,
-      role: Role.OWNER,
-    },
+    update: { name: 'Ahmad Owner', passwordHash: ownerHash, pin: ownerPin, role: Role.OWNER, isActive: true },
+    create: { name: 'Ahmad Owner', email: 'owner@billiard.com', passwordHash: ownerHash, pin: ownerPin, role: Role.OWNER },
+  });
+
+  await prisma.user.upsert({
+    where: { email: 'developer@billiard.com' },
+    update: { name: 'Danu Developer', passwordHash: developerHash, role: Role.DEVELOPER, isActive: true },
+    create: { name: 'Danu Developer', email: 'developer@billiard.com', passwordHash: developerHash, role: Role.DEVELOPER },
   });
 
   const manager = await prisma.user.upsert({
     where: { email: 'manager@billiard.com' },
-    update: {},
-    create: {
-      name: 'Budi Manager',
-      email: 'manager@billiard.com',
-      passwordHash: managerHash,
-      role: Role.MANAGER,
-    },
+    update: { name: 'Budi Manager', passwordHash: managerHash, role: Role.MANAGER, isActive: true },
+    create: { name: 'Budi Manager', email: 'manager@billiard.com', passwordHash: managerHash, role: Role.MANAGER },
   });
 
-  const cashier = await prisma.user.upsert({
+  await prisma.user.upsert({
     where: { email: 'cashier@billiard.com' },
-    update: {},
-    create: {
-      name: 'Citra Kasir',
-      email: 'cashier@billiard.com',
-      passwordHash: cashierHash,
-      role: Role.CASHIER,
-    },
+    update: { name: 'Citra Kasir', passwordHash: cashierHash, role: Role.CASHIER, isActive: true },
+    create: { name: 'Citra Kasir', email: 'cashier@billiard.com', passwordHash: cashierHash, role: Role.CASHIER },
   });
 
-  console.log('✅ Users created');
+  console.log('✅ Users seeded');
+  console.log('✅ Tables default: 0 meja (buat via Developer > Manajemen Meja)');
+  console.log('✅ IoT devices default: 0 device (buat via Developer > IoT Configurated)');
 
-  // ─── Tables ───────────────────────────────────────────────────────────────
-  const tables = [];
-  for (let i = 1; i <= 10; i++) {
-    const table = await prisma.table.upsert({
-      where: { name: `Meja ${i}` },
-      update: {},
-      create: {
-        name: `Meja ${i}`,
-        description: `Billiard Table ${i}`,
-        hourlyRate: i <= 5 ? 30000 : 40000,
-      },
-    });
-    tables.push(table);
-  }
-  console.log('✅ 10 Tables created');
-
-  // ─── IoT Single Gateway Device ────────────────────────────────────────────
-  // New architecture: one ESP gateway controls all table relays.
-  // Seed enforces a single IoT device and rotates gateway token on every seed run.
-  await prisma.iotCommand.deleteMany();
-  await prisma.iotDevice.deleteMany();
-
-  const rawToken = `iot-gateway-secret-${crypto.randomBytes(8).toString('hex')}`;
-  const tokenHash = await bcrypt.hash(rawToken, 10);
-
-  const gatewayDevice = await prisma.iotDevice.create({
-    data: {
-      deviceToken: tokenHash,
-    },
-  });
-
-  console.log(`📱 IoT Gateway Device ID: ${gatewayDevice.id}`);
-  console.log(`🔐 IoT Gateway raw token (save this!): ${rawToken}`);
-  console.log('✅ Single IoT gateway device created');
-
-  // ─── Menu Items ───────────────────────────────────────────────────────────
   const defaultCategories = [
     { name: 'Minuman', skuPrefix: 'BEV', lastSkuNumber: 6 },
     { name: 'Snack', skuPrefix: 'SNK', lastSkuNumber: 5 },
@@ -96,15 +51,10 @@ async function main() {
   for (const category of defaultCategories) {
     await prisma.menuCategory.upsert({
       where: { name: category.name },
-      update: {
-        skuPrefix: category.skuPrefix,
-        lastSkuNumber: category.lastSkuNumber,
-      },
+      update: { skuPrefix: category.skuPrefix, lastSkuNumber: category.lastSkuNumber },
       create: category,
     });
   }
-
-  console.log('✅ Default menu categories created');
 
   const menuItems = [
     { sku: 'BEV-001', name: 'Es Teh Manis', category: 'Minuman', price: 5000, cost: 2000 },
@@ -133,30 +83,18 @@ async function main() {
     const menuItem = await prisma.menuItem.upsert({
       where: { sku: item.sku },
       update: {},
-      create: {
-        ...item,
-        price: item.price,
-        cost: item.cost,
-        changedById: manager.id,
-      },
+      create: { ...item, changedById: manager.id },
     });
-    // Create stock record
+
     await prisma.stockFnb.upsert({
       where: { menuItemId: menuItem.id },
       update: {},
-      create: {
-        menuItemId: menuItem.id,
-        qtyOnHand: 50,
-        lowStockThreshold: 5,
-        trackStock: true,
-      },
+      create: { menuItemId: menuItem.id, qtyOnHand: 50, lowStockThreshold: 5, trackStock: true },
     });
   }
-  console.log('✅ 20 Menu items + stock created');
 
-  // ─── Operational Assets ───────────────────────────────────────────────────
   const assets = [
-    { name: 'Meja Billiard', category: 'Meja', qtyGood: 10, qtyBad: 0 },
+    { name: 'Meja Billiard', category: 'Meja', qtyGood: 15, qtyBad: 0 },
     { name: 'Stik Billiard', category: 'Stik', qtyGood: 28, qtyBad: 4 },
     { name: 'Bola Billiard Set', category: 'Bola', qtyGood: 9, qtyBad: 1 },
     { name: 'Segitiga (Rack)', category: 'Aksesoris', qtyGood: 10, qtyBad: 2 },
@@ -164,19 +102,15 @@ async function main() {
   ];
 
   for (const asset of assets) {
-    await prisma.operationalAsset.upsert({
-      where: { name: asset.name },
-      update: {},
-      create: asset,
-    });
+    await prisma.operationalAsset.upsert({ where: { name: asset.name }, update: {}, create: asset });
   }
-  console.log('✅ Operational assets created');
 
   console.log('\n🎉 Seed complete!');
   console.log('\n📋 Default credentials:');
-  console.log('  Owner:   owner@billiard.com   / owner123   (PIN: 123456)');
-  console.log('  Manager: manager@billiard.com / manager123');
-  console.log('  Cashier: cashier@billiard.com / cashier123');
+  console.log('  Owner:     owner@billiard.com     / owner123     (PIN: 123456)');
+  console.log('  Developer: developer@billiard.com / developer123');
+  console.log('  Manager:   manager@billiard.com   / manager123');
+  console.log('  Cashier:   cashier@billiard.com   / cashier123');
 }
 
 main()

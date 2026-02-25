@@ -6,32 +6,23 @@ import {
   Query,
   Headers,
   UseGuards,
-  Patch,
-  Delete,
-  Param
+  Param,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
-import { IsOptional, IsString, IsNumber } from 'class-validator';
+import { IsString } from 'class-validator';
 import { IotService } from './iot.service';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 
-class GatewaySettingsDto {
+class CreateDeviceDto {
   @IsString()
-  deviceId: string;
+  name: string;
 }
 
-class RelayRouteDto {
+class DeviceActionDto {
   @IsString()
-  tableId: string;
-
-  @IsNumber()
-  relayChannel: number;
-
-  @IsOptional()
-  @IsNumber()
-  gpioPin?: number;
+  deviceId: string;
 }
 
 @ApiTags('IoT')
@@ -39,7 +30,6 @@ class RelayRouteDto {
 export class IotController {
   constructor(private iotService: IotService) {}
 
-  // Device endpoints (auth via HMAC, not JWT)
   @Post('devices/heartbeat')
   async heartbeat(
     @Headers('x-device-id') deviceId: string,
@@ -73,58 +63,38 @@ export class IotController {
     @Body() body: { commandId: string; success: boolean },
   ) {
     const rawBody = JSON.stringify(body);
-    return this.iotService.ackCommand(
-      deviceId, token, timestamp, nonce, signature,
-      body.commandId, body.success, rawBody,
-    );
-  }
-
-  // Owner IoT settings (single ESP gateway)
-  @Get('settings')
-  @ApiBearerAuth()
-  @UseGuards(AuthGuard('jwt'), RolesGuard)
-  @Roles('OWNER' as any)
-  getSettings() {
-    return this.iotService.getGatewaySettings();
-  }
-
-  @Patch('settings/gateway')
-  @ApiBearerAuth()
-  @UseGuards(AuthGuard('jwt'), RolesGuard)
-  @Roles('OWNER' as any)
-  setGateway(@Body() dto: GatewaySettingsDto) {
-    return this.iotService.setGatewayDevice(dto.deviceId);
-  }
-
-  @Delete('settings/gateway')
-  @ApiBearerAuth()
-  @UseGuards(AuthGuard('jwt'), RolesGuard)
-  @Roles('OWNER' as any)
-  clearGatewayOverride() {
-    return this.iotService.clearGatewayOverride();
-  }
-
-  @Patch('settings/routes')
-  @ApiBearerAuth()
-  @UseGuards(AuthGuard('jwt'), RolesGuard)
-  @Roles('OWNER' as any)
-  setRoute(@Body() dto: RelayRouteDto) {
-    return this.iotService.setRelayRoute(dto.tableId, dto.relayChannel, dto.gpioPin);
-  }
-
-  @Delete('settings/routes/:tableId')
-  @ApiBearerAuth()
-  @UseGuards(AuthGuard('jwt'), RolesGuard)
-  @Roles('OWNER' as any)
-  clearRoute(@Param('tableId') tableId: string) {
-    return this.iotService.clearRelayRoute(tableId);
+    return this.iotService.ackCommand(deviceId, token, timestamp, nonce, signature, body.commandId, body.success, rawBody);
   }
 
   @Get('devices')
   @ApiBearerAuth()
   @UseGuards(AuthGuard('jwt'), RolesGuard)
-  @Roles('OWNER' as any)
+  @Roles('DEVELOPER' as any)
   listDevices() {
     return this.iotService.listDevices();
+  }
+
+  @Post('devices')
+  @ApiBearerAuth()
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles('DEVELOPER' as any)
+  createDevice(@Body() dto: CreateDeviceDto) {
+    return this.iotService.createDevice(dto.name);
+  }
+
+  @Post('devices/:deviceId/rotate-token')
+  @ApiBearerAuth()
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles('DEVELOPER' as any)
+  rotateToken(@Param('deviceId') deviceId: string) {
+    return this.iotService.rotateDeviceToken(deviceId);
+  }
+
+  @Post('test-connection')
+  @ApiBearerAuth()
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles('DEVELOPER' as any)
+  testConnection(@Body() dto: DeviceActionDto) {
+    return this.iotService.testConnection(dto.deviceId);
   }
 }
