@@ -5,13 +5,13 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
 import DashboardLayout from '@/components/shared/DashboardLayout';
 
-export default function OwnerLayout({ children }: { children: React.ReactNode }) {
+export default function DeveloperLayout({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
-    if (!loading && user && user.role !== 'OWNER') {
-      if (user.role === 'DEVELOPER') router.replace('/developer/dashboard');
+    if (!loading && user && user.role !== 'DEVELOPER') {
+      if (user.role === 'OWNER') router.replace('/owner/dashboard');
       else if (user.role === 'MANAGER') router.replace('/manager/dashboard');
       else router.replace('/cashier/dashboard');
     }
