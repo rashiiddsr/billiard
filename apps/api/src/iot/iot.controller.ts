@@ -73,6 +73,18 @@ export class IotController {
     return this.iotService.getDeviceConfig(deviceId, token, timestamp, nonce, signature);
   }
 
+
+  @Get('devices/relay-state')
+  async getRelayState(
+    @Query('deviceId') deviceId: string,
+    @Headers('x-device-token') token: string,
+    @Headers('x-timestamp') timestamp: string,
+    @Headers('x-nonce') nonce: string,
+    @Headers('x-signature') signature: string,
+  ) {
+    return this.iotService.getRelayState(deviceId, token, timestamp, nonce, signature);
+  }
+
   @Post('commands/ack')
   async ackCommand(
     @Headers('x-device-id') deviceId: string,
