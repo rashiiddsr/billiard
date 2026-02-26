@@ -156,7 +156,6 @@ export default function OrdersPage() {
       const payment = await paymentsApi.createCheckout({
         orderIds: [order.id],
         method,
-        discountAmount: 0,
         reference: reference || undefined,
         amountPaid: paid,
       });

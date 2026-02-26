@@ -358,6 +358,12 @@ export class BillingService {
           data: { status: TableStatus.AVAILABLE },
         });
         await this.iot.sendCommand(session.tableId, 'LIGHT_OFF');
+        await this.audit.log({
+          action: AuditAction.AUTO_STOP_BILLING,
+          entity: 'BillingSession',
+          entityId: session.id,
+          afterData: { reason: 'session_timeout', autoStoppedAt: now },
+        });
         console.log(`⏰ Session ${session.id} auto-completed at ${now.toISOString()}`);
       } catch (err) {
         console.error(`Failed to complete session ${session.id}:`, err);

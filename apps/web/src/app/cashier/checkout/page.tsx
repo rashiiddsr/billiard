@@ -115,7 +115,6 @@ export default function CheckoutPage() {
         billingSessionId: selectedSession || undefined,
         orderIds: sessionOrders.map((o: any) => o.id),
         method,
-        discountAmount: 0,
         reference: reference || undefined,
         amountPaid: paid,
       });

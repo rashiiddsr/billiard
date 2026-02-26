@@ -14,6 +14,7 @@ import { PaymentsModule } from './payments/payments.module';
 import { FinanceModule } from './finance/finance.module';
 import { StockModule } from './stock/stock.module';
 import { AuditModule } from './audit/audit.module';
+import { NotificationsModule } from './notifications/notifications.module';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { AuditModule } from './audit/audit.module';
     FinanceModule,
     StockModule,
     AuditModule,
+    NotificationsModule,
   ],
 })
 export class AppModule {}

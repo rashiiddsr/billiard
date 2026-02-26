@@ -20,9 +20,6 @@ export class CreateCheckoutDto {
   @IsOptional() @IsString() billingSessionId?: string;
   @IsOptional() @IsArray() orderIds?: string[];
   @IsEnum(PaymentMethod) method: PaymentMethod;
-  @IsOptional() @IsNumber() @Min(0) discountAmount?: number;
-  @IsOptional() @IsString() discountReason?: string;
-  @IsOptional() @IsString() discountApprovedById?: string;
   @IsOptional() @IsString() reference?: string; // for QRIS/TRANSFER
   @IsOptional() @IsNumber() @Min(0) amountPaid?: number;
 }
@@ -78,12 +75,7 @@ export class PaymentsService {
     }
 
     const subtotal = billingAmount.plus(fnbAmount);
-    const discount = new Decimal(dto.discountAmount || 0);
-    const totalAmount = subtotal.plus(taxAmount).minus(discount);
-
-    if (totalAmount.lessThan(0)) {
-      throw new BadRequestException('Discount cannot exceed total amount');
-    }
+    const totalAmount = subtotal.plus(taxAmount);
 
     let payment: any = null;
     for (let i = 0; i < 5; i += 1) {
@@ -97,9 +89,9 @@ export class PaymentsService {
             billingAmount: billingAmount.toFixed(2),
             fnbAmount: fnbAmount.toFixed(2),
             subtotal: subtotal.toFixed(2),
-            discountAmount: discount.toFixed(2),
-            discountReason: dto.discountReason,
-            discountApprovedById: dto.discountApprovedById,
+            discountAmount: '0.00',
+            discountReason: null,
+            discountApprovedById: null,
             taxAmount: taxAmount.toFixed(2),
             totalAmount: totalAmount.toFixed(2),
             reference: dto.reference,
@@ -134,6 +126,19 @@ export class PaymentsService {
         await this.deductStock(orderId, userId);
       }
     }
+
+    await this.audit.log({
+      userId,
+      action: AuditAction.PAYMENT,
+      entity: 'Payment',
+      entityId: payment.id,
+      afterData: {
+        paymentNumber: payment.paymentNumber,
+        method: payment.method,
+        total: totalAmount.toFixed(2),
+        discount: '0.00',
+      },
+    });
 
     return payment;
   }
@@ -187,10 +192,20 @@ export class PaymentsService {
     if (!payment) throw new NotFoundException('Payment not found');
     if (payment.status !== 'PAID') throw new BadRequestException('Payment must be PAID to print');
 
-    return this.prisma.payment.update({
+    const updated = await this.prisma.payment.update({
       where: { id: paymentId },
       data: { isPrinted: true, printedAt: new Date() },
     });
+
+    await this.audit.log({
+      userId,
+      action: AuditAction.PRINT_PAYMENT,
+      entity: 'Payment',
+      entityId: paymentId,
+      afterData: { paymentNumber: payment.paymentNumber },
+    });
+
+    return updated;
   }
 
   async getReceiptData(paymentId: string) {
@@ -310,13 +325,31 @@ export class PaymentsService {
     const payment = await this.prisma.payment.findUnique({ where: { id: paymentId } });
     if (!payment) throw new NotFoundException('Payment not found');
     if (payment.status !== 'PAID') throw new BadRequestException('Hanya transaksi lunas yang bisa di-void');
-    return this.prisma.payment.update({ where: { id: paymentId }, data: { status: 'REFUNDED' } });
+    const updated = await this.prisma.payment.update({ where: { id: paymentId }, data: { status: 'REFUNDED' } });
+    await this.audit.log({
+      userId,
+      action: AuditAction.VOID_PAYMENT,
+      entity: 'Payment',
+      entityId: paymentId,
+      beforeData: { status: payment.status },
+      afterData: { status: 'REFUNDED', paymentNumber: payment.paymentNumber },
+    });
+    return updated;
   }
 
-  async deletePayment(paymentId: string) {
+  async deletePayment(paymentId: string, userId: string) {
     const payment = await this.prisma.payment.findUnique({ where: { id: paymentId } });
     if (!payment) throw new NotFoundException('Payment not found');
     await this.prisma.payment.delete({ where: { id: paymentId } });
+
+    await this.audit.log({
+      userId,
+      action: AuditAction.DELETE_PAYMENT,
+      entity: 'Payment',
+      entityId: paymentId,
+      beforeData: { paymentNumber: payment.paymentNumber, totalAmount: payment.totalAmount },
+    });
+
     return { success: true };
   }
 
@@ -418,8 +451,8 @@ export class PaymentsController {
 
   @Patch(':id/delete')
   @Roles('OWNER' as any)
-  deletePayment(@Param('id') id: string) {
-    return this.paymentsService.deletePayment(id);
+  deletePayment(@Param('id') id: string, @CurrentUser() user: any) {
+    return this.paymentsService.deletePayment(id, user.id);
   }
 }
 

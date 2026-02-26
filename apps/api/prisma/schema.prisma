@@ -71,14 +71,19 @@ enum AuditAction {
   CREATE
   UPDATE
   DELETE
+  CONFIRM_ORDER
+  CANCEL_ORDER
   LOGIN
   LOGOUT
   FAILED_AUTH
   START_BILLING
   STOP_BILLING
+  AUTO_STOP_BILLING
   EXTEND_BILLING
   PAYMENT
-  DISCOUNT_APPROVED
+  PRINT_PAYMENT
+  VOID_PAYMENT
+  DELETE_PAYMENT
 }
 
 // ─── Models ───────────────────────────────────────────────────────────────────
@@ -102,6 +107,7 @@ model User {
   payments          Payment[]
   expenses          Expense[]
   auditLogs         AuditLog[]
+  notifications     Notification[]
   stockAdjustments  StockAdjustment[]
   menuChanges       MenuItem[]        @relation("MenuChangedBy")
   refreshTokens     RefreshToken[]
@@ -409,4 +415,21 @@ model AuditLog {
   createdAt   DateTime    @default(now())
 
   @@map("audit_logs")
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  message   String
+  entity    String?
+  entityId  String?
+  isRead    Boolean  @default(false)
+  readAt    DateTime?
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([userId, isRead, createdAt])
+  @@map("notifications")
 }
