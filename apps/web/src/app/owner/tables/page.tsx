@@ -19,20 +19,29 @@ export default function OwnerTablesPage() {
   const [hourlyRate, setHourlyRate] = useState('');
   const [submittingRate, setSubmittingRate] = useState(false);
 
-  const load = async () => {
-    setLoading(true);
+  const load = async (showLoading = false) => {
+    if (showLoading) setLoading(true);
     try {
       setTables(await tablesApi.list(true));
     } catch {
       toast.error('Gagal memuat meja');
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(true); }, []);
   useEffect(() => {
-    const timer = setInterval(load, 1000);
+    const timer = setInterval(() => {
+      setTables((prev) => prev.map((table) => ({
+        ...table,
+        testingRemainingSeconds: Math.max(0, Number(table.testingRemainingSeconds || 0) - 1),
+      })));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+  useEffect(() => {
+    const timer = setInterval(() => load(false), 10000);
     return () => clearInterval(timer);
   }, []);
 
@@ -54,7 +63,7 @@ export default function OwnerTablesPage() {
       await tablesApi.update(editingTable.id, { hourlyRate: parsedRate });
       toast.success('Harga meja diperbarui');
       setEditingTable(null);
-      load();
+      load(false);
     } catch (e: any) {
       toast.error(e?.response?.data?.message || 'Gagal update harga');
     } finally {
@@ -74,7 +83,7 @@ export default function OwnerTablesPage() {
     try {
       await tablesApi.testing(table.id);
       toast.success(`Meja ${table.name} sedang di testing`);
-      load();
+      load(false);
     } catch (e: any) {
       toast.error(e?.response?.data?.message || 'Gagal menjalankan testing lampu');
     }
@@ -84,7 +93,7 @@ export default function OwnerTablesPage() {
     try {
       await tablesApi.stopTesting(table.id);
       toast.success(`Testing ${table.name} dihentikan`);
-      load();
+      load(false);
     } catch (e: any) {
       toast.error(e?.response?.data?.message || 'Gagal menghentikan testing lampu');
     }
@@ -94,7 +103,7 @@ export default function OwnerTablesPage() {
     try {
       await tablesApi.update(table.id, { isActive: !table.isActive });
       toast.success(`Meja ${!table.isActive ? 'diaktifkan' : 'dinonaktifkan'}`);
-      load();
+      load(false);
     } catch (e: any) {
       toast.error(e?.response?.data?.message || 'Gagal ubah status');
     }

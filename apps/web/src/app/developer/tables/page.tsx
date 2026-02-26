@@ -28,8 +28,8 @@ export default function DeveloperTablesPage() {
 
   const deviceMap = useMemo(() => Object.fromEntries(devices.map((d) => [d.id, d])), [devices]);
 
-  const load = async () => {
-    setLoading(true);
+  const load = async (showLoading = false) => {
+    if (showLoading) setLoading(true);
     try {
       const [tableData, deviceData] = await Promise.all([tablesApi.list(true), iotApi.listDevices()]);
       setTables(tableData);
@@ -37,13 +37,22 @@ export default function DeveloperTablesPage() {
     } catch {
       toast.error('Gagal memuat data meja/device');
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(true); }, []);
   useEffect(() => {
-    const timer = setInterval(load, 1000);
+    const timer = setInterval(() => {
+      setTables((prev) => prev.map((table) => ({
+        ...table,
+        testingRemainingSeconds: Math.max(0, Number(table.testingRemainingSeconds || 0) - 1),
+      })));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+  useEffect(() => {
+    const timer = setInterval(() => load(false), 10000);
     return () => clearInterval(timer);
   }, []);
 
@@ -131,7 +140,7 @@ export default function DeveloperTablesPage() {
       }
 
       setShowForm(false);
-      load();
+      load(false);
     } catch (e: any) {
       toast.error(e?.response?.data?.message || 'Gagal menyimpan meja');
     }
@@ -162,7 +171,7 @@ export default function DeveloperTablesPage() {
       await tablesApi.testing(testingTable.id, minutes);
       toast.success(`Lampu ${testingTable.name} hidup selama ${minutes} menit`);
       setTestingTable(null);
-      load();
+      load(false);
     } catch (e: any) {
       toast.error(e?.response?.data?.message || 'Gagal memulai testing meja');
     } finally {
@@ -174,7 +183,7 @@ export default function DeveloperTablesPage() {
     try {
       await tablesApi.stopTesting(table.id);
       toast.success(`Testing ${table.name} dihentikan`);
-      load();
+      load(false);
     } catch (e: any) {
       toast.error(e?.response?.data?.message || 'Gagal menghentikan testing meja');
     }
@@ -184,7 +193,7 @@ export default function DeveloperTablesPage() {
     try {
       await tablesApi.update(table.id, { isActive: !table.isActive });
       toast.success(`Meja ${!table.isActive ? 'diaktifkan' : 'dinonaktifkan'}`);
-      load();
+      load(false);
     } catch {
       toast.error('Gagal mengubah status meja');
     }
