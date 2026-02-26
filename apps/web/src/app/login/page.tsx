@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
 import toast from 'react-hot-toast';
+import { useCompany } from '@/lib/company';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -11,6 +12,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
   const router = useRouter();
+  const { appName, logoUrl } = useCompany();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -38,13 +40,17 @@ export default function LoginPage() {
         <div className="grid w-full overflow-hidden rounded-3xl border border-slate-200 bg-white/70 shadow-2xl shadow-sky-200/60 backdrop-blur md:grid-cols-2">
           <div className="hidden flex-col justify-between border-r border-slate-200 bg-gradient-to-br from-blue-600/30 via-cyan-500/20 to-violet-600/20 p-10 md:flex">
             <div>
-              <div className="mb-5 inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-100">
-                <svg className="h-8 w-8 text-slate-800" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <circle cx="12" cy="12" r="9" strokeWidth="2" />
-                  <circle cx="12" cy="12" r="3" strokeWidth="2" />
-                </svg>
+              <div className="mb-5 inline-flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl bg-blue-100">
+                {logoUrl ? (
+                  <img src={logoUrl} alt={appName} className="h-full w-full object-cover" />
+                ) : (
+                  <svg className="h-8 w-8 text-slate-800" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <circle cx="12" cy="12" r="9" strokeWidth="2" />
+                    <circle cx="12" cy="12" r="3" strokeWidth="2" />
+                  </svg>
+                )}
               </div>
-              <h1 className="text-3xl font-bold text-slate-800">Billiard Club OS</h1>
+              <h1 className="text-3xl font-bold text-slate-800">{appName}</h1>
               <p className="mt-3 text-sm text-slate-600">
                 Kelola billing meja, transaksi F&B, dan operasional harian dalam satu dashboard modern.
               </p>

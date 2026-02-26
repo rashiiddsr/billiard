@@ -28,6 +28,7 @@ export default function ProfilePage() {
   const { user, setUser } = useAuth();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
   const [password, setPassword] = useState('');
   const [activityLogs, setActivityLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -63,8 +64,9 @@ export default function ProfilePage() {
         const profile = await usersApi.getMyProfile();
         setName(profile.name || '');
         setEmail(profile.email || '');
+        setPhoneNumber(profile.phoneNumber || '');
         if (user) {
-          setUser({ ...user, name: profile.name, email: profile.email, profileImageUrl: profile.profileImageUrl });
+          setUser({ ...user, name: profile.name, email: profile.email, phoneNumber: profile.phoneNumber, profileImageUrl: profile.profileImageUrl });
         }
       } catch {
         toast.error('Gagal memuat profil');
@@ -112,7 +114,7 @@ export default function ProfilePage() {
     event.preventDefault();
     setSaving(true);
     try {
-      const payload: any = { name, email };
+      const payload: any = { name, email, phoneNumber };
       if (password.trim()) {
         payload.password = password;
       }
@@ -132,6 +134,7 @@ export default function ProfilePage() {
           ...user,
           name: latestProfile.name,
           email: latestProfile.email,
+          phoneNumber: latestProfile.phoneNumber,
           profileImageUrl: latestProfile.profileImageUrl,
         });
       }
@@ -155,7 +158,7 @@ export default function ProfilePage() {
       <div className="space-y-4">
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <h1 className="text-xl font-bold text-slate-800">Profil Saya</h1>
-          <p className="mb-6 text-sm text-slate-500">Kelola nama, email, password, dan foto profil akun Anda.</p>
+          <p className="mb-6 text-sm text-slate-500">Kelola nama, email, nomor HP, password, dan foto profil akun Anda.</p>
 
           <div className="mb-6 flex flex-col items-center gap-3">
             <button
@@ -194,6 +197,10 @@ export default function ProfilePage() {
             <div>
               <label className="mb-1 block text-sm font-medium text-slate-700">Email</label>
               <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" className="w-full rounded-xl border border-slate-300 px-3 py-2" required />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-700">Nomor HP</label>
+              <input value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value)} className="w-full rounded-xl border border-slate-300 px-3 py-2" required />
             </div>
             <div className="md:col-span-2">
               <label className="mb-1 block text-sm font-medium text-slate-700">Password baru (opsional)</label>
