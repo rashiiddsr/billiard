@@ -163,6 +163,11 @@ export class TablesService {
   async update(id: string, dto: UpdateTableDto, actorRole: Role) {
     const existing = await this.findOne(id);
 
+    const hasActiveBilling = (existing.billingSessions || []).some((session: any) => session.status === SessionStatus.ACTIVE);
+    if (hasActiveBilling) {
+      throw new BadRequestException('Meja tidak bisa diubah saat billing sedang berjalan');
+    }
+
     if (actorRole === Role.OWNER && (dto.name !== undefined || dto.description !== undefined || dto.iotDeviceId !== undefined || dto.relayChannel !== undefined || dto.gpioPin !== undefined)) {
       throw new BadRequestException('Owner can only update hourlyRate and isActive for tables');
     }
@@ -189,7 +194,6 @@ export class TablesService {
       include: { billingSessions: { where: { status: SessionStatus.ACTIVE }, select: { id: true }, take: 1 } },
     });
     if (!table) throw new NotFoundException('Table not found');
-    if (!table.isActive) throw new BadRequestException('Meja nonaktif tidak bisa ditesting');
     if (table.billingSessions.length > 0 || table.status === TableStatus.OCCUPIED) {
       throw new BadRequestException('Meja sedang dalam sesi billing aktif');
     }
