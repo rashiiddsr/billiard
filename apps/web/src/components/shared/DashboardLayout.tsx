@@ -64,18 +64,29 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
     fetchNotifications();
     const token = Cookies.get('accessToken');
-    if (!token) return;
+    let source: EventSource | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
-    const source = new EventSource(`${getApiOrigin()}/api/v1/notifications/stream?access_token=${token}`);
-    source.onmessage = () => {
-      fetchNotifications();
+    const connectStream = () => {
+      if (!token) return;
+
+      source = new EventSource(`${getApiOrigin()}/api/v1/notifications/stream?access_token=${token}`);
+      source.onmessage = () => {
+        fetchNotifications();
+      };
+      source.onerror = () => {
+        source?.close();
+        reconnectTimer = setTimeout(connectStream, 5000);
+      };
     };
-    source.onerror = () => {
-      source.close();
-    };
+
+    connectStream();
+    const fallbackPoll = setInterval(fetchNotifications, 30 * 1000);
 
     return () => {
-      source.close();
+      source?.close();
+      clearInterval(fallbackPoll);
+      if (reconnectTimer) clearTimeout(reconnectTimer);
     };
   }, [user]);
 
@@ -167,7 +178,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   )}
                 </button>
                 {notifOpen && (
-                  <div className="absolute right-0 mt-2 w-96 rounded-2xl border border-slate-200 bg-white p-3 shadow-xl">
+                  <div className="absolute right-0 mt-2 w-[calc(100vw-1.5rem)] max-w-96 rounded-2xl border border-slate-200 bg-white p-3 shadow-xl">
                     <div className="mb-2 flex items-center justify-between">
                       <p className="text-sm font-semibold text-slate-700">Notifikasi</p>
                       <button onClick={markAllAsRead} className="text-xs text-sky-600 hover:text-sky-800">Tandai semua dibaca</button>
@@ -209,7 +220,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   <ChevronDownIcon />
                 </button>
                 {profileOpen && (
-                  <div className="absolute right-0 mt-2 w-72 rounded-2xl border border-slate-200 bg-white p-3 shadow-xl">
+                  <div className="absolute right-0 mt-2 w-[calc(100vw-1.5rem)] max-w-72 rounded-2xl border border-slate-200 bg-white p-3 shadow-xl">
                     <p className="text-sm font-semibold text-slate-800">{user.name}</p>
                     <p className="mb-3 text-xs text-slate-500">{user.email}</p>
                     <button onClick={() => router.push(profileHref)} className="mb-2 w-full rounded-xl bg-sky-50 px-3 py-2 text-sm font-medium text-sky-700 hover:bg-sky-100">

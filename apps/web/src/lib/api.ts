@@ -8,6 +8,11 @@ export const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
+const ACCESS_COOKIE_EXP_DAYS = 1 / 24; // 1 jam
+const REFRESH_COOKIE_EXP_DAYS = 30;
+const COOKIE_OPTIONS = { sameSite: 'strict' as const, secure: typeof window !== 'undefined' ? window.location.protocol === 'https:' : false };
+let refreshPromise: Promise<any> | null = null;
+
 // Request interceptor - add access token
 api.interceptors.request.use((config) => {
   const token = Cookies.get('accessToken');
@@ -22,27 +27,51 @@ api.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
     const original = error.config as any;
-    if (error.response?.status === 401 && !original._retry) {
+    const status = error.response?.status;
+    const isRefreshRequest = original?.url?.includes('/auth/refresh');
+
+    if (status === 401 && !original?._retry && !isRefreshRequest) {
       original._retry = true;
+
       try {
         const refreshToken = Cookies.get('refreshToken');
         if (!refreshToken) throw new Error('No refresh token');
 
-        const { data } = await axios.post(`${API_URL}/auth/refresh`, { refreshToken });
-        Cookies.set('accessToken', data.accessToken, { expires: 1 / 96 }); // 15 min
-        Cookies.set('refreshToken', data.refreshToken, { expires: 7 });
+        if (!refreshPromise) {
+          refreshPromise = axios.post(`${API_URL}/auth/refresh`, { refreshToken }).finally(() => {
+            refreshPromise = null;
+          });
+        }
+
+        const { data } = await refreshPromise;
+        Cookies.set('accessToken', data.accessToken, { expires: ACCESS_COOKIE_EXP_DAYS, ...COOKIE_OPTIONS });
+        Cookies.set('refreshToken', data.refreshToken, { expires: REFRESH_COOKIE_EXP_DAYS, ...COOKIE_OPTIONS });
+        Cookies.set('loginAt', new Date().toISOString(), { expires: REFRESH_COOKIE_EXP_DAYS, ...COOKIE_OPTIONS });
         original.headers.Authorization = `Bearer ${data.accessToken}`;
         return api(original);
-      } catch {
-        // Redirect to login
+      } catch (refreshError: any) {
+        const refreshFailedByAuth = refreshError?.response?.status === 401;
+        if (!refreshFailedByAuth) {
+          return Promise.reject(error);
+        }
+
         Cookies.remove('accessToken');
         Cookies.remove('refreshToken');
+        Cookies.remove('loginAt');
         Cookies.remove('user');
         if (typeof window !== 'undefined') {
           window.location.href = '/login';
         }
       }
     }
+
+    if (status === 401 && isRefreshRequest) {
+      Cookies.remove('accessToken');
+      Cookies.remove('refreshToken');
+      Cookies.remove('loginAt');
+      Cookies.remove('user');
+    }
+
     return Promise.reject(error);
   },
 );
