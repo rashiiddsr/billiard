@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../common/prisma/prisma.service';
-import { IoTCommandType, IoTCommandStatus } from '@prisma/client';
+import { IoTCommandType, IoTCommandStatus, TableStatus, SessionStatus } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
@@ -177,6 +177,63 @@ export class IotService {
       relayChannels: IotService.ALLOWED_RELAY_CHANNELS,
       gpioPins: IotService.ALLOWED_GPIO_PINS,
       tables,
+      generatedAt: new Date().toISOString(),
+    };
+  }
+
+  async getRelayState(
+    deviceId: string,
+    token: string,
+    timestamp: string,
+    nonce: string,
+    signature: string,
+  ) {
+    await this.verifyDeviceRequest(deviceId, token, timestamp, nonce, signature);
+
+    const now = new Date();
+    const tables = await this.prisma.table.findMany({
+      where: { iotDeviceId: deviceId, isActive: true },
+      select: {
+        id: true,
+        name: true,
+        relayChannel: true,
+        status: true,
+        billingSessions: {
+          where: { status: SessionStatus.ACTIVE, endTime: { gt: now } },
+          select: { id: true },
+          take: 1,
+        },
+      },
+      orderBy: { relayChannel: 'asc' },
+    });
+
+    await this.prisma.iotDevice.update({
+      where: { id: deviceId },
+      data: { lastSeen: new Date(), isOnline: true },
+    });
+
+    const states = tables.map((table) => {
+      const hasActiveSession = table.billingSessions.length > 0;
+      const isMaintenance = table.status === TableStatus.MAINTENANCE;
+      const isOccupied = table.status === TableStatus.OCCUPIED;
+      const shouldOn = isMaintenance || hasActiveSession || isOccupied;
+
+      let reason = 'AVAILABLE';
+      if (isMaintenance) reason = 'MAINTENANCE';
+      else if (hasActiveSession) reason = 'ACTIVE_SESSION';
+      else if (isOccupied) reason = 'OCCUPIED';
+
+      return {
+        tableId: table.id,
+        tableName: table.name,
+        relayChannel: table.relayChannel,
+        shouldOn,
+        reason,
+      };
+    });
+
+    return {
+      states,
       generatedAt: new Date().toISOString(),
     };
   }
