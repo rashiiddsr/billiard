@@ -3,11 +3,20 @@ import {
   NotFoundException,
   ConflictException,
   BadRequestException,
+  Module,
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Param,
+  Body,
+  UseGuards,
+  UseInterceptors,
+  UploadedFile,
 } from '@nestjs/common';
-import { Module } from '@nestjs/common';
-import { Controller, Get, Post, Patch, Param, Body, UseGuards, Delete } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
-import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { IsString, IsEmail, IsEnum, IsOptional, IsBoolean, MinLength } from 'class-validator';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { AuditService } from '../common/audit/audit.service';
@@ -16,6 +25,9 @@ import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { AuditAction, Role } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
+import { diskStorage } from 'multer';
+import { extname, join } from 'path';
+import { existsSync, mkdirSync } from 'fs';
 
 export class CreateUserDto {
   @IsString() name: string;
@@ -34,6 +46,12 @@ export class UpdateUserDto {
   @IsOptional() @IsString() pin?: string;
 }
 
+export class UpdateOwnProfileDto {
+  @IsOptional() @IsString() name?: string;
+  @IsOptional() @IsEmail() email?: string;
+  @IsOptional() @IsString() @MinLength(6) password?: string;
+}
+
 @Injectable()
 export class UsersService {
   constructor(
@@ -43,7 +61,7 @@ export class UsersService {
 
   async findAll() {
     return this.prisma.user.findMany({
-      select: { id: true, name: true, email: true, role: true, isActive: true, createdAt: true },
+      select: { id: true, name: true, email: true, role: true, isActive: true, profileImageUrl: true, createdAt: true },
       orderBy: { name: 'asc' },
     });
   }
@@ -51,7 +69,7 @@ export class UsersService {
   async findOne(id: string) {
     const user = await this.prisma.user.findUnique({
       where: { id },
-      select: { id: true, name: true, email: true, role: true, isActive: true, createdAt: true },
+      select: { id: true, name: true, email: true, role: true, isActive: true, profileImageUrl: true, createdAt: true },
     });
     if (!user) throw new NotFoundException('User not found');
     return user;
@@ -76,7 +94,7 @@ export class UsersService {
         pin: pinHash,
         role: dto.role,
       },
-      select: { id: true, name: true, email: true, role: true, isActive: true, createdAt: true },
+      select: { id: true, name: true, email: true, role: true, isActive: true, profileImageUrl: true, createdAt: true },
     });
 
     await this.audit.log({
@@ -119,7 +137,7 @@ export class UsersService {
     const updated = await this.prisma.user.update({
       where: { id },
       data,
-      select: { id: true, name: true, email: true, role: true, isActive: true },
+      select: { id: true, name: true, email: true, role: true, isActive: true, profileImageUrl: true },
     });
 
     await this.audit.log({
@@ -132,6 +150,74 @@ export class UsersService {
 
     return updated;
   }
+
+  async getOwnProfile(userId: string) {
+    const [profile, activity] = await Promise.all([
+      this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { id: true, name: true, email: true, role: true, profileImageUrl: true, createdAt: true },
+      }),
+      this.prisma.auditLog.findMany({
+        where: { userId },
+        include: { user: { select: { id: true, name: true, email: true, role: true } } },
+        orderBy: { createdAt: 'desc' },
+        take: 30,
+      }),
+    ]);
+
+    if (!profile) throw new NotFoundException('User not found');
+
+    return { ...profile, activityLogs: activity };
+  }
+
+  async updateOwnProfile(userId: string, dto: UpdateOwnProfileDto) {
+    const existing = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!existing) throw new NotFoundException('User not found');
+
+    if (dto.email && dto.email !== existing.email) {
+      const emailExists = await this.prisma.user.findUnique({ where: { email: dto.email } });
+      if (emailExists) throw new ConflictException('Email already exists');
+    }
+
+    const data: any = { name: dto.name, email: dto.email };
+    if (dto.password) {
+      data.passwordHash = await bcrypt.hash(dto.password, 12);
+    }
+
+    const updated = await this.prisma.user.update({
+      where: { id: userId },
+      data,
+      select: { id: true, name: true, email: true, role: true, profileImageUrl: true },
+    });
+
+    await this.audit.log({
+      userId,
+      action: AuditAction.UPDATE,
+      entity: 'Profile',
+      entityId: userId,
+      metadata: { fields: Object.keys(dto).filter((k) => Boolean((dto as any)[k])) },
+    });
+
+    return updated;
+  }
+
+  async updateProfilePhoto(userId: string, profileImageUrl: string) {
+    const updated = await this.prisma.user.update({
+      where: { id: userId },
+      data: { profileImageUrl },
+      select: { id: true, name: true, email: true, role: true, profileImageUrl: true },
+    });
+
+    await this.audit.log({
+      userId,
+      action: AuditAction.UPDATE,
+      entity: 'ProfilePhoto',
+      entityId: userId,
+      metadata: { profileImageUrl },
+    });
+
+    return updated;
+  }
 }
 
 @ApiTags('Users')
@@ -140,6 +226,52 @@ export class UsersService {
 @Controller('users')
 export class UsersController {
   constructor(private usersService: UsersService) {}
+
+  @Get('profile/me')
+  @Roles('OWNER' as any, 'MANAGER' as any, 'CASHIER' as any, 'DEVELOPER' as any)
+  getOwnProfile(@CurrentUser() user: any) {
+    return this.usersService.getOwnProfile(user.id);
+  }
+
+  @Patch('profile/me')
+  @Roles('OWNER' as any, 'MANAGER' as any, 'CASHIER' as any, 'DEVELOPER' as any)
+  updateOwnProfile(@CurrentUser() user: any, @Body() dto: UpdateOwnProfileDto) {
+    return this.usersService.updateOwnProfile(user.id, dto);
+  }
+
+  @Post('profile/me/photo')
+  @Roles('OWNER' as any, 'MANAGER' as any, 'CASHIER' as any, 'DEVELOPER' as any)
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(
+    FileInterceptor('photo', {
+      storage: diskStorage({
+        destination: (_req, _file, cb) => {
+          const uploadPath = join(process.cwd(), 'uploads');
+          if (!existsSync(uploadPath)) {
+            mkdirSync(uploadPath, { recursive: true });
+          }
+          cb(null, uploadPath);
+        },
+        filename: (_req, file, cb) => {
+          const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+          cb(null, `${unique}${extname(file.originalname).toLowerCase()}`);
+        },
+      }),
+      limits: { fileSize: 5 * 1024 * 1024 },
+      fileFilter: (_req, file, cb) => {
+        const allowed = ['image/jpeg', 'image/png'];
+        if (allowed.includes(file.mimetype)) {
+          cb(null, true);
+          return;
+        }
+        cb(new BadRequestException('Format file harus JPG/PNG'), false);
+      },
+    }),
+  )
+  uploadPhoto(@CurrentUser() user: any, @UploadedFile() photo?: any) {
+    if (!photo) throw new BadRequestException('File foto wajib dipilih');
+    return this.usersService.updateProfilePhoto(user.id, `/uploads/${photo.filename}`);
+  }
 
   @Get()
   @Roles('OWNER' as any)
