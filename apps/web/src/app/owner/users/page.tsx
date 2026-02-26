@@ -7,6 +7,14 @@ import toast from 'react-hot-toast';
 
 type Role = 'MANAGER' | 'CASHIER';
 
+const API_ORIGIN = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1').replace('/api/v1', '');
+
+const resolveProfileImage = (path?: string | null) => {
+  if (!path) return null;
+  if (path.startsWith('http://') || path.startsWith('https://')) return path;
+  return `${API_ORIGIN}${path}`;
+};
+
 export default function UsersPage() {
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -93,7 +101,6 @@ export default function UsersPage() {
         <button onClick={openCreate} className="btn-primary">+ Tambah User</button>
       </div>
 
-      {/* Form Modal */}
       {showForm && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
           <div className="bg-white border border-slate-200 rounded-xl w-full max-w-md">
@@ -132,7 +139,6 @@ export default function UsersPage() {
         </div>
       )}
 
-      {/* Users Table */}
       <div className="card p-0 overflow-hidden">
         <div className="table-wrapper">
           <table className="data-table">
@@ -152,26 +158,40 @@ export default function UsersPage() {
               ) : filteredUsers.length === 0 ? (
                 <tr><td colSpan={6} className="text-center py-8 text-slate-500">Tidak ada user</td></tr>
               ) : (
-                filteredUsers.map((user) => (
-                  <tr key={user.id}>
-                    <td className="font-medium">{user.name}</td>
-                    <td className="text-slate-500">{user.email}</td>
-                    <td>
-                      <span className={`badge ${roleColor[user.role as Role]}`}>{user.role}</span>
-                    </td>
-                    <td>
-                      <button type="button" onClick={() => toggleActive(user)} className={`toggle-switch ${user.isActive ? 'active' : ''}`} title={user.isActive ? 'Aktif' : 'Nonaktif'} />
-                    </td>
-                    <td className="text-slate-500 text-sm">{formatDate(user.createdAt)}</td>
-                    <td>
-                      <div className="flex gap-2">
-                        <button onClick={() => openEdit(user)} className="text-xs px-2 py-1 bg-slate-100 hover:bg-slate-200 rounded">
-                          Edit
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                filteredUsers.map((user) => {
+                  const profileImage = resolveProfileImage(user.profileImageUrl);
+                  return (
+                    <tr key={user.id}>
+                      <td>
+                        <div className="flex items-center gap-3">
+                          {profileImage ? (
+                            <img src={profileImage} alt={user.name} className="h-9 w-9 rounded-full object-cover" />
+                          ) : (
+                            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-blue-600 to-cyan-500 text-xs font-bold text-white">
+                              {user.name?.slice(0, 2).toUpperCase()}
+                            </div>
+                          )}
+                          <span className="font-medium">{user.name}</span>
+                        </div>
+                      </td>
+                      <td className="text-slate-500">{user.email}</td>
+                      <td>
+                        <span className={`badge ${roleColor[user.role as Role]}`}>{user.role}</span>
+                      </td>
+                      <td>
+                        <button type="button" onClick={() => toggleActive(user)} className={`toggle-switch ${user.isActive ? 'active' : ''}`} title={user.isActive ? 'Aktif' : 'Nonaktif'} />
+                      </td>
+                      <td className="text-slate-500 text-sm">{formatDate(user.createdAt)}</td>
+                      <td>
+                        <div className="flex gap-2">
+                          <button onClick={() => openEdit(user)} className="text-xs px-2 py-1 bg-slate-100 hover:bg-slate-200 rounded">
+                            Edit
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
