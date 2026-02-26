@@ -15,6 +15,9 @@ export default function DeveloperTablesPage() {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<any>(null);
   const [form, setForm] = useState<any>({ name: '', iotDeviceId: '', relayChannel: '', gpioPin: '', hourlyRate: '' });
+  const [testingTable, setTestingTable] = useState<any>(null);
+  const [testingMinutes, setTestingMinutes] = useState('5');
+  const [testingSubmitting, setTestingSubmitting] = useState(false);
 
   const deviceMap = useMemo(() => Object.fromEntries(devices.map((d) => [d.id, d])), [devices]);
 
@@ -123,6 +126,40 @@ export default function DeveloperTablesPage() {
     }
   };
 
+
+
+  const canStartTesting = (table: any) => table.isActive && table.status === 'AVAILABLE' && (table.billingSessions || []).length === 0;
+
+  const openTestingModal = (table: any) => {
+    if (!canStartTesting(table)) {
+      toast.error('Testing hanya untuk meja OFF (tidak sedang billing)');
+      return;
+    }
+    setTestingTable(table);
+    setTestingMinutes('5');
+  };
+
+  const startTesting = async () => {
+    if (!testingTable) return;
+    const minutes = Number(testingMinutes);
+    if (Number.isNaN(minutes) || minutes <= 0) {
+      toast.error('Durasi testing wajib berupa angka menit > 0');
+      return;
+    }
+
+    setTestingSubmitting(true);
+    try {
+      await tablesApi.testing(testingTable.id, minutes);
+      toast.success(`Lampu ${testingTable.name} hidup selama ${minutes} menit`);
+      setTestingTable(null);
+      load();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || 'Gagal memulai testing meja');
+    } finally {
+      setTestingSubmitting(false);
+    }
+  };
+
   const toggleActive = async (table: any) => {
     try {
       await tablesApi.update(table.id, { isActive: !table.isActive });
@@ -193,6 +230,27 @@ export default function DeveloperTablesPage() {
         </div>
       )}
 
+
+
+      {testingTable && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl border border-slate-200 w-full max-w-md p-4 space-y-3">
+            <h3 className="font-semibold">Testing Lampu Meja</h3>
+            <p className="text-sm text-slate-600">Masukkan durasi menit untuk menyalakan lampu meja <span className="font-semibold">{testingTable.name}</span>.</p>
+            <div>
+              <label className="label">Durasi (menit)</label>
+              <input type="number" min={1} className="input" value={testingMinutes} onChange={(e) => setTestingMinutes(e.target.value)} />
+            </div>
+            <div className="flex gap-2 justify-end">
+              <button className="btn-secondary" onClick={() => setTestingTable(null)} disabled={testingSubmitting}>Batal</button>
+              <button className="text-xs px-3 py-2 bg-violet-600 text-white rounded hover:bg-violet-700 disabled:opacity-50" onClick={startTesting} disabled={testingSubmitting}>
+                {testingSubmitting ? 'Memproses...' : 'Konfirmasi Testing'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="card p-0 overflow-hidden">
         <div className="table-wrapper">
           <table className="data-table">
@@ -213,11 +271,21 @@ export default function DeveloperTablesPage() {
                   <td>{t.gpioPin}</td>
                   <td>{formatCurrency(Number(t.hourlyRate))}</td>
                   <td>
-                    <button type="button" onClick={() => toggleActive(t)} className={`toggle-switch ${t.isActive ? 'active' : ''}`} title={t.isActive ? 'Aktif' : 'Nonaktif'} />
+                    <div className="flex items-center gap-2">
+                      <button type="button" onClick={() => toggleActive(t)} className={`toggle-switch ${t.isActive ? 'active' : ''}`} title={t.isActive ? 'Aktif' : 'Nonaktif'} />
+                      {t.status === 'MAINTENANCE' && <span className="text-xs font-semibold text-violet-700">Testing</span>}
+                    </div>
                   </td>
                   <td>
                     <div className="flex gap-2">
                       <button className="text-xs px-2 py-1 bg-slate-100 rounded" onClick={() => openEdit(t)}>Edit</button>
+                      <button
+                        className="text-xs px-2 py-1 bg-violet-100 text-violet-700 rounded hover:bg-violet-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                        onClick={() => openTestingModal(t)}
+                        disabled={!canStartTesting(t)}
+                      >
+                        Testing
+                      </button>
                     </div>
                   </td>
                 </tr>

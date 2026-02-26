@@ -51,6 +51,25 @@ export default function OwnerTablesPage() {
     }
   };
 
+
+
+  const canStartTesting = (table: any) => table.isActive && table.status === 'AVAILABLE' && (table.billingSessions || []).length === 0;
+
+  const startTesting = async (table: any) => {
+    if (!canStartTesting(table)) {
+      toast.error('Testing hanya bisa untuk meja OFF (tidak sedang billing)');
+      return;
+    }
+
+    try {
+      await tablesApi.testing(table.id);
+      toast.success(`Testing lampu ${table.name} dimulai (±20 detik)`);
+      load();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || 'Gagal menjalankan testing lampu');
+    }
+  };
+
   const toggleActive = async (table: any) => {
     try {
       await tablesApi.update(table.id, { isActive: !table.isActive });
@@ -110,9 +129,23 @@ export default function OwnerTablesPage() {
                   <td className="font-mono text-xs">{t.id}</td>
                   <td>{t.name}</td>
                   <td>{formatCurrency(Number(t.hourlyRate))}</td>
-                  <td><button type="button" onClick={() => toggleActive(t)} className={`toggle-switch ${t.isActive ? 'active' : ''}`} title={t.isActive ? 'Aktif' : 'Nonaktif'} /></td>
                   <td>
-                    <button className="text-xs px-2 py-1 bg-amber-100 text-amber-700 rounded hover:bg-amber-200" onClick={() => openEditRate(t)}>Edit Harga</button>
+                    <div className="flex items-center gap-2">
+                      <button type="button" onClick={() => toggleActive(t)} className={`toggle-switch ${t.isActive ? 'active' : ''}`} title={t.isActive ? 'Aktif' : 'Nonaktif'} />
+                      {t.status === 'MAINTENANCE' && <span className="text-xs font-semibold text-violet-700">Testing</span>}
+                    </div>
+                  </td>
+                  <td>
+                    <div className="flex gap-2">
+                      <button className="text-xs px-2 py-1 bg-amber-100 text-amber-700 rounded hover:bg-amber-200" onClick={() => openEditRate(t)}>Edit Harga</button>
+                      <button
+                        className="text-xs px-2 py-1 bg-violet-100 text-violet-700 rounded hover:bg-violet-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                        onClick={() => startTesting(t)}
+                        disabled={!canStartTesting(t)}
+                      >
+                        Testing
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
