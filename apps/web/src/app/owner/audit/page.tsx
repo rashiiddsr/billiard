@@ -6,7 +6,9 @@ import { formatDate } from '@/lib/utils';
 
 const ACTIONS = [
   'CREATE', 'UPDATE', 'DELETE', 'LOGIN', 'LOGOUT', 'FAILED_AUTH',
-  'START_BILLING', 'STOP_BILLING', 'EXTEND_BILLING', 'PAYMENT', 'DISCOUNT_APPROVED',
+  'CONFIRM_ORDER', 'CANCEL_ORDER',
+  'START_BILLING', 'STOP_BILLING', 'AUTO_STOP_BILLING', 'EXTEND_BILLING',
+  'PAYMENT', 'PRINT_PAYMENT', 'VOID_PAYMENT', 'DELETE_PAYMENT',
 ];
 
 export default function AuditPage() {
@@ -61,11 +63,16 @@ export default function AuditPage() {
       LOGIN: 'bg-slate-100 text-slate-700',
       LOGOUT: 'bg-slate-100 text-slate-700',
       FAILED_AUTH: 'bg-red-100 text-red-700',
+      CONFIRM_ORDER: 'bg-emerald-100 text-emerald-700',
+      CANCEL_ORDER: 'bg-rose-100 text-rose-700',
+      AUTO_STOP_BILLING: 'bg-orange-100 text-orange-700',
+      PRINT_PAYMENT: 'bg-indigo-100 text-indigo-700',
+      VOID_PAYMENT: 'bg-red-100 text-red-700',
+      DELETE_PAYMENT: 'bg-red-100 text-red-700',
       START_BILLING: 'bg-green-100 text-green-700',
       STOP_BILLING: 'bg-orange-100 text-orange-700',
       EXTEND_BILLING: 'bg-yellow-100 text-yellow-700',
       PAYMENT: 'bg-purple-100 text-purple-700',
-      DISCOUNT_APPROVED: 'bg-pink-100 text-pink-700',
     };
     return map[action] || 'bg-slate-100 text-slate-700';
   };
@@ -73,16 +80,19 @@ export default function AuditPage() {
   const totalPages = Math.ceil(total / 20);
 
   const selectedLogDetail = useMemo(() => {
-    if (!selectedLog) return '-';
-    const detail = {
-      beforeData: selectedLog.beforeData,
-      afterData: selectedLog.afterData,
-      metadata: selectedLog.metadata,
-      entityId: selectedLog.entityId,
-      ipAddress: selectedLog.ipAddress,
-      userAgent: selectedLog.userAgent,
-    };
-    return JSON.stringify(detail, null, 2);
+    if (!selectedLog) return [];
+    const readable = selectedLog.metadata?.readable;
+    const chunks = [
+      { label: 'Ringkasan Aksi', value: readable?.title || `${selectedLog.action} ${selectedLog.entity}` },
+      { label: 'Penjelasan', value: readable?.description || '-' },
+      { label: 'Entity ID', value: selectedLog.entityId || '-' },
+      { label: 'IP Address', value: selectedLog.ipAddress || '-' },
+      { label: 'User Agent', value: selectedLog.userAgent || '-' },
+      { label: 'Data Sebelum', value: selectedLog.beforeData ? JSON.stringify(selectedLog.beforeData, null, 2) : '-' },
+      { label: 'Data Sesudah', value: selectedLog.afterData ? JSON.stringify(selectedLog.afterData, null, 2) : '-' },
+      { label: 'Metadata Tambahan', value: selectedLog.metadata ? JSON.stringify(selectedLog.metadata, null, 2) : '-' },
+    ];
+    return chunks;
   }, [selectedLog]);
 
   return (
@@ -98,7 +108,14 @@ export default function AuditPage() {
             </div>
             <div className="p-4 space-y-2">
               <p className="text-sm text-slate-500">{formatDate(selectedLog.createdAt)} • {selectedLog.user?.name || 'System'} • {selectedLog.action} • {selectedLog.entity}</p>
-              <pre className="text-xs bg-slate-50 border border-slate-200 rounded p-3 overflow-auto max-h-[360px]">{selectedLogDetail}</pre>
+              <div className="space-y-2 max-h-[360px] overflow-auto">
+                {selectedLogDetail.map((item: any) => (
+                  <div key={item.label} className="rounded border border-slate-200 bg-slate-50 p-3">
+                    <p className="text-xs font-semibold text-slate-500">{item.label}</p>
+                    <pre className="whitespace-pre-wrap text-xs text-slate-700">{item.value}</pre>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </div>

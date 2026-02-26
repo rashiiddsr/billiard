@@ -187,11 +187,21 @@ export class OrdersService {
     if (!order) throw new NotFoundException('Order not found');
     if (order.status !== 'DRAFT') throw new BadRequestException('Order is not in DRAFT status');
 
-    return this.prisma.order.update({
+    const updated = await this.prisma.order.update({
       where: { id },
       data: { status: 'CONFIRMED' },
       include: { items: { include: { menuItem: true } } },
     });
+
+    await this.audit.log({
+      userId,
+      action: AuditAction.CONFIRM_ORDER,
+      entity: 'Order',
+      entityId: id,
+      afterData: { orderNumber: order.orderNumber, status: 'CONFIRMED' },
+    });
+
+    return updated;
   }
 
   async cancelOrder(id: string, userId: string) {
@@ -212,7 +222,7 @@ export class OrdersService {
 
     await this.audit.log({
       userId,
-      action: AuditAction.UPDATE,
+      action: AuditAction.CANCEL_ORDER,
       entity: 'Order',
       entityId: id,
       metadata: { action: 'cancel' },

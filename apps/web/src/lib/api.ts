@@ -168,3 +168,9 @@ export const iotApi = {
   testConnection: (deviceId: string) =>
     api.post('/iot/test-connection', { deviceId }).then((r) => r.data),
 };
+
+// ─── Notifications ───────────────────────────────────────────────────────────
+export const notificationsApi = {
+  list: (params?: any) => api.get('/notifications', { params }).then((r) => r.data),
+  markRead: (id?: string) => api.patch('/notifications/read', undefined, { params: id ? { id } : undefined }).then((r) => r.data),
+};

@@ -1,10 +1,12 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
+import { notificationsApi } from '@/lib/api';
 import Sidebar from '@/components/shared/Sidebar';
 import toast from 'react-hot-toast';
+import Cookies from 'js-cookie';
 
 const roleGreeting: Record<string, string> = {
   OWNER: 'Ringkasan performa bisnis hari ini',
@@ -36,14 +38,46 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [mobileOpen, setMobileOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
   const notifRef = useRef<HTMLDivElement>(null);
   const profileRef = useRef<HTMLDivElement>(null);
+
+  const fetchNotifications = async () => {
+    try {
+      const data = await notificationsApi.list({ page: 1, limit: 10 });
+      setNotifications(data.data || []);
+      setUnreadCount(data.unread || 0);
+    } catch {
+      // noop
+    }
+  };
 
   useEffect(() => {
     if (!loading && !user) {
       router.replace('/login');
     }
   }, [user, loading, router]);
+
+  useEffect(() => {
+    if (!user) return;
+
+    fetchNotifications();
+    const token = Cookies.get('accessToken');
+    if (!token) return;
+
+    const source = new EventSource(`${getApiOrigin()}/api/v1/notifications/stream?access_token=${token}`);
+    source.onmessage = () => {
+      fetchNotifications();
+    };
+    source.onerror = () => {
+      source.close();
+    };
+
+    return () => {
+      source.close();
+    };
+  }, [user]);
 
   useEffect(() => {
     const handleOutsideClick = (event: MouseEvent) => {
@@ -72,19 +106,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     };
   }, []);
 
-  const notifications = useMemo(
-    () => [
-      { id: 1, title: 'Pendapatan harian diperbarui', time: 'Baru saja' },
-      { id: 2, title: '2 meja akan habis dalam 15 menit', time: '5 menit lalu' },
-      { id: 3, title: 'Reminder stok minuman mendekati batas minimum', time: '12 menit lalu' },
-    ],
-    [],
-  );
-
   const handleLogout = async () => {
     await logout();
     toast.success('Berhasil keluar');
     router.push('/login');
+  };
+
+  const markAllAsRead = async () => {
+    await notificationsApi.markRead();
+    await fetchNotifications();
   };
 
   const profileHref = user ? `/${user.role.toLowerCase()}/profile` : '/login';
@@ -127,18 +157,29 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                     setNotifOpen((v) => !v);
                     setProfileOpen(false);
                   }}
-                  className="rounded-xl border border-slate-200 bg-white p-2 text-slate-600 shadow-sm hover:bg-slate-50"
+                  className="relative rounded-xl border border-slate-200 bg-white p-2 text-slate-600 shadow-sm hover:bg-slate-50"
                 >
                   <BellIcon />
+                  {unreadCount > 0 && (
+                    <span className="absolute -right-1 -top-1 rounded-full bg-red-500 px-1.5 text-[10px] font-semibold text-white">
+                      {unreadCount > 9 ? '9+' : unreadCount}
+                    </span>
+                  )}
                 </button>
                 {notifOpen && (
-                  <div className="absolute right-0 mt-2 w-80 rounded-2xl border border-slate-200 bg-white p-3 shadow-xl">
-                    <p className="mb-2 text-sm font-semibold text-slate-700">Notifikasi</p>
-                    <div className="space-y-2">
-                      {notifications.map((item) => (
-                        <div key={item.id} className="rounded-xl bg-slate-50 p-2">
-                          <p className="text-sm text-slate-700">{item.title}</p>
-                          <p className="text-xs text-slate-400">{item.time}</p>
+                  <div className="absolute right-0 mt-2 w-96 rounded-2xl border border-slate-200 bg-white p-3 shadow-xl">
+                    <div className="mb-2 flex items-center justify-between">
+                      <p className="text-sm font-semibold text-slate-700">Notifikasi</p>
+                      <button onClick={markAllAsRead} className="text-xs text-sky-600 hover:text-sky-800">Tandai semua dibaca</button>
+                    </div>
+                    <div className="max-h-80 space-y-2 overflow-auto">
+                      {notifications.length === 0 ? (
+                        <p className="rounded-xl bg-slate-50 p-3 text-sm text-slate-500">Belum ada notifikasi.</p>
+                      ) : notifications.map((item) => (
+                        <div key={item.id} className={`rounded-xl border p-2 ${item.isRead ? 'bg-slate-50 border-slate-100' : 'bg-sky-50 border-sky-100'}`}>
+                          <p className="text-sm font-medium text-slate-700">{item.title}</p>
+                          <p className="text-xs text-slate-600">{item.message}</p>
+                          <p className="text-[11px] text-slate-400">{new Date(item.createdAt).toLocaleString('id-ID')}</p>
                         </div>
                       ))}
                     </div>
