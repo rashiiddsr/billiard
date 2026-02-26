@@ -25,6 +25,7 @@ const navByRole: Record<string, NavItem[]> = {
     { label: 'Pesanan F&B', href: '/cashier/orders', icon: <CartIcon /> },
     { label: 'Checkout', href: '/cashier/checkout', icon: <CashIcon /> },
     { label: 'Daftar Transaksi', href: '/cashier/transactions', icon: <LogIcon /> },
+    { label: 'Profil', href: '/cashier/profile', icon: <UserIcon /> },
   ],
   OWNER: [
     { label: 'Dashboard', href: '/owner/dashboard', icon: <HomeIcon /> },
@@ -35,11 +36,13 @@ const navByRole: Record<string, NavItem[]> = {
     { label: 'Manajemen User', href: '/owner/users', icon: <UserIcon /> },
     { label: 'Manajemen Meja', href: '/owner/tables', icon: <BilliardIcon /> },
     { label: 'Audit Log', href: '/owner/audit', icon: <LogIcon /> },
+    { label: 'Profil', href: '/owner/profile', icon: <UserIcon /> },
   ],
   DEVELOPER: [
     { label: 'Dashboard', href: '/developer/dashboard', icon: <HomeIcon /> },
     { label: 'Manajemen Meja', href: '/developer/tables', icon: <BilliardIcon /> },
     { label: 'IoT Configurated', href: '/developer/iot', icon: <ChipIcon /> },
+    { label: 'Profil', href: '/developer/profile', icon: <UserIcon /> },
   ],
   MANAGER: [
     { label: 'Dashboard', href: '/manager/dashboard', icon: <HomeIcon /> },
@@ -48,6 +51,7 @@ const navByRole: Record<string, NavItem[]> = {
     { label: 'Manajemen Aset', href: '/manager/stock', icon: <BoxIcon /> },
     { label: 'Pengeluaran', href: '/manager/expenses', icon: <WalletIcon /> },
     { label: 'Daftar Transaksi', href: '/manager/transactions', icon: <LogIcon /> },
+    { label: 'Profil', href: '/manager/profile', icon: <UserIcon /> },
   ],
 };
 

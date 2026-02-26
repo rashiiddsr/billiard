@@ -6,6 +6,11 @@ import { Toaster } from 'react-hot-toast';
 export const metadata: Metadata = {
   title: 'Billiard POS',
   description: 'Billiard Billing + Cafe POS + IoT System',
+  icons: {
+    icon: '/favicon.svg',
+    shortcut: '/favicon.svg',
+    apple: '/favicon.svg',
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
