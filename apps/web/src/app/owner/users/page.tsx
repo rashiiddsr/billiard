@@ -32,6 +32,7 @@ export default function UsersPage() {
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<Role>('CASHIER');
 
@@ -51,22 +52,22 @@ export default function UsersPage() {
 
   const openCreate = () => {
     setEditUser(null);
-    setName(''); setEmail(''); setPassword(''); setRole('CASHIER');
+    setName(''); setEmail(''); setPhoneNumber(''); setPassword(''); setRole('CASHIER');
     setShowForm(true);
   };
 
   const openEdit = (user: any) => {
     setEditUser(user);
-    setName(user.name); setEmail(user.email); setPassword(''); setRole(user.role);
+    setName(user.name); setEmail(user.email); setPhoneNumber(user.phoneNumber || ''); setPassword(''); setRole(user.role);
     setShowForm(true);
   };
 
   const submit = async () => {
-    if (!name || !email) { toast.error('Nama dan email wajib diisi'); return; }
+    if (!name || !email || !phoneNumber) { toast.error('Nama, email, dan nomor HP wajib diisi'); return; }
     if (!editUser && !password) { toast.error('Password wajib untuk user baru'); return; }
     setSubmitting(true);
     try {
-      const data: any = { name, email, role };
+      const data: any = { name, email, phoneNumber, role };
       if (password) data.password = password;
 
       if (editUser) {
@@ -125,6 +126,11 @@ export default function UsersPage() {
                 <label className="label">Email <span className="text-red-500">*</span></label>
                 <input type="email" className="input" value={email} onChange={(e) => setEmail(e.target.value)} />
               </div>
+
+              <div>
+                <label className="label">Nomor HP <span className="text-red-500">*</span></label>
+                <input className="input" value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value)} />
+              </div>
               <div>
                 <label className="label">Password {!editUser && <span className="text-red-500">*</span>} {editUser && '(kosongkan jika tidak diubah)'}</label>
                 <input type="password" className="input" value={password} onChange={(e) => setPassword(e.target.value)} />
@@ -154,6 +160,7 @@ export default function UsersPage() {
               <tr>
                 <th>Nama</th>
                 <th>Email</th>
+                <th>Nomor HP</th>
                 <th>Role</th>
                 <th>Status</th>
                 <th>Dibuat</th>
@@ -162,9 +169,9 @@ export default function UsersPage() {
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={6} className="text-center py-8 text-slate-500">Memuat...</td></tr>
+                <tr><td colSpan={7} className="text-center py-8 text-slate-500">Memuat...</td></tr>
               ) : filteredUsers.length === 0 ? (
-                <tr><td colSpan={6} className="text-center py-8 text-slate-500">Tidak ada user</td></tr>
+                <tr><td colSpan={7} className="text-center py-8 text-slate-500">Tidak ada user</td></tr>
               ) : (
                 filteredUsers.map((user) => {
                   const profileImage = resolveProfileImage(user.profileImageUrl);
@@ -183,6 +190,7 @@ export default function UsersPage() {
                         </div>
                       </td>
                       <td className="text-slate-500">{user.email}</td>
+                      <td className="text-slate-500">{user.phoneNumber || '-'}</td>
                       <td>
                         <span className={`badge ${roleColor[user.role as Role]}`}>{user.role}</span>
                       </td>

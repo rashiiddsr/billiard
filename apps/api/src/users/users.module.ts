@@ -33,6 +33,7 @@ import { existsSync, mkdirSync } from 'fs';
 export class CreateUserDto {
   @IsString() name: string;
   @IsEmail() email: string;
+  @IsString() phoneNumber: string;
   @IsString() @MinLength(6) password: string;
   @IsEnum(Role) role: Role;
   @IsOptional() @IsString() pin?: string;
@@ -41,6 +42,7 @@ export class CreateUserDto {
 export class UpdateUserDto {
   @IsOptional() @IsString() name?: string;
   @IsOptional() @IsEmail() email?: string;
+  @IsOptional() @IsString() phoneNumber?: string;
   @IsOptional() @IsString() @MinLength(6) password?: string;
   @IsOptional() @IsEnum(Role) role?: Role;
   @IsOptional() @IsBoolean() isActive?: boolean;
@@ -50,6 +52,7 @@ export class UpdateUserDto {
 export class UpdateOwnProfileDto {
   @IsOptional() @IsString() name?: string;
   @IsOptional() @IsEmail() email?: string;
+  @IsOptional() @IsString() phoneNumber?: string;
   @IsOptional() @IsString() @MinLength(6) password?: string;
 }
 
@@ -62,7 +65,7 @@ export class UsersService {
 
   async findAll() {
     return this.prisma.user.findMany({
-      select: { id: true, name: true, email: true, role: true, isActive: true, profileImageUrl: true, createdAt: true },
+      select: { id: true, name: true, email: true, phoneNumber: true, role: true, isActive: true, profileImageUrl: true, createdAt: true },
       orderBy: { name: 'asc' },
     });
   }
@@ -70,7 +73,7 @@ export class UsersService {
   async findOne(id: string) {
     const user = await this.prisma.user.findUnique({
       where: { id },
-      select: { id: true, name: true, email: true, role: true, isActive: true, profileImageUrl: true, createdAt: true },
+      select: { id: true, name: true, email: true, phoneNumber: true, role: true, isActive: true, profileImageUrl: true, createdAt: true },
     });
     if (!user) throw new NotFoundException('User not found');
     return user;
@@ -91,12 +94,13 @@ export class UsersService {
       data: {
         name: dto.name,
         email: dto.email,
+        phoneNumber: dto.phoneNumber,
         passwordHash,
         pin: pinHash,
         role: dto.role,
         profileImageUrl: null,
       },
-      select: { id: true, name: true, email: true, role: true, isActive: true, profileImageUrl: true, createdAt: true },
+      select: { id: true, name: true, email: true, phoneNumber: true, role: true, isActive: true, profileImageUrl: true, createdAt: true },
     });
 
     await this.audit.log({
@@ -104,7 +108,7 @@ export class UsersService {
       action: AuditAction.CREATE,
       entity: 'User',
       entityId: user.id,
-      afterData: { name: dto.name, email: dto.email, role: dto.role },
+      afterData: { name: dto.name, email: dto.email, phoneNumber: dto.phoneNumber, role: dto.role },
     });
 
     return user;
@@ -139,7 +143,7 @@ export class UsersService {
     const updated = await this.prisma.user.update({
       where: { id },
       data,
-      select: { id: true, name: true, email: true, role: true, isActive: true, profileImageUrl: true },
+      select: { id: true, name: true, email: true, phoneNumber: true, role: true, isActive: true, profileImageUrl: true },
     });
 
     await this.audit.log({
@@ -147,7 +151,7 @@ export class UsersService {
       action: AuditAction.UPDATE,
       entity: 'User',
       entityId: id,
-      afterData: { name: dto.name, role: dto.role, isActive: dto.isActive },
+      afterData: { name: dto.name, phoneNumber: dto.phoneNumber, role: dto.role, isActive: dto.isActive },
     });
 
     return updated;
@@ -164,7 +168,7 @@ export class UsersService {
     const [profile, activity] = await Promise.all([
       this.prisma.user.findUnique({
         where: { id: userId },
-        select: { id: true, name: true, email: true, role: true, profileImageUrl: true, createdAt: true },
+        select: { id: true, name: true, email: true, phoneNumber: true, role: true, profileImageUrl: true, createdAt: true },
       }),
       this.prisma.auditLog.findMany({
         where: activityWhere,
@@ -188,7 +192,7 @@ export class UsersService {
       if (emailExists) throw new ConflictException('Email already exists');
     }
 
-    const data: any = { name: dto.name, email: dto.email };
+    const data: any = { name: dto.name, email: dto.email, phoneNumber: dto.phoneNumber };
     if (dto.password) {
       data.passwordHash = await bcrypt.hash(dto.password, 12);
     }
@@ -196,7 +200,7 @@ export class UsersService {
     const updated = await this.prisma.user.update({
       where: { id: userId },
       data,
-      select: { id: true, name: true, email: true, role: true, profileImageUrl: true },
+      select: { id: true, name: true, email: true, phoneNumber: true, role: true, profileImageUrl: true },
     });
 
     await this.audit.log({
@@ -214,7 +218,7 @@ export class UsersService {
     const updated = await this.prisma.user.update({
       where: { id: userId },
       data: { profileImageUrl },
-      select: { id: true, name: true, email: true, role: true, profileImageUrl: true },
+      select: { id: true, name: true, email: true, phoneNumber: true, role: true, profileImageUrl: true },
     });
 
     await this.audit.log({

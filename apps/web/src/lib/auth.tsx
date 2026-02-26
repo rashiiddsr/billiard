@@ -9,6 +9,7 @@ export interface User {
   name: string;
   email: string;
   role: 'OWNER' | 'DEVELOPER' | 'MANAGER' | 'CASHIER';
+  phoneNumber?: string;
   profileImageUrl?: string | null;
 }
 

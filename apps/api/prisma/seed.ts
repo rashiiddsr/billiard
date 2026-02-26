@@ -14,29 +14,47 @@ async function main() {
 
   await prisma.user.upsert({
     where: { email: 'owner@billiard.com' },
-    update: { name: 'Ahmad Owner', passwordHash: ownerHash, pin: ownerPin, role: Role.OWNER, isActive: true },
-    create: { name: 'Ahmad Owner', email: 'owner@billiard.com', passwordHash: ownerHash, pin: ownerPin, role: Role.OWNER },
+    update: { name: 'Ahmad Owner', phoneNumber: '081234567890', passwordHash: ownerHash, pin: ownerPin, role: Role.OWNER, isActive: true },
+    create: { name: 'Ahmad Owner', email: 'owner@billiard.com', phoneNumber: '081234567890', passwordHash: ownerHash, pin: ownerPin, role: Role.OWNER },
   });
 
   await prisma.user.upsert({
     where: { email: 'developer@billiard.com' },
-    update: { name: 'Danu Developer', passwordHash: developerHash, role: Role.DEVELOPER, isActive: true },
-    create: { name: 'Danu Developer', email: 'developer@billiard.com', passwordHash: developerHash, role: Role.DEVELOPER },
+    update: { name: 'Danu Developer', phoneNumber: '081234567891', passwordHash: developerHash, role: Role.DEVELOPER, isActive: true },
+    create: { name: 'Danu Developer', email: 'developer@billiard.com', phoneNumber: '081234567891', passwordHash: developerHash, role: Role.DEVELOPER },
   });
 
   const manager = await prisma.user.upsert({
     where: { email: 'manager@billiard.com' },
-    update: { name: 'Budi Manager', passwordHash: managerHash, role: Role.MANAGER, isActive: true },
-    create: { name: 'Budi Manager', email: 'manager@billiard.com', passwordHash: managerHash, role: Role.MANAGER },
+    update: { name: 'Budi Manager', phoneNumber: '081234567892', passwordHash: managerHash, role: Role.MANAGER, isActive: true },
+    create: { name: 'Budi Manager', email: 'manager@billiard.com', phoneNumber: '081234567892', passwordHash: managerHash, role: Role.MANAGER },
   });
 
   await prisma.user.upsert({
     where: { email: 'cashier@billiard.com' },
-    update: { name: 'Citra Kasir', passwordHash: cashierHash, role: Role.CASHIER, isActive: true },
-    create: { name: 'Citra Kasir', email: 'cashier@billiard.com', passwordHash: cashierHash, role: Role.CASHIER },
+    update: { name: 'Citra Kasir', phoneNumber: '081234567893', passwordHash: cashierHash, role: Role.CASHIER, isActive: true },
+    create: { name: 'Citra Kasir', email: 'cashier@billiard.com', phoneNumber: '081234567893', passwordHash: cashierHash, role: Role.CASHIER },
+  });
+
+  await prisma.companyProfile.upsert({
+    where: { id: 'default-company-profile' },
+    update: {
+      name: 'V-Luxe Billiard',
+      address: 'Jl. Hangtuah, Babussalam, Kec. Mandau, Kabupaten Bengkalis, Riau 28784',
+      phoneNumber: '085174388234',
+      logoUrl: null,
+    },
+    create: {
+      id: 'default-company-profile',
+      name: 'V-Luxe Billiard',
+      address: 'Jl. Hangtuah, Babussalam, Kec. Mandau, Kabupaten Bengkalis, Riau 28784',
+      phoneNumber: '085174388234',
+      logoUrl: null,
+    },
   });
 
   console.log('✅ Users seeded');
+  console.log('✅ Company profile seeded');
   console.log('✅ Tables default: 0 meja (buat via Developer > Manajemen Meja)');
   console.log('✅ IoT devices default: 0 device (buat via Developer > IoT Configurated)');
 

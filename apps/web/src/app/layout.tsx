@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 import { AuthProvider } from '@/lib/auth';
 import { Toaster } from 'react-hot-toast';
+import { CompanyProvider } from '@/lib/company';
 
 export const metadata: Metadata = {
   title: 'Billiard POS',
@@ -18,7 +19,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="id">
       <body className="bg-white text-slate-800 antialiased">
         <AuthProvider>
-          {children}
+          <CompanyProvider>
+            {children}
+          </CompanyProvider>
           <Toaster
             position="top-right"
             toastOptions={{
