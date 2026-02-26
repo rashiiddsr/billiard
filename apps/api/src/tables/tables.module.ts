@@ -2,7 +2,7 @@ import { Controller, Get, Post, Patch, Param, Body, UseGuards, Query } from '@ne
 import { Module } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
-import { TablesService, CreateTableDto, UpdateTableDto } from './tables.service';
+import { TablesService, CreateTableDto, UpdateTableDto, TestTableDto } from './tables.service';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -35,6 +35,12 @@ export class TablesController {
   @Roles('OWNER' as any, 'DEVELOPER' as any)
   update(@Param('id') id: string, @Body() dto: UpdateTableDto, @CurrentUser() user: any) {
     return this.tablesService.update(id, dto, user.role);
+  }
+
+  @Post(':id/testing')
+  @Roles('OWNER' as any, 'DEVELOPER' as any)
+  startTesting(@Param('id') id: string, @Body() dto: TestTableDto, @CurrentUser() user: any) {
+    return this.tablesService.startTesting(id, user.role, dto);
   }
 }
 

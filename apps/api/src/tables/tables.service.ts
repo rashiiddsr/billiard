@@ -1,7 +1,7 @@
-import { Injectable, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, BadRequestException, Logger } from '@nestjs/common';
 import { IsString, IsNumber, IsOptional, IsBoolean, Min } from 'class-validator';
 import { PrismaService } from '../common/prisma/prisma.service';
-import { Role } from '@prisma/client';
+import { Role, SessionStatus, TableStatus } from '@prisma/client';
 import { IotService } from '../iot/iot.service';
 
 export class CreateTableDto {
@@ -23,8 +23,14 @@ export class UpdateTableDto {
   @IsOptional() @IsNumber() gpioPin?: number;
 }
 
+export class TestTableDto {
+  @IsOptional() @IsNumber() @Min(1) durationMinutes?: number;
+}
+
 @Injectable()
 export class TablesService {
+  private readonly logger = new Logger(TablesService.name);
+
   constructor(
     private prisma: PrismaService,
     private iotService: IotService,
@@ -154,6 +160,55 @@ export class TablesService {
     }
 
     return this.prisma.table.update({ where: { id }, data: dto });
+  }
+
+  async startTesting(id: string, actorRole: Role, dto?: TestTableDto) {
+    const table = await this.prisma.table.findUnique({
+      where: { id },
+      include: { billingSessions: { where: { status: SessionStatus.ACTIVE }, select: { id: true }, take: 1 } },
+    });
+    if (!table) throw new NotFoundException('Table not found');
+    if (!table.isActive) throw new BadRequestException('Meja nonaktif tidak bisa ditesting');
+    if (table.billingSessions.length > 0 || table.status === TableStatus.OCCUPIED) {
+      throw new BadRequestException('Meja sedang dalam sesi billing aktif');
+    }
+    if (table.status !== TableStatus.AVAILABLE) {
+      throw new BadRequestException('Meja sedang dalam proses testing');
+    }
+
+    const durationSeconds = actorRole === Role.DEVELOPER
+      ? Math.round((dto?.durationMinutes || 0) * 60)
+      : 20;
+
+    if (actorRole === Role.DEVELOPER && durationSeconds <= 0) {
+      throw new BadRequestException('Durasi testing (menit) wajib diisi');
+    }
+
+    await this.prisma.table.update({ where: { id }, data: { status: TableStatus.MAINTENANCE } });
+
+    try {
+      await this.iotService.sendCommand(id, 'LIGHT_ON');
+    } catch (error) {
+      await this.prisma.table.update({ where: { id }, data: { status: TableStatus.AVAILABLE } });
+      throw error;
+    }
+
+    setTimeout(async () => {
+      try {
+        await this.iotService.sendCommand(id, 'LIGHT_OFF');
+      } catch (error) {
+        this.logger.error(`Failed sending LIGHT_OFF for table ${id} after testing`, error as any);
+      } finally {
+        await this.prisma.table.update({ where: { id }, data: { status: TableStatus.AVAILABLE } });
+      }
+    }, durationSeconds * 1000);
+
+    return {
+      tableId: id,
+      status: 'TESTING',
+      durationSeconds,
+      message: `Testing lampu dimulai selama ${durationSeconds} detik`,
+    };
   }
 
   private async generateNextTableId() {
