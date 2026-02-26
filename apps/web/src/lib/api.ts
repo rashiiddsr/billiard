@@ -152,6 +152,11 @@ export const usersApi = {
   get: (id: string) => api.get(`/users/${id}`).then((r) => r.data),
   create: (data: any) => api.post('/users', data).then((r) => r.data),
   update: (id: string, data: any) => api.patch(`/users/${id}`, data).then((r) => r.data),
+  getMyProfile: () => api.get('/users/profile/me').then((r) => r.data),
+  updateMyProfile: (data: any) => api.patch('/users/profile/me', data).then((r) => r.data),
+  uploadMyPhoto: (formData: FormData) => api.post('/users/profile/me/photo', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  }).then((r) => r.data),
 };
 
 // ─── IoT ─────────────────────────────────────────────────────────────────────
