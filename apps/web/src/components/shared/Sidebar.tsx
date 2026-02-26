@@ -66,7 +66,7 @@ export default function Sidebar({ collapsed, mobileOpen, onClose }: { collapsed:
       <aside
         className={cn(
           'fixed left-0 top-0 z-40 h-screen border-r border-white/80 bg-white/90 shadow-xl backdrop-blur-xl transition-all',
-          collapsed ? 'w-24' : 'w-72',
+          collapsed ? 'w-20 md:w-24' : 'w-[86vw] max-w-72',
           mobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0',
         )}
       >
@@ -78,7 +78,7 @@ export default function Sidebar({ collapsed, mobileOpen, onClose }: { collapsed:
             {!collapsed && (
               <div>
                 <p className="text-sm font-bold text-slate-800">Billiard POS</p>
-                <p className="text-xs text-slate-500">{user?.role}</p>
+                <p className="text-xs text-slate-500">Management System</p>
               </div>
             )}
           </div>
