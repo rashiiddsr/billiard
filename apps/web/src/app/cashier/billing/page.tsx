@@ -66,11 +66,6 @@ export default function BillingPage() {
       return;
     }
 
-    if (table.status === 'MAINTENANCE') {
-      toast.error('Meja sedang dalam mode testing, billing belum bisa dimulai');
-      return;
-    }
-
     setSelectedTable(table);
     setDuration(60);
     setRateType('HOURLY');
@@ -218,14 +213,13 @@ export default function BillingPage() {
           const session = getSessionForTable(table.id);
           const remaining = session && session.rateType !== 'OWNER_LOCK' ? getRemainingTime(session.endTime) : null;
           const isOccupied = !!session;
-          const isTesting = table.status === 'MAINTENANCE';
           const device = table.iotDevice;
 
           return (
             <div key={table.id} className="card border border-sky-100 bg-white/95 text-slate-800 transition-all hover:-translate-y-0.5 hover:border-cyan-300">
               <div className="mb-4 flex items-center justify-between">
-                <span className={`badge ${isOccupied ? 'bg-amber-100 text-amber-700' : isTesting ? 'bg-violet-100 text-violet-700' : 'bg-emerald-100 text-emerald-700'}`}>
-                  {isOccupied ? 'Sedang Main' : isTesting ? 'Sedang Testing' : 'Siap Pakai'}
+                <span className={`badge ${isOccupied ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                  {isOccupied ? 'Sedang Main' : 'Siap Pakai'}
                 </span>
                 <span className={`h-2.5 w-2.5 rounded-full ${device?.isOnline ? 'bg-emerald-400' : 'bg-red-500'}`} title={device?.isOnline ? 'Online' : 'Offline'} />
               </div>
@@ -246,8 +240,8 @@ export default function BillingPage() {
 
               <div className="grid grid-cols-2 gap-2">
                 {!isOccupied ? (
-                  <button onClick={() => openStartModal(table)} disabled={isTesting} className="btn-primary col-span-2 py-2.5 text-sm disabled:cursor-not-allowed disabled:opacity-40">
-                    {isTesting ? 'Sedang Testing' : 'Mulai Billing'}
+                  <button onClick={() => openStartModal(table)} className="btn-primary col-span-2 py-2.5 text-sm">
+                    Mulai Billing
                   </button>
                 ) : isOwner ? (
                   <button
