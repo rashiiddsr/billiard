@@ -9,6 +9,7 @@ export interface User {
   name: string;
   email: string;
   role: 'OWNER' | 'DEVELOPER' | 'MANAGER' | 'CASHIER';
+  profileImageUrl?: string | null;
 }
 
 interface AuthContextType {
@@ -20,6 +21,7 @@ interface AuthContextType {
   isDeveloper: boolean;
   isManager: boolean;
   isCashier: boolean;
+  setUser: (user: User) => void;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -53,9 +55,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
   }, []);
 
+  const setAndPersistUser = useCallback((nextUser: User) => {
+    Cookies.set('user', JSON.stringify(nextUser), { expires: 7 });
+    setUser(nextUser);
+  }, []);
+
   return (
     <AuthContext.Provider value={{
-      user, loading, login, logout,
+      user, loading, login, logout, setUser: setAndPersistUser,
       isOwner: user?.role === 'OWNER',
       isDeveloper: user?.role === 'DEVELOPER',
       isManager: user?.role === 'MANAGER',
