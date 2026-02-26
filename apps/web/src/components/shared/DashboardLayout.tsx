@@ -13,14 +13,6 @@ const roleGreeting: Record<string, string> = {
   CASHIER: 'Semua kebutuhan transaksi ada di sini',
 };
 
-const API_ORIGIN = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1').replace('/api/v1', '');
-
-const resolveProfileImage = (path?: string | null) => {
-  if (!path) return null;
-  if (path.startsWith('http://') || path.startsWith('https://')) return path;
-  return `${API_ORIGIN}${path}`;
-};
-
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { user, loading, logout } = useAuth();
   const router = useRouter();
@@ -78,9 +70,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     toast.success('Berhasil keluar');
     router.push('/login');
   };
-
-  const profileHref = user ? `/${user.role.toLowerCase()}/profile` : '/login';
-  const profileImage = resolveProfileImage(user?.profileImageUrl);
 
   if (loading) {
     return (
@@ -146,13 +135,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   }}
                   className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm hover:bg-slate-50"
                 >
-                  {profileImage ? (
-                    <img src={profileImage} alt={user.name} className="h-8 w-8 rounded-full object-cover" />
-                  ) : (
-                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-blue-600 to-cyan-500 text-xs font-bold text-white">
-                      {user.name?.slice(0, 2).toUpperCase()}
-                    </div>
-                  )}
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-blue-600 to-cyan-500 text-xs font-bold text-white">
+                    {user.name?.slice(0, 2).toUpperCase()}
+                  </div>
                   <div className="hidden text-left md:block">
                     <p className="text-sm font-semibold leading-none">{user.name}</p>
                     <p className="text-xs text-slate-500">{user.role}</p>
@@ -163,9 +148,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   <div className="absolute right-0 mt-2 w-72 rounded-2xl border border-slate-200 bg-white p-3 shadow-xl">
                     <p className="text-sm font-semibold text-slate-800">{user.name}</p>
                     <p className="mb-3 text-xs text-slate-500">{user.email}</p>
-                    <button onClick={() => router.push(profileHref)} className="mb-2 w-full rounded-xl bg-sky-50 px-3 py-2 text-sm font-medium text-sky-700 hover:bg-sky-100">
-                      Manajemen Profil
-                    </button>
                     <button onClick={handleLogout} className="w-full rounded-xl bg-red-50 px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-100">
                       Keluar
                     </button>
