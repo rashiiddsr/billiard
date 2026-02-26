@@ -336,7 +336,7 @@ export class BillingService {
   @Cron(CronExpression.EVERY_30_SECONDS)
   async checkBillingSessions() {
     const now = new Date();
-    const fiveMinutesFromNow = new Date(now.getTime() + 5 * 60 * 1000);
+    const oneMinuteFromNow = new Date(now.getTime() + 60 * 1000);
 
     // Sessions that should end
     const expiredSessions = await this.prisma.billingSession.findMany({
@@ -370,13 +370,13 @@ export class BillingService {
       }
     }
 
-    // Sessions approaching end (within next 5 minutes, blink not yet sent)
+    // Sessions approaching end (within next 60 seconds, blink not yet sent)
     const nearlyExpiredSessions = await this.prisma.billingSession.findMany({
       where: {
         status: SessionStatus.ACTIVE,
         rateType: { not: 'OWNER_LOCK' },
         blinkCommandSent: false,
-        endTime: { gte: now, lte: fiveMinutesFromNow },
+        endTime: { gte: now, lte: oneMinuteFromNow },
       },
     });
 
