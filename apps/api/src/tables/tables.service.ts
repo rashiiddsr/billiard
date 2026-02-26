@@ -1,7 +1,7 @@
-import { Injectable, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, BadRequestException, Logger } from '@nestjs/common';
 import { IsString, IsNumber, IsOptional, IsBoolean, Min } from 'class-validator';
 import { PrismaService } from '../common/prisma/prisma.service';
-import { Role } from '@prisma/client';
+import { Role, SessionStatus, TableStatus } from '@prisma/client';
 import { IotService } from '../iot/iot.service';
 
 export class CreateTableDto {
@@ -23,8 +23,21 @@ export class UpdateTableDto {
   @IsOptional() @IsNumber() gpioPin?: number;
 }
 
+export class TestTableDto {
+  @IsOptional() @IsNumber() @Min(1) durationMinutes?: number;
+}
+
+type TestingSession = {
+  tableId: string;
+  endsAt: Date;
+  timer: NodeJS.Timeout;
+};
+
 @Injectable()
 export class TablesService {
+  private readonly logger = new Logger(TablesService.name);
+  private readonly testingSessions = new Map<string, TestingSession>();
+
   constructor(
     private prisma: PrismaService,
     private iotService: IotService,
@@ -32,6 +45,20 @@ export class TablesService {
 
   private sortByNameNatural<T extends { name: string }>(items: T[]) {
     return [...items].sort((a, b) => a.name.localeCompare(b.name, 'id', { numeric: true, sensitivity: 'base' }));
+  }
+
+  private enrichTestingState<T extends { id: string; status: TableStatus }>(table: T) {
+    const testing = this.testingSessions.get(table.id);
+    const remainingSeconds = testing
+      ? Math.max(0, Math.ceil((testing.endsAt.getTime() - Date.now()) / 1000))
+      : 0;
+
+    return {
+      ...table,
+      isTesting: table.status === TableStatus.MAINTENANCE,
+      testingRemainingSeconds: table.status === TableStatus.MAINTENANCE ? remainingSeconds : 0,
+      testingEndsAt: table.status === TableStatus.MAINTENANCE ? (testing?.endsAt || null) : null,
+    };
   }
 
   private async ensureDeviceAndMapping(
@@ -94,7 +121,7 @@ export class TablesService {
       },
     });
 
-    return this.sortByNameNatural(tables);
+    return this.sortByNameNatural(tables).map((table) => this.enrichTestingState(table as any));
   }
 
   async findOne(id: string) {
@@ -109,7 +136,7 @@ export class TablesService {
       },
     });
     if (!table) throw new NotFoundException('Table not found');
-    return table;
+    return this.enrichTestingState(table);
   }
 
   async create(dto: CreateTableDto) {
@@ -154,6 +181,80 @@ export class TablesService {
     }
 
     return this.prisma.table.update({ where: { id }, data: dto });
+  }
+
+  async startTesting(id: string, actorRole: Role, dto?: TestTableDto) {
+    const table = await this.prisma.table.findUnique({
+      where: { id },
+      include: { billingSessions: { where: { status: SessionStatus.ACTIVE }, select: { id: true }, take: 1 } },
+    });
+    if (!table) throw new NotFoundException('Table not found');
+    if (!table.isActive) throw new BadRequestException('Meja nonaktif tidak bisa ditesting');
+    if (table.billingSessions.length > 0 || table.status === TableStatus.OCCUPIED) {
+      throw new BadRequestException('Meja sedang dalam sesi billing aktif');
+    }
+    if (table.status !== TableStatus.AVAILABLE) {
+      throw new BadRequestException('Meja sedang dalam proses testing');
+    }
+
+    const durationSeconds = actorRole === Role.DEVELOPER
+      ? Math.round((dto?.durationMinutes || 0) * 60)
+      : 20;
+
+    if (actorRole === Role.DEVELOPER && durationSeconds <= 0) {
+      throw new BadRequestException('Durasi testing (menit) wajib diisi');
+    }
+
+    await this.prisma.table.update({ where: { id }, data: { status: TableStatus.MAINTENANCE } });
+
+    try {
+      await this.iotService.sendCommand(id, 'LIGHT_ON');
+    } catch (error) {
+      await this.prisma.table.update({ where: { id }, data: { status: TableStatus.AVAILABLE } });
+      throw error;
+    }
+
+    const endsAt = new Date(Date.now() + durationSeconds * 1000);
+    const timer = setTimeout(() => {
+      this.stopTesting(id).catch((error) => {
+        this.logger.error(`Failed auto stop testing for table ${id}`, error as any);
+      });
+    }, durationSeconds * 1000);
+
+    this.testingSessions.set(id, { tableId: id, endsAt, timer });
+
+    return {
+      tableId: id,
+      status: 'TESTING',
+      durationSeconds,
+      testingEndsAt: endsAt,
+      message: `Testing lampu dimulai selama ${durationSeconds} detik`,
+    };
+  }
+
+  async stopTesting(id: string) {
+    const table = await this.prisma.table.findUnique({ where: { id } });
+    if (!table) throw new NotFoundException('Table not found');
+    if (table.status !== TableStatus.MAINTENANCE) {
+      throw new BadRequestException('Meja tidak sedang testing');
+    }
+
+    const active = this.testingSessions.get(id);
+    if (active) {
+      clearTimeout(active.timer);
+      this.testingSessions.delete(id);
+    }
+
+    try {
+      await this.iotService.sendCommand(id, 'LIGHT_OFF');
+    } catch (error) {
+      this.logger.error(`Failed sending LIGHT_OFF when stop testing table ${id}`, error as any);
+      throw error;
+    } finally {
+      await this.prisma.table.update({ where: { id }, data: { status: TableStatus.AVAILABLE } });
+    }
+
+    return { tableId: id, status: 'AVAILABLE', message: 'Testing dihentikan' };
   }
 
   private async generateNextTableId() {

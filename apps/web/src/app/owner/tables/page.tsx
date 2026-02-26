@@ -5,6 +5,13 @@ import { tablesApi } from '@/lib/api';
 import { formatCurrency } from '@/lib/utils';
 import toast from 'react-hot-toast';
 
+const formatRemaining = (seconds: number) => {
+  const safe = Math.max(0, seconds || 0);
+  const m = Math.floor(safe / 60);
+  const s = safe % 60;
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+};
+
 export default function OwnerTablesPage() {
   const [tables, setTables] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -24,6 +31,10 @@ export default function OwnerTablesPage() {
   };
 
   useEffect(() => { load(); }, []);
+  useEffect(() => {
+    const timer = setInterval(load, 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   const openEditRate = (table: any) => {
     setEditingTable(table);
@@ -48,6 +59,34 @@ export default function OwnerTablesPage() {
       toast.error(e?.response?.data?.message || 'Gagal update harga');
     } finally {
       setSubmittingRate(false);
+    }
+  };
+
+  const canStartTesting = (table: any) => table.isActive && table.status === 'AVAILABLE' && (table.billingSessions || []).length === 0;
+  const isTesting = (table: any) => table.status === 'MAINTENANCE';
+
+  const startTesting = async (table: any) => {
+    if (!canStartTesting(table)) {
+      toast.error('Testing hanya bisa untuk meja OFF (tidak sedang billing)');
+      return;
+    }
+
+    try {
+      await tablesApi.testing(table.id);
+      toast.success(`Meja ${table.name} sedang di testing`);
+      load();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || 'Gagal menjalankan testing lampu');
+    }
+  };
+
+  const stopTesting = async (table: any) => {
+    try {
+      await tablesApi.stopTesting(table.id);
+      toast.success(`Testing ${table.name} dihentikan`);
+      load();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || 'Gagal menghentikan testing lampu');
     }
   };
 
@@ -110,9 +149,29 @@ export default function OwnerTablesPage() {
                   <td className="font-mono text-xs">{t.id}</td>
                   <td>{t.name}</td>
                   <td>{formatCurrency(Number(t.hourlyRate))}</td>
-                  <td><button type="button" onClick={() => toggleActive(t)} className={`toggle-switch ${t.isActive ? 'active' : ''}`} title={t.isActive ? 'Aktif' : 'Nonaktif'} /></td>
                   <td>
-                    <button className="text-xs px-2 py-1 bg-amber-100 text-amber-700 rounded hover:bg-amber-200" onClick={() => openEditRate(t)}>Edit Harga</button>
+                    <div className="flex items-center gap-2">
+                      <button type="button" onClick={() => toggleActive(t)} className={`toggle-switch ${t.isActive ? 'active' : ''}`} title={t.isActive ? 'Aktif' : 'Nonaktif'} />
+                      {isTesting(t) && <span className="text-xs font-semibold text-violet-700">Sedang di testing ({formatRemaining(t.testingRemainingSeconds)})</span>}
+                    </div>
+                  </td>
+                  <td>
+                    <div className="flex gap-2">
+                      <button className="text-xs px-2 py-1 bg-amber-100 text-amber-700 rounded hover:bg-amber-200" onClick={() => openEditRate(t)}>Edit Harga</button>
+                      {isTesting(t) ? (
+                        <button className="text-xs px-2 py-1 bg-violet-600 text-white rounded hover:bg-violet-700" onClick={() => stopTesting(t)}>
+                          Hentikan
+                        </button>
+                      ) : (
+                        <button
+                          className="text-xs px-2 py-1 bg-violet-100 text-violet-700 rounded hover:bg-violet-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                          onClick={() => startTesting(t)}
+                          disabled={!canStartTesting(t)}
+                        >
+                          Testing
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
