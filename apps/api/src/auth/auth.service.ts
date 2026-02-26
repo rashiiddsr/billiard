@@ -80,6 +80,7 @@ export class AuthService {
         email: user.email,
         role: user.role,
         profileImageUrl: user.profileImageUrl,
+        phoneNumber: user.phoneNumber,
       },
       ...tokens,
     };

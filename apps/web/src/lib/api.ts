@@ -188,6 +188,18 @@ export const usersApi = {
   }).then((r) => r.data),
 };
 
+
+
+// ─── Company ─────────────────────────────────────────────────────────────────
+export const companyApi = {
+  getProfile: () => api.get('/company/profile').then((r) => r.data),
+  updateProfile: (data: any) => api.patch('/company/profile', data).then((r) => r.data),
+  uploadLogo: (formData: FormData) => api.post('/company/profile/logo', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  }).then((r) => r.data),
+  resetLogo: () => api.patch('/company/profile/logo/reset').then((r) => r.data),
+};
+
 // ─── IoT ─────────────────────────────────────────────────────────────────────
 export const iotApi = {
   listDevices: () => api.get('/iot/devices').then((r) => r.data),

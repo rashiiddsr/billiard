@@ -92,6 +92,7 @@ model User {
   id            String   @id @default(cuid())
   name          String
   email         String   @unique
+  phoneNumber   String
   profileImageUrl String?
   passwordHash  String
   pin           String?  // hashed 6-digit PIN
@@ -113,6 +114,18 @@ model User {
   refreshTokens     RefreshToken[]
 
   @@map("users")
+}
+
+model CompanyProfile {
+  id          String   @id @default(cuid())
+  name        String?
+  address     String
+  phoneNumber String
+  logoUrl     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("company_profiles")
 }
 
 model RefreshToken {

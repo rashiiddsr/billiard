@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
 import { cn } from '@/lib/utils';
+import { useCompany } from '@/lib/company';
 
 interface NavItem {
   label: string;
@@ -36,6 +37,7 @@ const navByRole: Record<string, NavItem[]> = {
     { label: 'Manajemen User', href: '/owner/users', icon: <UserIcon /> },
     { label: 'Manajemen Meja', href: '/owner/tables', icon: <BilliardIcon /> },
     { label: 'Audit Log', href: '/owner/audit', icon: <LogIcon /> },
+    { label: 'Data Perusahaan', href: '/owner/company', icon: <OfficeIcon /> },
     { label: 'Profil', href: '/owner/profile', icon: <UserIcon /> },
   ],
   DEVELOPER: [
@@ -57,6 +59,7 @@ const navByRole: Record<string, NavItem[]> = {
 
 export default function Sidebar({ collapsed, mobileOpen, onClose }: { collapsed: boolean; mobileOpen: boolean; onClose: () => void }) {
   const { user } = useAuth();
+  const { appName, logoUrl } = useCompany();
   const pathname = usePathname();
   const navItems = navByRole[user?.role || ''] || [];
 
@@ -72,12 +75,16 @@ export default function Sidebar({ collapsed, mobileOpen, onClose }: { collapsed:
       >
         <div className="border-b border-slate-100 p-4">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-blue-600 to-cyan-500 text-white">
-              <BilliardIcon />
+            <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-xl bg-gradient-to-br from-blue-600 to-cyan-500 text-white">
+              {logoUrl ? (
+                <img src={logoUrl} alt={appName} className="h-full w-full object-cover" />
+              ) : (
+                <BilliardIcon />
+              )}
             </div>
             {!collapsed && (
               <div>
-                <p className="text-sm font-bold text-slate-800">Billiard POS</p>
+                <p className="text-sm font-bold text-slate-800">{appName}</p>
                 <p className="text-xs text-slate-500">Management System</p>
               </div>
             )}
@@ -123,3 +130,5 @@ function BoxIcon() { return <svg className="h-5 w-5" fill="none" viewBox="0 0 24
 function TagIcon() { return <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h7l5 5-7 7-5-5V7z" /><circle cx="10" cy="10" r="1.5" /></svg>; }
 function WalletIcon() { return <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" /></svg>; }
 function ChipIcon() { return <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3v2m6-2v2M9 19v2m6-2v2M3 9h2m14 0h2M3 15h2m14 0h2M7 7h10v10H7V7z" /></svg>; }
+
+function OfficeIcon() { return <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 21h18M5 21V7a2 2 0 012-2h10a2 2 0 012 2v14M9 9h.01M9 13h.01M9 17h.01M15 9h.01M15 13h.01M15 17h.01" /></svg>; }
