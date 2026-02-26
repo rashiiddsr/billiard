@@ -7,12 +7,11 @@
 #include <Adafruit_MCP23X17.h>
 #include "mbedtls/md.h"
 #include <time.h>
-#include <Preferences.h>
 
 /**
  * FIXED:
- * 1) BLINK_3X diabaikan -> relay tidak kedip, langsung ON/OFF.
- * 2) Auto-resume -> state relay disimpan ke NVS (Preferences) dan di-restore saat boot.
+ * 1) BLINK command sinkron dengan backend -> relay kedip 2x (non-blocking) sebagai notifikasi akhir sesi.
+ * 2) State relay mengikuti source-of-truth backend (tanpa persistence lokal), aman saat listrik padam.
  * 3) Proteksi konflik pin: kalau BUTTON_GPIO_PINS memakai pin yang sama dengan RELAY_GPIO_PINS,
  *    maka tombol channel itu di-skip (agar tidak mengubah pin relay jadi INPUT_PULLUP).
  */
@@ -35,6 +34,7 @@ static const uint32_t HEARTBEAT_INTERVAL_MS = 30000;
 static const uint32_t PULL_INTERVAL_MS = 700;
 static const uint32_t BUTTON_SCAN_INTERVAL_MS = 20;
 static const uint32_t CONFIG_REFRESH_INTERVAL_MS = 60000;
+static const uint32_t RELAY_SYNC_INTERVAL_MS = 5000;
 
 // =========================
 // Hardware config
@@ -70,43 +70,6 @@ static const uint8_t MCP_BTN_PINS[16] = {
 };
 
 // =========================
-// Auto Resume (NVS)
-// =========================
-Preferences prefs;
-static const char* NVS_NS = "billiard";
-uint16_t relayBitmap = 0;          // bit0=CH0 ... bit15=CH15
-bool channelState[16] = {false};   // mirror runtime
-
-void nvsBegin() {
-  prefs.begin(NVS_NS, false);
-  relayBitmap = prefs.getUShort("relayBm", 0);
-  Serial.printf("[NVS] relayBm=0x%04X\n", relayBitmap);
-}
-
-void nvsSaveBitmap() {
-  prefs.putUShort("relayBm", relayBitmap);
-}
-
-void applyBitmapToRelays() {
-  Serial.println("[BOOT] Restoring relay state from NVS...");
-  for (int ch = 0; ch < 16; ch++) {
-    bool on = ((relayBitmap >> ch) & 1) != 0;
-    channelState[ch] = on;
-
-    int gpio = RELAY_GPIO_PINS[ch];
-    pinMode(gpio, OUTPUT);
-
-    uint8_t level = RELAY_ACTIVE_LOW ? (on ? LOW : HIGH) : (on ? HIGH : LOW);
-    // pulse OFF dulu untuk “lepas” kondisi aneh pada relay board
-    digitalWrite(gpio, RELAY_ACTIVE_LOW ? HIGH : LOW);
-    delay(2);
-    digitalWrite(gpio, level);
-
-    Serial.printf("  CH%d(GPIO%d) -> %s\n", ch, gpio, on ? "ON" : "OFF");
-  }
-}
-
-// =========================
 // Dynamic table config
 // =========================
 struct TableConfig {
@@ -119,6 +82,7 @@ struct TableConfig {
 
 TableConfig TABLES[16];
 uint8_t TABLE_COUNT = 0;
+bool channelState[16] = {false};
 
 Adafruit_MCP23X17 mcp;
 
@@ -131,6 +95,24 @@ uint32_t lastHeartbeatAt = 0;
 uint32_t lastPullAt = 0;
 uint32_t lastButtonScanAt = 0;
 uint32_t lastConfigRefreshAt = 0;
+uint32_t lastRelaySyncAt = 0;
+
+static const uint8_t BLINK_PULSES = 2;
+static const uint16_t BLINK_PULSE_MS = 160;
+
+struct BlinkJob {
+  bool active;
+  uint8_t channel;
+  bool baseState;
+  bool toggledState;
+  uint8_t transitionsDone;
+  uint8_t transitionsTarget;
+  uint16_t pulseMs;
+  uint32_t lastStepAt;
+};
+
+BlinkJob blinkJob{false, 0, false, false, 0, 0, BLINK_PULSE_MS, 0};
+
 
 // =========================
 // Helpers: detect pin conflict
@@ -261,12 +243,54 @@ void setRelayChannel(uint8_t channel, bool on) {
 
   channelState[channel] = on;
 
-  if (on) relayBitmap |= (1 << channel);
-  else    relayBitmap &= ~(1 << channel);
-  nvsSaveBitmap();
+  Serial.printf("[Relay] CH=%d gpio=%d <= %s\n",
+                channel, gpio, on ? "ON" : "OFF");
+}
 
-  Serial.printf("[Relay] CH=%d gpio=%d <= %s | bm=0x%04X\n",
-                channel, gpio, on ? "ON" : "OFF", relayBitmap);
+void scheduleBlinkRelay(uint8_t channel, uint8_t times = BLINK_PULSES, uint16_t pulseMs = BLINK_PULSE_MS) {
+  if (channel > 15 || times == 0) return;
+
+  blinkJob.active = true;
+  blinkJob.channel = channel;
+  blinkJob.baseState = channelState[channel];
+  blinkJob.toggledState = blinkJob.baseState;
+  blinkJob.transitionsDone = 0;
+  blinkJob.transitionsTarget = times * 2;
+  blinkJob.pulseMs = pulseMs;
+  blinkJob.lastStepAt = 0;
+
+  Serial.printf("[Relay] CH=%d BLINK_%dX scheduled (pulse=%ums, non-blocking)\n",
+                channel, times, pulseMs);
+}
+
+void processBlinkJob() {
+  if (!blinkJob.active) return;
+
+  uint32_t now = millis();
+  if (blinkJob.lastStepAt != 0 && (now - blinkJob.lastStepAt) < blinkJob.pulseMs) return;
+
+  blinkJob.toggledState = !blinkJob.toggledState;
+
+  int gpio = RELAY_GPIO_PINS[blinkJob.channel];
+  uint8_t level = RELAY_ACTIVE_LOW
+    ? (blinkJob.toggledState ? LOW : HIGH)
+    : (blinkJob.toggledState ? HIGH : LOW);
+  pinMode(gpio, OUTPUT);
+  digitalWrite(gpio, level);
+
+  blinkJob.transitionsDone++;
+  blinkJob.lastStepAt = now;
+
+  if (blinkJob.transitionsDone >= blinkJob.transitionsTarget) {
+    uint8_t baseLevel = RELAY_ACTIVE_LOW
+      ? (blinkJob.baseState ? LOW : HIGH)
+      : (blinkJob.baseState ? HIGH : LOW);
+    digitalWrite(gpio, baseLevel);
+
+    Serial.printf("[Relay] CH=%d BLINK done, restored=%s\n",
+                  blinkJob.channel, blinkJob.baseState ? "ON" : "OFF");
+    blinkJob.active = false;
+  }
 }
 
 // =========================
@@ -349,6 +373,48 @@ bool fetchDeviceConfig() {
 
   Serial.printf("[Config] loaded tables=%d\n", TABLE_COUNT);
   printMappingTable();
+  return true;
+}
+
+bool syncRelayStateFromBackend() {
+  if (!ensureWifi()) return false;
+
+  String ts = nowTs();
+  String nonce = genNonce();
+  String message = String(DEVICE_ID) + ":" + ts + ":" + nonce + ":";
+  String sig = hmacSha256(message, HMAC_SECRET);
+
+  String url = String(API_BASE) + "/iot/devices/relay-state?deviceId=" + String(DEVICE_ID);
+  ApiResponse res = apiRequest("GET", url, "", sig, ts, nonce, false);
+
+  if (!res.ok) {
+    Serial.printf("[RelaySync] code=%d err=%s\n", res.statusCode, res.body.c_str());
+    return false;
+  }
+
+  StaticJsonDocument<3072> root;
+  if (deserializeJson(root, res.body)) {
+    Serial.println("[RelaySync] JSON parse error");
+    return false;
+  }
+
+  JsonArray states = root["states"].as<JsonArray>();
+  if (states.isNull()) {
+    Serial.println("[RelaySync] states null");
+    return false;
+  }
+
+  for (JsonObject st : states) {
+    int relayCh = st["relayChannel"] | -1;
+    bool shouldOn = st["shouldOn"] | false;
+    if (relayCh < 0 || relayCh > 15) continue;
+
+    if (channelState[relayCh] != shouldOn) {
+      setRelayChannel((uint8_t)relayCh, shouldOn);
+    }
+  }
+
+  Serial.printf("[RelaySync] applied states=%d\n", states.size());
   return true;
 }
 
@@ -503,8 +569,7 @@ void pullAndExecuteCommand() {
       setRelayChannel((uint8_t)relayCh, false);
       success = true;
     } else if (type == "BLINK_3X") {
-      // DIABAIKAN supaya tidak kedip sebelum OFF
-      Serial.println("[CMD] BLINK_3X ignored");
+      scheduleBlinkRelay((uint8_t)relayCh, BLINK_PULSES, BLINK_PULSE_MS);
       success = true;
     }
   }
@@ -517,43 +582,37 @@ void pullAndExecuteCommand() {
 // =========================
 void setup() {
   Serial.begin(115200);
-  delay(800);
+  delay(250);
 
-  // 1) load NVS state
-  nvsBegin();
-
-  // 2) init relay pins (OFF sementara)
+  // 1) init relay pins fail-safe OFF saat boot
   initEspRelayOutputs();
 
-  // 3) tunggu power relay stabil + restore (mengurangi kasus “baru bisa setelah reset”)
-  delay(500);
-  applyBitmapToRelays();
-  delay(80);
-  applyBitmapToRelays(); // apply ulang sekali
-
-  // 4) wifi + time
+  // 2) wifi + time
   WiFi.mode(WIFI_STA);
   ensureWifi();
   syncNtpTime();
 
-  // 5) config (tidak reset state relay)
+  // 3) config + sinkronisasi state relay dari backend
   fetchDeviceConfig();
+  syncRelayStateFromBackend();
 
-  // 6) buttons
+  // 4) buttons
   initButtonsInput();
 
-  // 7) heartbeat
+  // 5) heartbeat
   sendHeartbeat();
 
   lastHeartbeatAt = millis();
   lastPullAt = millis();
   lastConfigRefreshAt = millis();
+  lastRelaySyncAt = millis();
 
   Serial.println("[System] Ready");
 }
 
 void loop() {
   scanButtons();
+  processBlinkJob();
 
   uint32_t now = millis();
 
@@ -571,4 +630,9 @@ void loop() {
     fetchDeviceConfig();
     lastConfigRefreshAt = now;
   }
+  if (now - lastRelaySyncAt >= RELAY_SYNC_INTERVAL_MS) {
+    syncRelayStateFromBackend();
+    lastRelaySyncAt = now;
+  }
 }
+

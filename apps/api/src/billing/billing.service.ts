@@ -61,6 +61,17 @@ export class BillingService {
     await this.iot.assertTableReadyForBilling(dto.tableId);
 
     const isOwnerLock = userRole === Role.OWNER;
+    const isCashierManual = userRole === Role.CASHIER && dto.rateType === 'MANUAL';
+    const minimumDurationMinutes = isCashierManual ? 10 : 30;
+
+    if (!isOwnerLock && dto.durationMinutes < minimumDurationMinutes) {
+      throw new BadRequestException(
+        isCashierManual
+          ? 'Billing manual oleh kasir minimal 10 menit'
+          : 'Durasi billing minimal 30 menit',
+      );
+    }
+
     const ratePerHour = isOwnerLock
       ? new Decimal(0)
       : dto.rateType === 'MANUAL' && dto.manualRatePerHour
@@ -336,7 +347,7 @@ export class BillingService {
   @Cron(CronExpression.EVERY_30_SECONDS)
   async checkBillingSessions() {
     const now = new Date();
-    const oneMinuteFromNow = new Date(now.getTime() + 60 * 1000);
+    const fiveMinutesFromNow = new Date(now.getTime() + 5 * 60 * 1000);
 
     // Sessions that should end
     const expiredSessions = await this.prisma.billingSession.findMany({
@@ -370,13 +381,13 @@ export class BillingService {
       }
     }
 
-    // Sessions approaching end (within next 60 seconds, blink not yet sent)
+    // Sessions approaching end (within next 5 minutes, blink not yet sent)
     const nearlyExpiredSessions = await this.prisma.billingSession.findMany({
       where: {
         status: SessionStatus.ACTIVE,
         rateType: { not: 'OWNER_LOCK' },
         blinkCommandSent: false,
-        endTime: { gte: now, lte: oneMinuteFromNow },
+        endTime: { gte: now, lte: fiveMinutesFromNow },
       },
     });
 
