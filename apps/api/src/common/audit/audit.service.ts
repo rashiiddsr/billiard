@@ -1,7 +1,17 @@
 import { Injectable } from '@nestjs/common';
-import { AuditAction, Role } from '@prisma/client';
+import { AuditAction, Prisma, Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { notificationBus } from '../notifications/notification-bus';
+
+const AUDIT_ACTION_VALUES = new Set(Object.values(AuditAction));
+
+function isMissingNotificationsTable(error: unknown) {
+  return (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    error.code === 'P2021' &&
+    error.meta?.modelName === 'Notification'
+  );
+}
 
 export interface AuditLogData {
   userId?: string;
@@ -62,11 +72,12 @@ export class AuditService {
 
   async log(data: AuditLogData) {
     try {
-      const readable = this.buildReadableAudit(data);
+      const action = AUDIT_ACTION_VALUES.has(data.action) ? data.action : AuditAction.UPDATE;
+      const readable = this.buildReadableAudit({ ...data, action });
       const log = await this.prisma.auditLog.create({
         data: {
           userId: data.userId,
-          action: data.action,
+          action,
           entity: data.entity,
           entityId: data.entityId,
           beforeData: data.beforeData,
@@ -86,29 +97,37 @@ export class AuditService {
       });
 
       for (const owner of owners) {
-        const notification = await this.prisma.notification.create({
-          data: {
-            userId: owner.id,
-            title: readable.title,
-            message: readable.description,
-            entity: data.entity,
-            entityId: data.entityId,
-            metadata: {
-              action: data.action,
-              auditLogId: log.id,
+        try {
+          const notification = await this.prisma.notification.create({
+            data: {
+              userId: owner.id,
+              title: readable.title,
+              message: readable.description,
+              entity: data.entity,
+              entityId: data.entityId,
+              metadata: {
+                action,
+                auditLogId: log.id,
+              },
             },
-          },
-        });
+          });
 
-        notificationBus.emit('notification', {
-          userId: owner.id,
-          notificationId: notification.id,
-          title: notification.title,
-          message: notification.message,
-          entity: notification.entity || undefined,
-          entityId: notification.entityId || undefined,
-          createdAt: notification.createdAt,
-        });
+          notificationBus.emit('notification', {
+            userId: owner.id,
+            notificationId: notification.id,
+            title: notification.title,
+            message: notification.message,
+            entity: notification.entity || undefined,
+            entityId: notification.entityId || undefined,
+            createdAt: notification.createdAt,
+          });
+        } catch (error) {
+          if (isMissingNotificationsTable(error)) {
+            console.warn('Notification table not found. Skip owner notification emit.');
+            break;
+          }
+          throw error;
+        }
       }
     } catch (error) {
       // Never throw from audit log - just log to console

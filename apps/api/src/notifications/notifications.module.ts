@@ -16,6 +16,17 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Observable } from 'rxjs';
 import { notificationBus, NotificationEventPayload } from '../common/notifications/notification-bus';
+import { Prisma } from '@prisma/client';
+
+
+
+function isMissingNotificationsTable(error: unknown) {
+  return (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    error.code === 'P2021' &&
+    error.meta?.modelName === 'Notification'
+  );
+}
 
 @Injectable()
 export class NotificationsService {
@@ -25,41 +36,58 @@ export class NotificationsService {
     const safeLimit = Math.min(Math.max(limit, 1), 100);
     const skip = (Math.max(page, 1) - 1) * safeLimit;
 
-    const [data, total, unread] = await Promise.all([
-      this.prisma.notification.findMany({
-        where: { userId },
-        orderBy: { createdAt: 'desc' },
-        take: safeLimit,
-        skip,
-      }),
-      this.prisma.notification.count({ where: { userId } }),
-      this.prisma.notification.count({ where: { userId, isRead: false } }),
-    ]);
+    try {
+      const [data, total, unread] = await Promise.all([
+        this.prisma.notification.findMany({
+          where: { userId },
+          orderBy: { createdAt: 'desc' },
+          take: safeLimit,
+          skip,
+        }),
+        this.prisma.notification.count({ where: { userId } }),
+        this.prisma.notification.count({ where: { userId, isRead: false } }),
+      ]);
 
-    return {
-      data,
-      total,
-      unread,
-      page,
-      limit: safeLimit,
-      totalPages: Math.ceil(total / safeLimit),
-    };
+      return {
+        data,
+        total,
+        unread,
+        page,
+        limit: safeLimit,
+        totalPages: Math.ceil(total / safeLimit),
+      };
+    } catch (error) {
+      if (!isMissingNotificationsTable(error)) throw error;
+
+      return {
+        data: [],
+        total: 0,
+        unread: 0,
+        page,
+        limit: safeLimit,
+        totalPages: 0,
+      };
+    }
   }
 
   async markRead(userId: string, notificationId?: string) {
-    if (notificationId) {
-      const existing = await this.prisma.notification.findFirst({ where: { id: notificationId, userId } });
-      if (!existing) throw new BadRequestException('Notifikasi tidak ditemukan');
+    try {
+      if (notificationId) {
+        const existing = await this.prisma.notification.findFirst({ where: { id: notificationId, userId } });
+        if (!existing) throw new BadRequestException('Notifikasi tidak ditemukan');
 
-      await this.prisma.notification.update({
-        where: { id: notificationId },
-        data: { isRead: true, readAt: new Date() },
-      });
-    } else {
-      await this.prisma.notification.updateMany({
-        where: { userId, isRead: false },
-        data: { isRead: true, readAt: new Date() },
-      });
+        await this.prisma.notification.update({
+          where: { id: notificationId },
+          data: { isRead: true, readAt: new Date() },
+        });
+      } else {
+        await this.prisma.notification.updateMany({
+          where: { userId, isRead: false },
+          data: { isRead: true, readAt: new Date() },
+        });
+      }
+    } catch (error) {
+      if (!isMissingNotificationsTable(error)) throw error;
     }
 
     return this.list(userId, 1, 20);
