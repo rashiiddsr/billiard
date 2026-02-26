@@ -93,7 +93,6 @@ export class UsersService {
         passwordHash,
         pin: pinHash,
         role: dto.role,
-        profileImageUrl: null,
       },
       select: { id: true, name: true, email: true, role: true, isActive: true, profileImageUrl: true, createdAt: true },
     });
