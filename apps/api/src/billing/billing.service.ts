@@ -51,9 +51,6 @@ export class BillingService {
 
     if (!table) throw new NotFoundException('Table not found');
     if (!table.isActive) throw new BadRequestException('Table is not active');
-    if (table.status !== TableStatus.AVAILABLE) {
-      throw new BadRequestException('Meja sedang testing atau tidak tersedia untuk billing');
-    }
     if (table.billingSessions.length > 0) {
       throw new BadRequestException('Table already has an active session');
     }
