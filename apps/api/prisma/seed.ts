@@ -14,26 +14,26 @@ async function main() {
 
   await prisma.user.upsert({
     where: { email: 'owner@billiard.com' },
-    update: { name: 'Ahmad Owner', passwordHash: ownerHash, pin: ownerPin, role: Role.OWNER, profileImageUrl: '/uploads/default-owner.png', isActive: true },
-    create: { name: 'Ahmad Owner', email: 'owner@billiard.com', passwordHash: ownerHash, pin: ownerPin, role: Role.OWNER, profileImageUrl: '/uploads/default-owner.png' },
+    update: { name: 'Ahmad Owner', passwordHash: ownerHash, pin: ownerPin, role: Role.OWNER, isActive: true },
+    create: { name: 'Ahmad Owner', email: 'owner@billiard.com', passwordHash: ownerHash, pin: ownerPin, role: Role.OWNER },
   });
 
   await prisma.user.upsert({
     where: { email: 'developer@billiard.com' },
-    update: { name: 'Danu Developer', passwordHash: developerHash, role: Role.DEVELOPER, profileImageUrl: '/uploads/default-developer.png', isActive: true },
-    create: { name: 'Danu Developer', email: 'developer@billiard.com', passwordHash: developerHash, role: Role.DEVELOPER, profileImageUrl: '/uploads/default-developer.png' },
+    update: { name: 'Danu Developer', passwordHash: developerHash, role: Role.DEVELOPER, isActive: true },
+    create: { name: 'Danu Developer', email: 'developer@billiard.com', passwordHash: developerHash, role: Role.DEVELOPER },
   });
 
   const manager = await prisma.user.upsert({
     where: { email: 'manager@billiard.com' },
-    update: { name: 'Budi Manager', passwordHash: managerHash, role: Role.MANAGER, profileImageUrl: '/uploads/default-manager.png', isActive: true },
-    create: { name: 'Budi Manager', email: 'manager@billiard.com', passwordHash: managerHash, role: Role.MANAGER, profileImageUrl: '/uploads/default-manager.png' },
+    update: { name: 'Budi Manager', passwordHash: managerHash, role: Role.MANAGER, isActive: true },
+    create: { name: 'Budi Manager', email: 'manager@billiard.com', passwordHash: managerHash, role: Role.MANAGER },
   });
 
   await prisma.user.upsert({
     where: { email: 'cashier@billiard.com' },
-    update: { name: 'Citra Kasir', passwordHash: cashierHash, role: Role.CASHIER, profileImageUrl: '/uploads/default-cashier.png', isActive: true },
-    create: { name: 'Citra Kasir', email: 'cashier@billiard.com', passwordHash: cashierHash, role: Role.CASHIER, profileImageUrl: '/uploads/default-cashier.png' },
+    update: { name: 'Citra Kasir', passwordHash: cashierHash, role: Role.CASHIER, isActive: true },
+    create: { name: 'Citra Kasir', email: 'cashier@billiard.com', passwordHash: cashierHash, role: Role.CASHIER },
   });
 
   console.log('✅ Users seeded');
