@@ -101,53 +101,10 @@ CREATE TABLE `billing_sessions` (
     `totalAmount` DECIMAL(12, 2) NOT NULL DEFAULT 0,
     `status` ENUM('ACTIVE', 'COMPLETED', 'CANCELLED', 'PAUSED') NOT NULL DEFAULT 'ACTIVE',
     `blinkCommandSent` BOOLEAN NOT NULL DEFAULT false,
-    `packageName` VARCHAR(191) NULL,
-    `packageOriginalPrice` DECIMAL(12, 2) NULL,
     `createdById` VARCHAR(191) NOT NULL,
     `approvedById` VARCHAR(191) NULL,
     `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `updatedAt` DATETIME(3) NOT NULL,
-
-    PRIMARY KEY (`id`)
-) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-
--- CreateTable
-CREATE TABLE `billing_packages` (
-    `id` VARCHAR(191) NOT NULL,
-    `name` VARCHAR(191) NOT NULL,
-    `durationMinutes` INTEGER NULL,
-    `price` DECIMAL(12, 2) NOT NULL,
-    `isActive` BOOLEAN NOT NULL DEFAULT true,
-    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-    `updatedAt` DATETIME(3) NOT NULL,
-
-    UNIQUE INDEX `billing_packages_name_key`(`name`),
-    PRIMARY KEY (`id`)
-) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-
--- CreateTable
-CREATE TABLE `billing_package_items` (
-    `id` VARCHAR(191) NOT NULL,
-    `billingPackageId` VARCHAR(191) NOT NULL,
-    `type` VARCHAR(191) NOT NULL,
-    `quantity` INTEGER NOT NULL DEFAULT 1,
-    `unitPrice` DECIMAL(12, 2) NOT NULL,
-    `menuItemId` VARCHAR(191) NULL,
-    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-
-    PRIMARY KEY (`id`)
-) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-
--- CreateTable
-CREATE TABLE `session_package_usages` (
-    `id` VARCHAR(191) NOT NULL,
-    `billingSessionId` VARCHAR(191) NOT NULL,
-    `billingPackageId` VARCHAR(191) NOT NULL,
-    `packageName` VARCHAR(191) NOT NULL,
-    `packagePrice` DECIMAL(12, 2) NOT NULL,
-    `originalPrice` DECIMAL(12, 2) NOT NULL,
-    `durationMinutes` INTEGER NULL,
-    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
 
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -363,18 +320,6 @@ ALTER TABLE `billing_sessions` ADD CONSTRAINT `billing_sessions_createdById_fkey
 ALTER TABLE `billing_sessions` ADD CONSTRAINT `billing_sessions_approvedById_fkey` FOREIGN KEY (`approvedById`) REFERENCES `users`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE `billing_package_items` ADD CONSTRAINT `billing_package_items_billingPackageId_fkey` FOREIGN KEY (`billingPackageId`) REFERENCES `billing_packages`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE `billing_package_items` ADD CONSTRAINT `billing_package_items_menuItemId_fkey` FOREIGN KEY (`menuItemId`) REFERENCES `menu_items`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE `session_package_usages` ADD CONSTRAINT `session_package_usages_billingSessionId_fkey` FOREIGN KEY (`billingSessionId`) REFERENCES `billing_sessions`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE `session_package_usages` ADD CONSTRAINT `session_package_usages_billingPackageId_fkey` FOREIGN KEY (`billingPackageId`) REFERENCES `billing_packages`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
 ALTER TABLE `menu_items` ADD CONSTRAINT `menu_items_changedById_fkey` FOREIGN KEY (`changedById`) REFERENCES `users`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -425,8 +370,3 @@ ALTER TABLE `audit_logs` ADD CONSTRAINT `audit_logs_userId_fkey` FOREIGN KEY (`u
 
 -- Manual migration helper (existing database):
 -- ALTER TABLE `iot_devices` ADD COLUMN `gpioPins` JSON NULL AFTER `deviceToken`;
--- ALTER TABLE `billing_sessions` ADD COLUMN `packageName` VARCHAR(191) NULL AFTER `blinkCommandSent`;
--- ALTER TABLE `billing_sessions` ADD COLUMN `packageOriginalPrice` DECIMAL(12, 2) NULL AFTER `packageName`;
--- CREATE TABLE `billing_packages` (...);
--- CREATE TABLE `billing_package_items` (...);
--- CREATE TABLE `session_package_usages` (...);
