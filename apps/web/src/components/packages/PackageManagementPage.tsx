@@ -130,10 +130,7 @@ export default function PackageManagementPage() {
   const submit = async () => {
     if (!form.name.trim()) return toast.error('Nama paket wajib diisi');
     if ((Number(form.price) || 0) < 0) return toast.error('Harga paket tidak valid');
-    if (form.durationMinutes && form.durationMinutes < 1) return toast.error('Durasi billing tidak valid');
-    if (!form.durationMinutes && form.fnbItems.length === 0) {
-      return toast.error('Isi durasi billing atau minimal 1 item F&B');
-    }
+    if (!form.durationMinutes || form.durationMinutes < 1) return toast.error('Billing (menit) wajib diisi');
     if (form.fnbItems.some((x) => !x.menuItemId)) {
       return toast.error('Semua baris F&B wajib pilih menu');
     }
@@ -194,57 +191,59 @@ export default function PackageManagementPage() {
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between gap-3">
         <h1 className="text-2xl font-bold">Manajemen Paket</h1>
-        <button onClick={openCreate} className="btn-primary">Tambah Paket</button>
       </div>
 
-      <div className="flex flex-col md:flex-row gap-3">
-        <input className="input" placeholder="Cari paket..." value={search} onChange={(e) => setSearch(e.target.value)} />
+      <div className="filter-bar justify-between">
+        <input className="input max-w-md" placeholder="Cari paket..." value={search} onChange={(e) => setSearch(e.target.value)} />
+        <button onClick={openCreate} className="btn-primary">+ Tambah Paket</button>
       </div>
 
-      <div className="card overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-slate-200 text-left">
-              <th className="p-3">Nama Paket</th>
-              <th className="p-3">Durasi Billing</th>
-              <th className="p-3">Harga</th>
-              <th className="p-3">Item F&B</th>
-              <th className="p-3">Status</th>
-              <th className="p-3 text-right">Aksi</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr><td className="p-4 text-slate-500" colSpan={6}>Memuat data...</td></tr>
-            ) : filtered.length === 0 ? (
-              <tr><td className="p-4 text-slate-500" colSpan={6}>Tidak ada paket.</td></tr>
-            ) : filtered.map((pkg) => {
-              const fnbCount = (pkg.items || []).filter((x: any) => x.type === 'MENU_ITEM').length;
-              return (
-                <tr key={pkg.id} className="border-b border-slate-100">
-                  <td className="p-3 font-medium">{pkg.name}</td>
-                  <td className="p-3">{pkg.durationMinutes ? `${pkg.durationMinutes} menit` : '-'}</td>
-                  <td className="p-3">{formatCurrency(pkg.price)}</td>
-                  <td className="p-3">{fnbCount} item</td>
-                  <td className="p-3">
-                    <button
-                      onClick={() => toggleActive(pkg)}
-                      className={`rounded-full px-3 py-1 text-xs font-semibold ${pkg.isActive ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}
-                    >
-                      {pkg.isActive ? 'Aktif' : 'Nonaktif'}
-                    </button>
-                  </td>
-                  <td className="p-3">
-                    <div className="flex justify-end gap-2">
-                      <button className="btn-secondary" onClick={() => openEdit(pkg)}>Edit</button>
-                      <button className="btn-danger" onClick={() => deletePkg(pkg)}>Hapus</button>
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+      <div className="card p-0 overflow-hidden">
+        <div className="table-wrapper">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Nama Paket</th>
+                <th>Durasi Billing</th>
+                <th>Harga</th>
+                <th>Item F&B</th>
+                <th>Status</th>
+                <th>Aksi</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr><td className="text-center py-8 text-slate-500" colSpan={6}>Memuat data...</td></tr>
+              ) : filtered.length === 0 ? (
+                <tr><td className="text-center py-8 text-slate-500" colSpan={6}>Tidak ada paket.</td></tr>
+              ) : filtered.map((pkg) => {
+                const fnbCount = (pkg.items || []).filter((x: any) => x.type === 'MENU_ITEM').length;
+                return (
+                  <tr key={pkg.id}>
+                    <td className="font-medium">{pkg.name}</td>
+                    <td>{pkg.durationMinutes ? `${pkg.durationMinutes} menit` : '-'}</td>
+                    <td>{formatCurrency(pkg.price)}</td>
+                    <td>{fnbCount} item</td>
+                    <td>
+                      <button
+                        onClick={() => toggleActive(pkg)}
+                        className={`badge ${pkg.isActive ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}
+                      >
+                        {pkg.isActive ? 'Aktif' : 'Nonaktif'}
+                      </button>
+                    </td>
+                    <td>
+                      <div className="flex gap-2">
+                        <button className="text-xs px-2 py-1 bg-slate-100 hover:bg-slate-200 rounded" onClick={() => openEdit(pkg)}>Edit</button>
+                        <button className="text-xs px-3 py-1 rounded bg-red-100 text-red-700 hover:bg-red-200" onClick={() => deletePkg(pkg)}>Hapus</button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {showForm && (
@@ -261,8 +260,8 @@ export default function PackageManagementPage() {
                   <input className="input" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} />
                 </div>
                 <div className="col-span-12 md:col-span-3">
-                  <label className="label">Billing (menit)</label>
-                  <input type="number" min={1} className="input" value={form.durationMinutes || ''} onChange={(e) => setForm((p) => ({ ...p, durationMinutes: e.target.value ? Number(e.target.value) : undefined }))} placeholder="Opsional" />
+                  <label className="label">Billing (menit) <span className="text-red-500">*</span></label>
+                  <input type="number" min={1} className="input" value={form.durationMinutes || ''} onChange={(e) => setForm((p) => ({ ...p, durationMinutes: e.target.value ? Number(e.target.value) : undefined }))} />
                 </div>
                 <div className="col-span-12 md:col-span-4">
                   <label className="label">Harga Paket (Rp) <span className="text-red-500">*</span></label>
