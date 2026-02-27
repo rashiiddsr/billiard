@@ -31,8 +31,7 @@ const navByRole: Record<string, NavItem[]> = {
   OWNER: [
     { label: 'Dashboard', href: '/owner/dashboard', icon: <HomeIcon /> },
     { label: 'Billing Meja', href: '/owner/billing', icon: <BilliardIcon /> },
-    { label: 'Laporan Keuangan', href: '/owner/finance', icon: <ChartIcon /> },
-    { label: 'Daftar Transaksi', href: '/owner/transactions', icon: <LogIcon /> },
+    { label: 'Laporan & Transaksi', href: '/owner/finance', icon: <ChartIcon /> },
     { label: 'Histori Owner', href: '/owner/history', icon: <LogIcon /> },
     { label: 'Manajemen User', href: '/owner/users', icon: <UserIcon /> },
     { label: 'Manajemen Meja', href: '/owner/tables', icon: <BilliardIcon /> },

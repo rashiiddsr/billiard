@@ -6,34 +6,20 @@ const prisma = new PrismaClient();
 async function main() {
   console.log('🌱 Seeding database...');
 
-  const ownerHash = await bcrypt.hash('owner123', 12);
+  const bayuHash = await bcrypt.hash('bayu123', 12);
+  const apisHash = await bcrypt.hash('apis123', 12);
   const ownerPin = await bcrypt.hash('123456', 12);
-  const developerHash = await bcrypt.hash('developer123', 12);
-  const managerHash = await bcrypt.hash('manager123', 12);
-  const cashierHash = await bcrypt.hash('cashier123', 12);
 
-  await prisma.user.upsert({
-    where: { email: 'owner@billiard.com' },
-    update: { name: 'Ahmad Owner', phoneNumber: '081234567890', passwordHash: ownerHash, pin: ownerPin, role: Role.OWNER, isActive: true },
-    create: { name: 'Ahmad Owner', email: 'owner@billiard.com', phoneNumber: '081234567890', passwordHash: ownerHash, pin: ownerPin, role: Role.OWNER },
+  const bayuOwner = await prisma.user.upsert({
+    where: { email: 'bayu@billiard.com' },
+    update: { name: 'bayu', phoneNumber: '082388112728', passwordHash: bayuHash, pin: ownerPin, role: Role.OWNER, isActive: true },
+    create: { name: 'bayu', email: 'bayu@billiard.com', phoneNumber: '082388112728', passwordHash: bayuHash, pin: ownerPin, role: Role.OWNER },
   });
 
   await prisma.user.upsert({
-    where: { email: 'developer@billiard.com' },
-    update: { name: 'Danu Developer', phoneNumber: '081234567891', passwordHash: developerHash, role: Role.DEVELOPER, isActive: true },
-    create: { name: 'Danu Developer', email: 'developer@billiard.com', phoneNumber: '081234567891', passwordHash: developerHash, role: Role.DEVELOPER },
-  });
-
-  const manager = await prisma.user.upsert({
-    where: { email: 'manager@billiard.com' },
-    update: { name: 'Budi Manager', phoneNumber: '081234567892', passwordHash: managerHash, role: Role.MANAGER, isActive: true },
-    create: { name: 'Budi Manager', email: 'manager@billiard.com', phoneNumber: '081234567892', passwordHash: managerHash, role: Role.MANAGER },
-  });
-
-  await prisma.user.upsert({
-    where: { email: 'cashier@billiard.com' },
-    update: { name: 'Citra Kasir', phoneNumber: '081234567893', passwordHash: cashierHash, role: Role.CASHIER, isActive: true },
-    create: { name: 'Citra Kasir', email: 'cashier@billiard.com', phoneNumber: '081234567893', passwordHash: cashierHash, role: Role.CASHIER },
+    where: { email: 'apis@billiard.com' },
+    update: { name: 'apis', phoneNumber: '081365657613', passwordHash: apisHash, pin: ownerPin, role: Role.OWNER, isActive: true },
+    create: { name: 'apis', email: 'apis@billiard.com', phoneNumber: '081365657613', passwordHash: apisHash, pin: ownerPin, role: Role.OWNER },
   });
 
   await prisma.companyProfile.upsert({
@@ -101,7 +87,7 @@ async function main() {
     const menuItem = await prisma.menuItem.upsert({
       where: { sku: item.sku },
       update: {},
-      create: { ...item, changedById: manager.id },
+      create: { ...item, changedById: bayuOwner.id },
     });
 
     await prisma.stockFnb.upsert({
@@ -125,10 +111,8 @@ async function main() {
 
   console.log('\n🎉 Seed complete!');
   console.log('\n📋 Default credentials:');
-  console.log('  Owner:     owner@billiard.com     / owner123     (PIN: 123456)');
-  console.log('  Developer: developer@billiard.com / developer123');
-  console.log('  Manager:   manager@billiard.com   / manager123');
-  console.log('  Cashier:   cashier@billiard.com   / cashier123');
+  console.log('  Owner: bayu@billiard.com / bayu123 (No: 082388112728)');
+  console.log('  Owner: apis@billiard.com / apis123 (No: 081365657613)');
 }
 
 main()
