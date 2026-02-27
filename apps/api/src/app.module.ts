@@ -16,7 +16,6 @@ import { StockModule } from './stock/stock.module';
 import { AuditModule } from './audit/audit.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { CompanyModule } from './company/company.module';
-import { PackagesModule } from './packages/packages.module';
 
 @Module({
   imports: [
@@ -40,7 +39,6 @@ import { PackagesModule } from './packages/packages.module';
     AuditModule,
     NotificationsModule,
     CompanyModule,
-    PackagesModule,
   ],
 })
 export class AppModule {}
