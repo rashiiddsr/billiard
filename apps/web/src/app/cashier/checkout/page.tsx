@@ -69,7 +69,12 @@ export default function CheckoutPage() {
   }, [selectedSessionDetail, billingAmt]);
 
   const subtotal = billingAmt + fnbAmt;
-  const total = subtotal;
+  const packageDiscount = (selectedSessionDetail?.packageUsages || []).reduce((sum: number, usage: any) => {
+    const original = Number(usage.originalPrice || 0);
+    const packagePrice = Number(usage.packagePrice || 0);
+    return sum + Math.max(0, original - packagePrice);
+  }, 0);
+  const total = Math.max(0, subtotal - packageDiscount);
   const change = Math.max(0, (parseFloat(amountPaid || '0') || 0) - total);
   const quickCash = Array.from(new Set([
     Math.ceil(total / 1000) * 1000,
@@ -173,6 +178,7 @@ export default function CheckoutPage() {
         <div className="mb-4 space-y-1 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
           <div className="flex justify-between"><span className="text-slate-500">Billiard</span><span>{formatCurrency(billingAmt)}</span></div>
           <div className="flex justify-between"><span className="text-slate-500">F&B</span><span>{formatCurrency(fnbAmt)}</span></div>
+          <div className="flex justify-between"><span className="text-slate-500">Diskon Paket</span><span>-{formatCurrency(packageDiscount)}</span></div>
           {itemizedFnb.length > 0 && (
             <div className="mt-1 border-t border-slate-200 pt-1">
               <p className="font-semibold">Detail Item F&B</p>
