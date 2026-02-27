@@ -31,6 +31,41 @@ export class IotService {
     return IotService.ALLOWED_GPIO_PINS.includes(pin);
   }
 
+  normalizeDeviceGpioPins(gpioPins?: number[]) {
+    if (!gpioPins || gpioPins.length === 0) {
+      return [...IotService.ALLOWED_GPIO_PINS];
+    }
+
+    if (gpioPins.length !== IotService.ALLOWED_GPIO_PINS.length) {
+      throw new BadRequestException('GPIO pin device harus berisi tepat 16 pin');
+    }
+
+    if (gpioPins.some((pin) => !Number.isInteger(pin))) {
+      throw new BadRequestException('GPIO pin device harus berupa angka bulat');
+    }
+
+    const invalidPins = gpioPins.filter((pin) => !this.isAllowedGpioPin(pin));
+    if (invalidPins.length > 0) {
+      throw new BadRequestException('GPIO pin device hanya boleh menggunakan daftar pin standar ESP');
+    }
+
+    if (new Set(gpioPins).size !== gpioPins.length) {
+      throw new BadRequestException('GPIO pin device tidak boleh duplikat');
+    }
+
+    return gpioPins;
+  }
+
+
+  getDeviceGpioPins(gpioPins: unknown) {
+    if (!Array.isArray(gpioPins)) {
+      return [...IotService.ALLOWED_GPIO_PINS];
+    }
+
+    const normalized = gpioPins.map((pin) => Number(pin));
+    return this.normalizeDeviceGpioPins(normalized);
+  }
+
   isAllowedRelayChannel(channel: number) {
     return IotService.ALLOWED_RELAY_CHANNELS.includes(channel);
   }
@@ -175,7 +210,7 @@ export class IotService {
         isActive: device.isActive,
       },
       relayChannels: IotService.ALLOWED_RELAY_CHANNELS,
-      gpioPins: IotService.ALLOWED_GPIO_PINS,
+      gpioPins: this.getDeviceGpioPins(device.gpioPins),
       tables,
       generatedAt: new Date().toISOString(),
     };
@@ -320,6 +355,7 @@ export class IotService {
       data: {
         name,
         deviceToken: tokenHash,
+        gpioPins: [...IotService.ALLOWED_GPIO_PINS],
         isOnline: false,
         isActive: true,
       },
@@ -330,12 +366,12 @@ export class IotService {
       device,
       privateToken: rawToken,
       relayChannels: IotService.ALLOWED_RELAY_CHANNELS,
-      gpioPins: IotService.ALLOWED_GPIO_PINS,
+      gpioPins: this.getDeviceGpioPins(device.gpioPins),
       note: 'Simpan private token ini sekarang. Token tidak bisa dilihat lagi.',
     };
   }
 
-  async updateDevice(deviceId: string, dto: { name?: string; isActive?: boolean }) {
+  async updateDevice(deviceId: string, dto: { name?: string; isActive?: boolean; gpioPins?: number[] }) {
     const device = await this.prisma.iotDevice.findUnique({ where: { id: deviceId } });
     if (!device) throw new NotFoundException('Device not found');
 
@@ -344,11 +380,16 @@ export class IotService {
       if (exists) throw new ConflictException('Nama device sudah dipakai');
     }
 
+    const normalizedGpioPins = dto.gpioPins !== undefined
+      ? this.normalizeDeviceGpioPins(dto.gpioPins)
+      : undefined;
+
     return this.prisma.iotDevice.update({
       where: { id: deviceId },
       data: {
         ...(dto.name !== undefined ? { name: dto.name } : {}),
         ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
+        ...(normalizedGpioPins !== undefined ? { gpioPins: normalizedGpioPins } : {}),
         ...(dto.isActive === false ? { isOnline: false } : {}),
       },
       include: { _count: { select: { tables: true } } },

@@ -11,7 +11,7 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
-import { IsString, IsOptional, IsBoolean } from 'class-validator';
+import { IsString, IsOptional, IsBoolean, IsArray, ArrayMinSize, ArrayMaxSize, IsInt } from 'class-validator';
 import { IotService } from './iot.service';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -32,6 +32,10 @@ class UpdateDeviceDto {
 
   @IsOptional() @IsBoolean()
   isActive?: boolean;
+
+  @IsOptional() @IsArray() @ArrayMinSize(16) @ArrayMaxSize(16)
+  @IsInt({ each: true })
+  gpioPins?: number[];
 }
 
 @ApiTags('IoT')

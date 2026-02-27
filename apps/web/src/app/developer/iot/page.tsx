@@ -4,7 +4,9 @@ import { useEffect, useState } from 'react';
 import { iotApi } from '@/lib/api';
 import toast from 'react-hot-toast';
 
-type DeviceForm = { name: string };
+const DEFAULT_GPIO_PINS = [23, 19, 18, 27, 26, 25, 33, 32, 14, 13, 12, 5, 17, 16, 4, 15];
+
+type DeviceForm = { name: string; gpioPins: number[] };
 
 export default function DeveloperIotPage() {
   const [devices, setDevices] = useState<any[]>([]);
@@ -12,7 +14,7 @@ export default function DeveloperIotPage() {
   const [tokenModal, setTokenModal] = useState<{ title: string; token: string } | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<any>(null);
-  const [form, setForm] = useState<DeviceForm>({ name: '' });
+  const [form, setForm] = useState<DeviceForm>({ name: '', gpioPins: [...DEFAULT_GPIO_PINS] });
 
   const load = async () => {
     setLoading(true);
@@ -29,14 +31,22 @@ export default function DeveloperIotPage() {
 
   const openCreate = () => {
     setEditing(null);
-    setForm({ name: '' });
+    setForm({ name: '', gpioPins: [...DEFAULT_GPIO_PINS] });
     setShowForm(true);
   };
 
   const openEdit = (device: any) => {
     setEditing(device);
-    setForm({ name: device.name });
+    setForm({ name: device.name, gpioPins: [...(device.gpioPins?.length ? device.gpioPins : DEFAULT_GPIO_PINS)] });
     setShowForm(true);
+  };
+
+  const setGpioPin = (channel: number, pin: number) => {
+    setForm((prev) => {
+      const next = [...prev.gpioPins];
+      next[channel] = pin;
+      return { ...prev, gpioPins: next };
+    });
   };
 
   const saveDevice = async () => {
@@ -45,10 +55,15 @@ export default function DeveloperIotPage() {
       return;
     }
 
+    if (new Set(form.gpioPins).size !== form.gpioPins.length) {
+      toast.error('GPIO pin tidak boleh duplikat di dalam satu device');
+      return;
+    }
+
     try {
       if (editing) {
-        await iotApi.updateDevice(editing.id, { name: form.name.trim() });
-        toast.success('Nama device berhasil diperbarui');
+        await iotApi.updateDevice(editing.id, { name: form.name.trim(), gpioPins: form.gpioPins });
+        toast.success('Device berhasil diperbarui');
       } else {
         const result = await iotApi.createDevice(form.name.trim());
         setTokenModal({ title: `Token Device ${result.device.name}`, token: result.privateToken });
@@ -128,12 +143,36 @@ export default function DeveloperIotPage() {
 
       {showForm && (
         <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl border border-slate-200 w-full max-w-lg p-4 space-y-3">
+          <div className="bg-white rounded-xl border border-slate-200 w-full max-w-3xl p-4 space-y-3">
             <h3 className="font-semibold">{editing ? 'Edit Device IoT' : 'Tambah Device IoT'}</h3>
             <div>
               <label className="label">Nama Device <span className="text-red-500">*</span></label>
-              <input className="input" placeholder="Nama device (misal: ESP Lantai 1)" value={form.name} onChange={(e) => setForm({ name: e.target.value })} />
+              <input className="input" placeholder="Nama device (misal: ESP Lantai 1)" value={form.name} onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))} />
             </div>
+
+            {editing && (
+              <div className="space-y-2">
+                <label className="label">Mapping GPIO per Relay Channel (0-15)</label>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-72 overflow-auto rounded border border-slate-200 p-3">
+                  {form.gpioPins.map((pin, channel) => (
+                    <div key={channel} className="flex items-center gap-2">
+                      <span className="w-24 text-sm text-slate-600">Channel {channel}</span>
+                      <select className="input" value={pin} onChange={(e) => setGpioPin(channel, Number(e.target.value))}>
+                        {DEFAULT_GPIO_PINS.map((gpioPin) => {
+                          const usedElsewhere = form.gpioPins.some((selected, idx) => idx !== channel && selected === gpioPin);
+                          return (
+                            <option key={gpioPin} value={gpioPin} disabled={usedElsewhere}>
+                              GPIO {gpioPin}{usedElsewhere ? ' (terpakai)' : ''}
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="flex justify-end gap-2">
               <button className="btn-secondary" onClick={() => setShowForm(false)}>Batal</button>
               <button className="btn-primary" onClick={saveDevice}>Simpan</button>
