@@ -62,14 +62,30 @@ export class PaymentsService {
     let billingAmount = new Decimal(0);
     let fnbAmount = new Decimal(0);
     let taxAmount = new Decimal(0);
+    let discountAmount = new Decimal(0);
+    let discountReason: string | null = null;
 
     // Get billing session charge
     if (dto.billingSessionId) {
       const session = await this.prisma.billingSession.findUnique({
         where: { id: dto.billingSessionId },
+        include: { packageUsages: true },
       });
       if (!session) throw new NotFoundException('Billing session not found');
       billingAmount = new Decimal(session.totalAmount.toString());
+
+      const packageOriginal = session.packageUsages.reduce(
+        (sum, usage) => sum.plus(new Decimal(usage.originalPrice.toString())),
+        new Decimal(0),
+      );
+      const packagePaid = session.packageUsages.reduce(
+        (sum, usage) => sum.plus(new Decimal(usage.packagePrice.toString())),
+        new Decimal(0),
+      );
+      if (packageOriginal.greaterThan(packagePaid)) {
+        discountAmount = packageOriginal.minus(packagePaid).toDecimalPlaces(2);
+        discountReason = 'Diskon paket billing + F&B';
+      }
     }
 
     // Get orders charge
@@ -83,7 +99,7 @@ export class PaymentsService {
     }
 
     const subtotal = billingAmount.plus(fnbAmount);
-    const totalAmount = subtotal.plus(taxAmount);
+    const totalAmount = subtotal.plus(taxAmount).minus(discountAmount);
 
     let payment: any = null;
     for (let i = 0; i < 5; i += 1) {
@@ -97,8 +113,8 @@ export class PaymentsService {
             billingAmount: billingAmount.toFixed(2),
             fnbAmount: fnbAmount.toFixed(2),
             subtotal: subtotal.toFixed(2),
-            discountAmount: '0.00',
-            discountReason: null,
+            discountAmount: discountAmount.toFixed(2),
+            discountReason,
             discountApprovedById: null,
             taxAmount: taxAmount.toFixed(2),
             totalAmount: totalAmount.toFixed(2),
@@ -145,6 +161,7 @@ export class PaymentsService {
         method: payment.method,
         total: totalAmount.toFixed(2),
         discount: '0.00',
+        packageDiscount: discountAmount.toFixed(2),
       },
     });
 
