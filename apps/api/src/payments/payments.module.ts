@@ -62,14 +62,30 @@ export class PaymentsService {
     let billingAmount = new Decimal(0);
     let fnbAmount = new Decimal(0);
     let taxAmount = new Decimal(0);
+    let discountAmount = new Decimal(0);
+    let discountReason: string | null = null;
 
     // Get billing session charge
     if (dto.billingSessionId) {
       const session = await this.prisma.billingSession.findUnique({
         where: { id: dto.billingSessionId },
+        include: { packageUsages: true },
       });
       if (!session) throw new NotFoundException('Billing session not found');
       billingAmount = new Decimal(session.totalAmount.toString());
+
+      const packageOriginal = session.packageUsages.reduce(
+        (sum, usage) => sum.plus(new Decimal(usage.originalPrice.toString())),
+        new Decimal(0),
+      );
+      const packagePaid = session.packageUsages.reduce(
+        (sum, usage) => sum.plus(new Decimal(usage.packagePrice.toString())),
+        new Decimal(0),
+      );
+      if (packageOriginal.greaterThan(packagePaid)) {
+        discountAmount = packageOriginal.minus(packagePaid).toDecimalPlaces(2);
+        discountReason = 'Diskon paket billing + F&B';
+      }
     }
 
     // Get orders charge
@@ -83,7 +99,7 @@ export class PaymentsService {
     }
 
     const subtotal = billingAmount.plus(fnbAmount);
-    const totalAmount = subtotal.plus(taxAmount);
+    const totalAmount = subtotal.plus(taxAmount).minus(discountAmount);
 
     let payment: any = null;
     for (let i = 0; i < 5; i += 1) {
@@ -97,8 +113,8 @@ export class PaymentsService {
             billingAmount: billingAmount.toFixed(2),
             fnbAmount: fnbAmount.toFixed(2),
             subtotal: subtotal.toFixed(2),
-            discountAmount: '0.00',
-            discountReason: null,
+            discountAmount: discountAmount.toFixed(2),
+            discountReason,
             discountApprovedById: null,
             taxAmount: taxAmount.toFixed(2),
             totalAmount: totalAmount.toFixed(2),
@@ -145,6 +161,7 @@ export class PaymentsService {
         method: payment.method,
         total: totalAmount.toFixed(2),
         discount: '0.00',
+        packageDiscount: discountAmount.toFixed(2),
       },
     });
 
@@ -240,7 +257,44 @@ export class PaymentsService {
     });
 
     let billingBreakdown = null;
+    let packageUsages: any[] = [];
+    let receiptFnbItems: any[] = fullPayment.order?.items?.map((item: any) => ({
+      name: item.menuItem.name,
+      sku: item.menuItem.sku,
+      qty: item.quantity,
+      unitPrice: item.unitPrice,
+      subtotal: item.subtotal,
+      notes: item.notes,
+    })) || [];
+
     if (fullPayment.billingSessionId) {
+      packageUsages = await this.prisma.sessionPackageUsage.findMany({
+        where: { billingSessionId: fullPayment.billingSessionId },
+        include: {
+          billingPackage: {
+            include: {
+              items: { include: { menuItem: true } },
+            },
+          },
+        },
+        orderBy: { createdAt: 'asc' },
+      });
+
+      const allOrders = await this.prisma.order.findMany({
+        where: { billingSessionId: fullPayment.billingSessionId, status: { not: 'CANCELLED' } },
+        include: { items: { include: { menuItem: true } } },
+      });
+      receiptFnbItems = allOrders.flatMap((order: any) =>
+        (order.items || []).map((item: any) => ({
+          name: item.menuItem.name,
+          sku: item.menuItem.sku,
+          qty: item.quantity,
+          unitPrice: item.unitPrice,
+          subtotal: item.subtotal,
+          notes: item.notes,
+        })),
+      );
+
       const extensionLogs = await this.prisma.auditLog.findMany({
         where: {
           entity: 'BillingSession',
@@ -281,14 +335,25 @@ export class PaymentsService {
         amount: fullPayment.billingAmount,
         breakdown: billingBreakdown,
       } : null,
-      fnbItems: fullPayment.order?.items?.map((item: any) => ({
-        name: item.menuItem.name,
-        sku: item.menuItem.sku,
-        qty: item.quantity,
-        unitPrice: item.unitPrice,
-        subtotal: item.subtotal,
-        notes: item.notes,
-      })) || [],
+      packageUsages: packageUsages.map((usage) => ({
+        id: usage.id,
+        packageName: usage.packageName,
+        packagePrice: usage.packagePrice,
+        originalPrice: usage.originalPrice,
+        durationMinutes: usage.durationMinutes,
+        billingEquivalent: usage.durationMinutes
+          ? new Decimal(fullPayment.billingSession?.ratePerHour?.toString() || '0').mul(usage.durationMinutes).div(60).toFixed(2)
+          : '0.00',
+        fnbItems: (usage.billingPackage?.items || [])
+          .filter((x: any) => x.type === 'MENU_ITEM')
+          .map((x: any) => ({
+            name: x.menuItem?.name || 'Menu',
+            qty: x.quantity,
+            unitPrice: x.unitPrice,
+            subtotal: new Decimal(x.unitPrice.toString()).mul(x.quantity).toFixed(2),
+          })),
+      })),
+      fnbItems: receiptFnbItems,
       subtotal: fullPayment.subtotal,
       discount: fullPayment.discountAmount,
       discountReason: fullPayment.discountReason,

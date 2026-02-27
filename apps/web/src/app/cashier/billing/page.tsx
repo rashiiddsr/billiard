@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { tablesApi, billingApi, authApi, ordersApi } from '@/lib/api';
+import { tablesApi, billingApi, authApi, ordersApi, packagesApi } from '@/lib/api';
 import { formatCurrency, getRemainingTime, formatTime } from '@/lib/utils';
 import { useAuth } from '@/lib/auth';
 import toast from 'react-hot-toast';
@@ -23,16 +23,22 @@ export default function BillingPage() {
   const [duration, setDuration] = useState(60);
   const [rateType, setRateType] = useState('HOURLY');
   const [extendMinutes, setExtendMinutes] = useState(30);
+  const [extendMode, setExtendMode] = useState<'HOURLY' | 'PACKAGE'>('HOURLY');
   const [targetTableId, setTargetTableId] = useState('');
   const [pin, setPin] = useState('');
   const [reAuthToken, setReAuthToken] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [packages, setPackages] = useState<any[]>([]);
+  const [selectedPackageId, setSelectedPackageId] = useState('');
+
+  const selectedPackage = packages.find((p) => p.id === selectedPackageId);
 
   const fetchData = useCallback(async () => {
     try {
-      const [tablesData, sessionsData] = await Promise.all([tablesApi.list(), billingApi.getActiveSessions()]);
+      const [tablesData, sessionsData, packageData] = await Promise.all([tablesApi.list(), billingApi.getActiveSessions(), packagesApi.active()]);
       setTables(tablesData);
       setActiveSessions(sessionsData);
+      setPackages(packageData || []);
     } catch (e) {
       console.error(e);
     } finally {
@@ -74,6 +80,8 @@ export default function BillingPage() {
     setSelectedTable(table);
     setDuration(60);
     setRateType('HOURLY');
+    setSelectedPackageId('');
+    setExtendMode('HOURLY');
 
     if (isOwner) {
       setPin('');
@@ -101,8 +109,15 @@ export default function BillingPage() {
     try {
       await billingApi.createSession({
         tableId: selectedTable.id,
-        durationMinutes: isOwner ? 525600 : rateType === 'FLEXIBLE' ? 60 : duration,
-        rateType: isOwner ? 'HOURLY' : rateType,
+        durationMinutes: isOwner
+          ? 525600
+          : selectedPackage
+          ? Number(selectedPackage.durationMinutes || 60)
+          : rateType === 'FLEXIBLE'
+          ? 60
+          : duration,
+        rateType: isOwner ? 'HOURLY' : selectedPackage ? 'HOURLY' : rateType,
+        billingPackageId: selectedPackageId || undefined,
         reAuthToken: isOwner ? reAuthToken : undefined,
       });
       toast.success(`Billing dimulai untuk ${selectedTable.name}!`);
@@ -119,7 +134,11 @@ export default function BillingPage() {
   const extendSession = async () => {
     setSubmitting(true);
     try {
-      await billingApi.extendSession(selectedSession.id, extendMinutes);
+      await billingApi.extendSession(
+        selectedSession.id,
+        extendMode === 'PACKAGE' ? 60 : extendMinutes,
+        extendMode === 'PACKAGE' ? selectedPackageId || undefined : undefined,
+      );
       toast.success('Sesi diperpanjang!');
       setModal(null);
       fetchData();
@@ -179,9 +198,15 @@ export default function BillingPage() {
 
   const estimatedCost = () => {
     if (!selectedTable) return 0;
+    if (selectedPackage) return Number(selectedPackage.price || 0);
     const rate = parseFloat(selectedTable.hourlyRate);
     if (rateType === 'FLEXIBLE') return rate;
     return Math.ceil((rate * duration) / 60);
+  };
+
+  const estimatedDuration = () => {
+    if (selectedPackage?.durationMinutes) return Number(selectedPackage.durationMinutes);
+    return duration;
   };
 
 
@@ -316,11 +341,13 @@ export default function BillingPage() {
                   </>
                 ) : (
                   <>
-                    {session.rateType === 'HOURLY' ? (
+                    {['HOURLY', 'PACKAGE'].includes(session.rateType) ? (
                       <button
                         onClick={() => {
                           setSelectedSession(session);
                           setExtendMinutes(60);
+                          setExtendMode('HOURLY');
+                          setSelectedPackageId('');
                           setModal('extend');
                         }}
                         disabled={(session.payments || []).length > 0}
@@ -400,7 +427,32 @@ export default function BillingPage() {
             </div>
           ) : (
             <div className="space-y-4">
-              {rateType === 'HOURLY' && (
+              <div>
+                <label className="label">Pilih Mode Start</label>
+                <div className="flex gap-2">
+                  <button onClick={() => { setSelectedPackageId(''); setRateType('HOURLY'); }} className={`flex-1 rounded-lg py-2 text-sm ${!selectedPackageId ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>
+                    Per Jam
+                  </button>
+                  <button onClick={() => setRateType('FLEXIBLE')} className={`flex-1 rounded-lg py-2 text-sm ${rateType === 'FLEXIBLE' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>
+                    Main Fleksibel
+                  </button>
+                  <button onClick={() => setRateType('HOURLY')} className={`flex-1 rounded-lg py-2 text-sm ${selectedPackageId ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>
+                    Paket
+                  </button>
+                </div>
+              </div>
+
+              {rateType === 'HOURLY' && selectedPackageId && (
+                <div>
+                  <label className="label">Pilih Paket <span className="text-red-500">*</span></label>
+                  <select className="input" value={selectedPackageId} onChange={(e) => setSelectedPackageId(e.target.value)}>
+                    <option value="">Pilih paket</option>
+                    {packages.map((pkg) => <option key={pkg.id} value={pkg.id}>{pkg.name} • {formatCurrency(pkg.price)}</option>)}
+                  </select>
+                </div>
+              )}
+
+              {rateType === 'HOURLY' && !selectedPackageId && (
                 <div>
                   <label className="label">Durasi Paket (menit)</label>
                   <div className="mb-2 grid grid-cols-5 gap-2">
@@ -413,24 +465,22 @@ export default function BillingPage() {
                   <input type="number" className="input" value={duration} onChange={(e) => setDuration(parseInt(e.target.value) || 60)} min={60} step={60} />
                 </div>
               )}
-              <div>
-                <label className="label">Tipe Rate</label>
-                <div className="flex gap-2">
-                  <button onClick={() => setRateType('HOURLY')} className={`flex-1 rounded-lg py-2 text-sm ${rateType === 'HOURLY' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>
-                    Per Jam ({formatCurrency(selectedTable.hourlyRate)})
-                  </button>
-                  <button onClick={() => setRateType('FLEXIBLE')} className={`flex-1 rounded-lg py-2 text-sm ${rateType === 'FLEXIBLE' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>
-                    Main Fleksibel
-                  </button>
+              {rateType === 'HOURLY' && !selectedPackageId && (
+                <div>
+                  <label className="label">Atau pilih paket</label>
+                  <select className="input" value={selectedPackageId} onChange={(e) => setSelectedPackageId(e.target.value)}>
+                    <option value="">Tanpa paket</option>
+                    {packages.map((pkg) => <option key={pkg.id} value={pkg.id}>{pkg.name} • {formatCurrency(pkg.price)}</option>)}
+                  </select>
                 </div>
-              </div>
+              )}
               <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
                 <div className="flex justify-between text-sm">
                   <span className="text-slate-500">Durasi</span>
-                  <span>{rateType === 'FLEXIBLE' ? 'Berjalan sampai dihentikan' : `${duration} menit`}</span>
+                  <span>{rateType === 'FLEXIBLE' ? 'Berjalan sampai dihentikan' : `${estimatedDuration()} menit`}</span>
                 </div>
                 <div className="mt-1 flex justify-between font-bold">
-                  <span className="text-slate-600">{rateType === 'FLEXIBLE' ? 'Tarif per Jam' : 'Estimasi Total'}</span>
+                  <span className="text-slate-600">{rateType === 'FLEXIBLE' ? 'Tarif per Jam' : selectedPackage ? 'Harga Paket' : 'Estimasi Total'}</span>
                   <span className="text-emerald-600">{formatCurrency(estimatedCost())}</span>
                 </div>
               </div>
@@ -448,26 +498,48 @@ export default function BillingPage() {
       {modal === 'extend' && selectedSession && (
         <Modal title={`Perpanjang — ${selectedSession.table?.name}`} onClose={() => setModal(null)}>
           <div className="space-y-4">
-            <div>
-              <label className="label">Tambah Waktu (jam)</label>
-              <div className="mb-2 flex gap-2">
-                {[60, 120, 180, 240].map((d) => (
-                  <button key={d} onClick={() => setExtendMinutes(d)} className={`flex-1 rounded-lg py-1.5 text-xs ${extendMinutes === d ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>
-                    +{d / 60} jam
-                  </button>
-                ))}
-              </div>
-              <input type="number" className="input" value={extendMinutes} onChange={(e) => setExtendMinutes(parseInt(e.target.value) || 60)} min={60} step={60} />
+            <div className="flex gap-2">
+              <button onClick={() => { setExtendMode('HOURLY'); setSelectedPackageId(''); }} className={`flex-1 rounded-lg py-2 text-sm ${extendMode === 'HOURLY' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>
+                Per Jam
+              </button>
+              <button onClick={() => setExtendMode('PACKAGE')} className={`flex-1 rounded-lg py-2 text-sm ${extendMode === 'PACKAGE' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>
+                Paket
+              </button>
             </div>
+
+            {extendMode === 'HOURLY' ? (
+              <div>
+                <label className="label">Tambah Waktu (jam)</label>
+                <div className="mb-2 flex gap-2">
+                  {[60, 120, 180, 240].map((d) => (
+                    <button key={d} onClick={() => setExtendMinutes(d)} className={`flex-1 rounded-lg py-1.5 text-xs ${extendMinutes === d ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>
+                      +{d / 60} jam
+                    </button>
+                  ))}
+                </div>
+                <input type="number" className="input" value={extendMinutes} onChange={(e) => setExtendMinutes(parseInt(e.target.value) || 60)} min={60} step={60} />
+              </div>
+            ) : (
+              <div>
+                <label className="label">Pilih Paket <span className="text-red-500">*</span></label>
+                <select className="input" value={selectedPackageId} onChange={(e) => setSelectedPackageId(e.target.value)}>
+                  <option value="">Pilih paket</option>
+                  {packages.map((pkg) => <option key={pkg.id} value={pkg.id}>{pkg.name} • {formatCurrency(pkg.price)}</option>)}
+                </select>
+              </div>
+            )}
+
             <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
               <div className="flex justify-between">
                 <span className="text-slate-600">Biaya tambahan</span>
-                <span>{formatCurrency(Math.ceil(parseFloat(selectedSession.ratePerHour) * extendMinutes / 60))}</span>
+                <span>{extendMode === 'PACKAGE' && selectedPackageId
+                  ? formatCurrency(Number(packages.find((x) => x.id === selectedPackageId)?.price || 0))
+                  : formatCurrency(Math.ceil(parseFloat(selectedSession.ratePerHour) * extendMinutes / 60))}</span>
               </div>
             </div>
             <div className="flex gap-2">
               <button onClick={() => setModal(null)} className="btn-secondary flex-1">Batal</button>
-              <button onClick={extendSession} className="btn-primary flex-1" disabled={submitting}>
+              <button onClick={extendSession} className="btn-primary flex-1" disabled={submitting || (extendMode === 'PACKAGE' && !selectedPackageId)}>
                 {submitting ? 'Memproses...' : 'Perpanjang'}
               </button>
             </div>
@@ -537,13 +609,15 @@ export default function BillingPage() {
                 {(sessionDetail.orders || []).length === 0 && <p className="text-slate-500">Belum ada pesanan F&B.</p>}
                 <div className="space-y-2">
                   {(sessionDetail.orders || []).map((order: any) => {
-                    const canDelete = order.status === 'DRAFT' && !(sessionDetail.payments || []).some((p: any) => p.status === 'PAID');
+                    const isPackageOrder = String(order.notes || '').startsWith('AUTO_PACKAGE:');
+                    const canDelete = !isPackageOrder && order.status === 'DRAFT' && !(sessionDetail.payments || []).some((p: any) => p.status === 'PAID');
                     return (
                       <div key={order.id} className="rounded border border-slate-200 bg-slate-50 p-2">
                         <div className="flex items-start justify-between gap-2">
                           <div>
                             <p className="text-xs font-semibold">{order.orderNumber} • {formatCurrency(order.total)}</p>
                             <p className="text-xs text-slate-500">{order.notes || 'Tanpa catatan'}</p>
+                            {isPackageOrder && <p className="text-[11px] font-semibold text-blue-600">Item paket (tidak bisa dihapus)</p>}
                           </div>
                           {canDelete && (
                             <button onClick={() => cancelOrderFromSession(order.id)} className="rounded bg-red-100 px-2 py-1 text-xs text-red-600 hover:bg-red-200">

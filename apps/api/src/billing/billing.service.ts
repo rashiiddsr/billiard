@@ -76,14 +76,38 @@ export class BillingService {
       ? new Decimal(0)
       : new Decimal(table.hourlyRate.toString());
 
+    let packageName: string | undefined;
+    let packageOriginalPrice: Decimal | undefined;
+    let packagePrice: Decimal | undefined;
+    if (dto.billingPackageId && !isOwnerLock) {
+      const pkg = await this.prisma.billingPackage.findUnique({
+        where: { id: dto.billingPackageId },
+        include: { items: true },
+      });
+      if (!pkg || !pkg.isActive) throw new BadRequestException('Paket tidak ditemukan atau tidak aktif');
+      if (!pkg.durationMinutes) throw new BadRequestException('Paket harus memiliki durasi billing');
+      dto.durationMinutes = pkg.durationMinutes;
+      packageName = pkg.name;
+      packagePrice = new Decimal(pkg.price.toString());
+      const billingOriginal = new Decimal(table.hourlyRate.toString()).mul(pkg.durationMinutes).div(60);
+      const fnbOriginal = pkg.items
+        .filter((item) => item.type === 'MENU_ITEM')
+        .reduce((sum, item) => sum.plus(new Decimal(item.unitPrice.toString()).mul(item.quantity)), new Decimal(0));
+      packageOriginalPrice = billingOriginal.plus(fnbOriginal);
+    }
+
     const startTime = new Date();
-    const effectiveDuration = isOwnerLock || isFlexible ? 525600 : dto.durationMinutes; // owner/flexible: stop manual
+    const effectiveDuration = isOwnerLock || isFlexible ? 525600 : dto.durationMinutes;
     const endTime = new Date(startTime.getTime() + effectiveDuration * 60 * 1000);
-    const totalAmount = isOwnerLock
+    const totalAmount = dto.billingPackageId && !isOwnerLock
+      ? packagePrice || new Decimal(0)
+      : isOwnerLock
       ? new Decimal(0)
       : isFlexible
       ? new Decimal(0)
       : ratePerHour.mul(effectiveDuration).div(60).toDecimalPlaces(0);
+
+    const appliedRateType = dto.billingPackageId && !isOwnerLock ? 'PACKAGE' : isOwnerLock ? 'OWNER_LOCK' : selectedRateType;
 
     const session = await this.prisma.billingSession.create({
       data: {
@@ -91,9 +115,11 @@ export class BillingService {
         startTime,
         endTime,
         durationMinutes: effectiveDuration,
-        rateType: isOwnerLock ? 'OWNER_LOCK' : selectedRateType,
+        rateType: appliedRateType,
         ratePerHour: ratePerHour.toFixed(2),
         totalAmount: totalAmount.toFixed(2),
+        packageName,
+        packageOriginalPrice: packageOriginalPrice?.toFixed(2),
         createdById: userId,
         approvedById: userRole === Role.OWNER ? userId : undefined,
       },
@@ -108,6 +134,10 @@ export class BillingService {
 
     // Send IoT LIGHT_ON command
     await this.iot.sendCommand(dto.tableId, 'LIGHT_ON');
+
+    if (dto.billingPackageId && !isOwnerLock) {
+      await this.applyPackage(session.id, dto.billingPackageId, userId, session.tableId, dto.durationMinutes);
+    }
 
     await this.audit.log({
       userId,
@@ -137,13 +167,22 @@ export class BillingService {
       throw new ForbiddenException('Sesi main bebas tidak memiliki fitur perpanjang');
     }
 
-    if (dto.additionalMinutes < 60 || dto.additionalMinutes % 60 !== 0) {
+    if (!dto.billingPackageId && (dto.additionalMinutes < 60 || dto.additionalMinutes % 60 !== 0)) {
       throw new BadRequestException('Perpanjangan billing wajib kelipatan 60 menit (minimal 60 menit)');
+    }
+
+    let extensionPackagePrice: Decimal | null = null;
+    if (dto.billingPackageId) {
+      const pkg = await this.prisma.billingPackage.findUnique({ where: { id: dto.billingPackageId } });
+      if (!pkg || !pkg.isActive) throw new BadRequestException('Paket tidak ditemukan atau tidak aktif');
+      if (!pkg.durationMinutes) throw new BadRequestException('Paket perpanjang harus memiliki durasi');
+      dto.additionalMinutes = pkg.durationMinutes;
+      extensionPackagePrice = new Decimal(pkg.price.toString());
     }
 
     const additionalMs = dto.additionalMinutes * 60 * 1000;
     const newEndTime = new Date(session.endTime.getTime() + additionalMs);
-    const additionalAmount = new Decimal(session.ratePerHour.toString())
+    const additionalAmount = extensionPackagePrice || new Decimal(session.ratePerHour.toString())
       .mul(dto.additionalMinutes)
       .div(60)
       .toDecimalPlaces(0);
@@ -176,7 +215,93 @@ export class BillingService {
       },
     });
 
+    if (dto.billingPackageId) {
+      await this.applyPackage(sessionId, dto.billingPackageId, userId, session.tableId, dto.additionalMinutes);
+    }
+
     return updated;
+  }
+
+  private async applyPackage(
+    sessionId: string,
+    billingPackageId: string,
+    userId: string,
+    tableId: string,
+    appliedDurationMinutes?: number,
+  ) {
+    const pkg = await this.prisma.billingPackage.findUnique({
+      where: { id: billingPackageId },
+      include: { items: { include: { menuItem: { include: { stock: true } } } } },
+    });
+    if (!pkg) return;
+
+    const session = await this.prisma.billingSession.findUnique({
+      where: { id: sessionId },
+      select: { ratePerHour: true },
+    });
+    const billingOriginalPrice = session && appliedDurationMinutes
+      ? new Decimal(session.ratePerHour.toString()).mul(appliedDurationMinutes).div(60).toDecimalPlaces(2)
+      : new Decimal(0);
+
+    const packageOriginalPrice = pkg.items.reduce(
+      (sum, item) => sum.plus(new Decimal(item.unitPrice.toString()).mul(item.quantity)),
+      billingOriginalPrice,
+    );
+
+    await this.prisma.sessionPackageUsage.create({
+      data: {
+        billingSessionId: sessionId,
+        billingPackageId: pkg.id,
+        packageName: pkg.name,
+        packagePrice: pkg.price.toFixed(2),
+        originalPrice: packageOriginalPrice.toFixed(2),
+        durationMinutes: pkg.durationMinutes,
+      },
+    });
+
+    const menuItems = pkg.items.filter((item) => item.type === 'MENU_ITEM' && item.menuItemId);
+    if (menuItems.length === 0) return;
+
+    await this.prisma.order.create({
+      data: {
+        orderNumber: `PKG-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
+        billingSessionId: sessionId,
+        tableId,
+        status: 'CONFIRMED',
+        notes: `AUTO_PACKAGE:${pkg.name}`,
+        subtotal: '0.00',
+        taxAmount: '0.00',
+        total: '0.00',
+        createdById: userId,
+        items: {
+          create: menuItems.map((item) => ({
+            menuItemId: item.menuItemId!,
+            quantity: item.quantity,
+            unitPrice: '0.00',
+            subtotal: '0.00',
+            taxAmount: '0.00',
+            notes: `Included in package ${pkg.name}`,
+          })),
+        },
+      },
+    });
+
+    for (const item of menuItems) {
+      if (!item.menuItem?.stock?.trackStock) continue;
+      await this.prisma.stockFnb.update({
+        where: { menuItemId: item.menuItemId! },
+        data: { qtyOnHand: { decrement: item.quantity } },
+      });
+      await this.prisma.stockAdjustment.create({
+        data: {
+          stockFnbId: item.menuItem.stock.id,
+          actionType: 'SALE_DEDUCTION',
+          quantityDelta: -item.quantity,
+          notes: `Paket ${pkg.name}`,
+          performedById: userId,
+        },
+      });
+    }
   }
 
   async stopSession(sessionId: string, userId: string, _userRole: Role) {
@@ -316,6 +441,7 @@ export class BillingService {
           include: { items: true },
         },
         payments: { where: { status: 'PAID' } },
+        packageUsages: true,
       },
       orderBy: { startTime: 'asc' },
     });
@@ -338,6 +464,7 @@ export class BillingService {
           },
         },
         payments: true,
+        packageUsages: true,
       },
     });
     if (!session) throw new NotFoundException('Session not found');
