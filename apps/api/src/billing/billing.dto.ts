@@ -11,6 +11,11 @@ export class CreateBillingSessionDto {
   @Min(60)
   durationMinutes: number;
 
+  @ApiProperty({ required: false, description: 'Billing package id' })
+  @IsOptional()
+  @IsString()
+  billingPackageId?: string;
+
   @ApiProperty({ enum: ['HOURLY', 'FLEXIBLE'] })
   @IsOptional()
   @IsEnum(['HOURLY', 'FLEXIBLE'])
@@ -27,6 +32,11 @@ export class ExtendBillingSessionDto {
   @IsNumber()
   @Min(60)
   additionalMinutes: number;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  billingPackageId?: string;
 }
 
 export class MoveBillingSessionDto {
