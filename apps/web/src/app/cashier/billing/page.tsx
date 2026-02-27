@@ -6,7 +6,7 @@ import { formatCurrency, getRemainingTime, formatTime } from '@/lib/utils';
 import { useAuth } from '@/lib/auth';
 import toast from 'react-hot-toast';
 
-type ModalType = 'start' | 'extend' | 'move' | 'stop' | 'reauth' | 'detail' | null;
+type ModalType = 'start' | 'extend' | 'stop' | 'reauth' | 'detail' | null;
 
 export default function BillingPage() {
   const { isOwner } = useAuth();
@@ -22,8 +22,8 @@ export default function BillingPage() {
 
   const [duration, setDuration] = useState(60);
   const [rateType, setRateType] = useState('HOURLY');
+  const [manualRate, setManualRate] = useState('');
   const [extendMinutes, setExtendMinutes] = useState(30);
-  const [targetTableId, setTargetTableId] = useState('');
   const [pin, setPin] = useState('');
   const [reAuthToken, setReAuthToken] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -74,6 +74,7 @@ export default function BillingPage() {
     setSelectedTable(table);
     setDuration(60);
     setRateType('HOURLY');
+    setManualRate('');
 
     if (isOwner) {
       setPin('');
@@ -101,8 +102,9 @@ export default function BillingPage() {
     try {
       await billingApi.createSession({
         tableId: selectedTable.id,
-        durationMinutes: isOwner ? 525600 : rateType === 'FLEXIBLE' ? 60 : duration,
+        durationMinutes: isOwner ? 525600 : duration,
         rateType: isOwner ? 'HOURLY' : rateType,
+        manualRatePerHour: !isOwner && rateType === 'MANUAL' ? parseFloat(manualRate) : undefined,
         reAuthToken: isOwner ? reAuthToken : undefined,
       });
       toast.success(`Billing dimulai untuk ${selectedTable.name}!`);
@@ -179,46 +181,10 @@ export default function BillingPage() {
 
   const estimatedCost = () => {
     if (!selectedTable) return 0;
-    const rate = parseFloat(selectedTable.hourlyRate);
-    if (rateType === 'FLEXIBLE') return rate;
+    const rate = rateType === 'MANUAL' ? parseFloat(manualRate || '0') : parseFloat(selectedTable.hourlyRate);
     return Math.ceil((rate * duration) / 60);
   };
 
-
-  const availableMoveTables = tables.filter((table) => table.status === 'AVAILABLE' && table.id !== selectedSession?.tableId);
-
-  const canMoveToTable = (session: any, table: any) => {
-    if (!session || !table) return false;
-    if (table.status !== 'AVAILABLE') return false;
-    if (session.rateType === 'OWNER_LOCK' || isOwner) return true;
-    return parseFloat(table.hourlyRate) === parseFloat(session.table?.hourlyRate || '0');
-  };
-
-  const openMoveModal = (session: any) => {
-    setSelectedSession(session);
-    const firstEligible = availableMoveTables.find((table) => canMoveToTable(session, table));
-    setTargetTableId(firstEligible?.id || '');
-    setModal('move');
-  };
-
-  const moveSession = async () => {
-    if (!targetTableId) {
-      toast.error('Pilih meja tujuan terlebih dahulu');
-      return;
-    }
-
-    setSubmitting(true);
-    try {
-      await billingApi.moveSession(selectedSession.id, targetTableId);
-      toast.success(`Meja ${selectedSession.table?.name} dipindahkan`);
-      setModal(null);
-      fetchData();
-    } catch (e: any) {
-      toast.error(e?.response?.data?.message || 'Gagal memindahkan meja');
-    } finally {
-      setSubmitting(false);
-    }
-  };
   const occupiedCount = activeSessions.length;
 
   if (loading) {
@@ -250,7 +216,7 @@ export default function BillingPage() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
         {tables.map((table) => {
           const session = getSessionForTable(table.id);
-          const remaining = session && !['OWNER_LOCK', 'FLEXIBLE'].includes(session.rateType) ? getRemainingTime(session.endTime) : null;
+          const remaining = session && session.rateType !== 'OWNER_LOCK' ? getRemainingTime(session.endTime) : null;
           const isOccupied = !!session;
           const isTesting = table.status === 'MAINTENANCE';
           const device = table.iotDevice;
@@ -274,7 +240,7 @@ export default function BillingPage() {
               {session && (
                 <div className="mb-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
                   {remaining ? <p className={`font-mono text-sm font-bold ${remaining.isWarning ? 'animate-pulse text-red-500' : 'text-emerald-600'}`}>{remaining.text}</p> : <p className="font-mono text-sm font-bold text-slate-500">-</p>}
-                  <p className="mt-1 text-xs text-slate-500">Tagihan sementara: {session.rateType === 'OWNER_LOCK' ? formatCurrency(0) : session.rateType === 'FLEXIBLE' ? `${formatCurrency(session.ratePerHour)}/jam` : formatCurrency(session.totalAmount)}</p>
+                  <p className="mt-1 text-xs text-slate-500">Tagihan sementara: {session.rateType === 'OWNER_LOCK' ? formatCurrency(0) : formatCurrency(session.totalAmount)}</p>
                 </div>
               )}
 
@@ -301,9 +267,6 @@ export default function BillingPage() {
                     <button onClick={() => openDetailModal(session)} className="btn-secondary py-2 text-sm">
                       Lihat Detail
                     </button>
-                    <button onClick={() => openMoveModal(session)} className="btn-secondary py-2 text-sm">
-                      Pindah Meja
-                    </button>
                     <button
                       onClick={() => {
                         setSelectedSession(session);
@@ -316,23 +279,17 @@ export default function BillingPage() {
                   </>
                 ) : (
                   <>
-                    {session.rateType === 'HOURLY' ? (
-                      <button
-                        onClick={() => {
-                          setSelectedSession(session);
-                          setExtendMinutes(60);
-                          setModal('extend');
-                        }}
-                        disabled={(session.payments || []).length > 0}
-                        className="btn-secondary py-2.5 text-sm disabled:cursor-not-allowed disabled:opacity-40"
-                      >
-                        Perpanjang
-                      </button>
-                    ) : (
-                      <button type="button" className="btn-secondary py-2.5 text-sm opacity-50" disabled>
-                        Main Fleksibel
-                      </button>
-                    )}
+                    <button
+                      onClick={() => {
+                        setSelectedSession(session);
+                        setExtendMinutes(60);
+                        setModal('extend');
+                      }}
+                      disabled={(session.payments || []).length > 0}
+                      className="btn-secondary py-2.5 text-sm disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      Perpanjang
+                    </button>
                     <a
                       href={(session.payments || []).length === 0 ? `/cashier/orders?sessionId=${session.id}` : '#'}
                       onClick={(e) => {
@@ -342,9 +299,6 @@ export default function BillingPage() {
                     >
                       Tambah F&B
                     </a>
-                    <button onClick={() => openMoveModal(session)} className="btn-secondary py-2.5 text-sm">
-                      Pindah Meja
-                    </button>
                     <button onClick={() => openDetailModal(session)} className="btn-secondary py-2.5 text-sm">
                       Detail
                     </button>
@@ -400,37 +354,41 @@ export default function BillingPage() {
             </div>
           ) : (
             <div className="space-y-4">
-              {rateType === 'HOURLY' && (
-                <div>
-                  <label className="label">Durasi Paket (menit)</label>
-                  <div className="mb-2 grid grid-cols-5 gap-2">
-                    {[60, 120, 180, 240, 300].map((d) => (
-                      <button key={d} onClick={() => setDuration(d)} className={`rounded-lg py-1.5 text-xs ${duration === d ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>
-                        {d / 60} jam
-                      </button>
-                    ))}
-                  </div>
-                  <input type="number" className="input" value={duration} onChange={(e) => setDuration(parseInt(e.target.value) || 60)} min={60} step={60} />
+              <div>
+                <label className="label">Durasi (menit)</label>
+                <div className="mb-2 grid grid-cols-5 gap-2">
+                  {[60, 120, 180, 240, 300].map((d) => (
+                    <button key={d} onClick={() => setDuration(d)} className={`rounded-lg py-1.5 text-xs ${duration === d ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>
+                      {d / 60} jam
+                    </button>
+                  ))}
                 </div>
-              )}
+                <input type="number" className="input" value={duration} onChange={(e) => setDuration(parseInt(e.target.value) || 60)} min={60} step={60} />
+              </div>
               <div>
                 <label className="label">Tipe Rate</label>
                 <div className="flex gap-2">
                   <button onClick={() => setRateType('HOURLY')} className={`flex-1 rounded-lg py-2 text-sm ${rateType === 'HOURLY' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>
                     Per Jam ({formatCurrency(selectedTable.hourlyRate)})
                   </button>
-                  <button onClick={() => setRateType('FLEXIBLE')} className={`flex-1 rounded-lg py-2 text-sm ${rateType === 'FLEXIBLE' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>
-                    Main Fleksibel
+                  <button onClick={() => setRateType('MANUAL')} className={`flex-1 rounded-lg py-2 text-sm ${rateType === 'MANUAL' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>
+                    Manual
                   </button>
                 </div>
               </div>
+              {rateType === 'MANUAL' && (
+                <div>
+                  <label className="label">Rate per Jam (Rp)</label>
+                  <input type="number" className="input" placeholder="30000" value={manualRate} onChange={(e) => setManualRate(e.target.value)} />
+                </div>
+              )}
               <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
                 <div className="flex justify-between text-sm">
                   <span className="text-slate-500">Durasi</span>
-                  <span>{rateType === 'FLEXIBLE' ? 'Berjalan sampai dihentikan' : `${duration} menit`}</span>
+                  <span>{duration} menit</span>
                 </div>
                 <div className="mt-1 flex justify-between font-bold">
-                  <span className="text-slate-600">{rateType === 'FLEXIBLE' ? 'Tarif per Jam' : 'Estimasi Total'}</span>
+                  <span className="text-slate-600">Estimasi Total</span>
                   <span className="text-emerald-600">{formatCurrency(estimatedCost())}</span>
                 </div>
               </div>
@@ -475,43 +433,10 @@ export default function BillingPage() {
         </Modal>
       )}
 
-
-      {modal === 'move' && selectedSession && (
-        <Modal title={`Pindah Meja — ${selectedSession.table?.name}`} onClose={() => setModal(null)}>
-          <div className="space-y-4">
-            <div>
-              <label className="label">Meja Tujuan (status Siap Pakai)</label>
-              <select className="input" value={targetTableId} onChange={(e) => setTargetTableId(e.target.value)}>
-                <option value="">Pilih meja tujuan</option>
-                {availableMoveTables.map((table) => {
-                  const eligible = canMoveToTable(selectedSession, table);
-                  return (
-                    <option key={table.id} value={table.id} disabled={!eligible}>
-                      {table.name} • {formatCurrency(table.hourlyRate)}/jam {!eligible ? '(Tarif tidak sesuai)' : ''}
-                    </option>
-                  );
-                })}
-              </select>
-              <p className="mt-2 text-xs text-slate-500">
-                {selectedSession.rateType === 'OWNER_LOCK' || isOwner
-                  ? 'Sesi owner bisa dipindahkan ke meja mana saja selama meja tujuan siap pakai.'
-                  : 'Sesi non-owner hanya bisa dipindah ke meja dengan tarif yang sama.'}
-              </p>
-            </div>
-            <div className="flex gap-2">
-              <button onClick={() => setModal(null)} className="btn-secondary flex-1">Batal</button>
-              <button onClick={moveSession} className="btn-primary flex-1" disabled={submitting || !targetTableId}>
-                {submitting ? 'Memindahkan...' : 'Pindahkan'}
-              </button>
-            </div>
-          </div>
-        </Modal>
-      )}
-
       {modal === 'stop' && selectedSession && (
         <Modal title="Hentikan Sesi?" onClose={() => setModal(null)}>
           <p className="mb-4 text-slate-600">
-            Yakin hentikan sesi <span className="font-bold">{selectedSession.table?.name}</span>? {selectedSession.rateType === 'OWNER_LOCK' ? 'Sesi owner akan ditutup dan masuk histori owner.' : selectedSession.rateType === 'FLEXIBLE' ? 'Durasi aktual akan dibulatkan ke atas per jam sesuai tarif meja.' : 'Biaya akan dihitung berdasarkan durasi paket/perpanjangan.'}
+            Yakin hentikan sesi <span className="font-bold">{selectedSession.table?.name}</span>? {selectedSession.rateType === 'OWNER_LOCK' ? 'Sesi owner akan ditutup dan masuk histori owner.' : 'Biaya akan dihitung berdasarkan waktu aktual.'}
           </p>
           <div className="flex gap-2">
             <button onClick={() => setModal(null)} className="btn-secondary flex-1">Batal</button>

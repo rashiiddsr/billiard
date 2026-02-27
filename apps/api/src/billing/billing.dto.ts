@@ -11,10 +11,15 @@ export class CreateBillingSessionDto {
   @Min(60)
   durationMinutes: number;
 
-  @ApiProperty({ enum: ['HOURLY', 'FLEXIBLE'] })
+  @ApiProperty({ enum: ['HOURLY', 'MANUAL'] })
   @IsOptional()
-  @IsEnum(['HOURLY', 'FLEXIBLE'])
+  @IsEnum(['HOURLY', 'MANUAL'])
   rateType?: string;
+
+  @ApiProperty({ description: 'Override rate per hour (MANUAL only)' })
+  @IsOptional()
+  @IsNumber()
+  manualRatePerHour?: number;
 
   @ApiProperty({ description: 'Re-auth token from /auth/re-auth (OWNER only)', required: false })
   @IsOptional()
@@ -27,10 +32,4 @@ export class ExtendBillingSessionDto {
   @IsNumber()
   @Min(60)
   additionalMinutes: number;
-}
-
-export class MoveBillingSessionDto {
-  @ApiProperty({ description: 'Destination table ID (must be AVAILABLE)' })
-  @IsString()
-  targetTableId: string;
 }
