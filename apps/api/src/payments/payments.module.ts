@@ -13,7 +13,7 @@ import { AuditService } from '../common/audit/audit.service';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
-import { AuditAction, PaymentMethod, PaymentStatus } from '@prisma/client';
+import { AuditAction, PaymentMethod, PaymentStatus, VoidRequestStatus } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
 
 export class CreateCheckoutDto {
@@ -26,6 +26,14 @@ export class CreateCheckoutDto {
 
 export class ConfirmPaymentDto {
   @IsNumber() @Min(0) amountPaid: number;
+}
+
+export class RequestVoidDto {
+  @IsOptional() @IsString() reason?: string;
+}
+
+export class RejectVoidDto {
+  @IsOptional() @IsString() reason?: string;
 }
 
 @Injectable()
@@ -337,6 +345,185 @@ export class PaymentsService {
     return updated;
   }
 
+  async requestVoid(paymentId: string, userId: string, reason?: string) {
+    const [payment, requester] = await Promise.all([
+      this.prisma.payment.findUnique({ where: { id: paymentId } }),
+      this.prisma.user.findUnique({ where: { id: userId }, select: { id: true, name: true, role: true } }),
+    ]);
+
+    if (!payment) throw new NotFoundException('Payment not found');
+    if (!requester) throw new NotFoundException('User not found');
+    if (requester.role !== 'MANAGER') throw new BadRequestException('Hanya manager yang dapat mengajukan void');
+    if (payment.status !== 'PAID') throw new BadRequestException('Hanya transaksi lunas yang bisa diajukan void');
+
+    const existingPending = await this.prisma.voidRequest.findFirst({
+      where: { paymentId, status: 'PENDING' },
+      select: { id: true },
+    });
+    if (existingPending) throw new BadRequestException('Transaksi ini sudah memiliki pengajuan void aktif');
+
+    const request = await this.prisma.voidRequest.create({
+      data: {
+        paymentId,
+        requestedById: userId,
+        reason,
+      },
+      include: {
+        payment: { select: { id: true, paymentNumber: true, totalAmount: true } },
+        requestedBy: { select: { id: true, name: true, role: true } },
+      },
+    });
+
+    const owners = await this.prisma.user.findMany({
+      where: { role: 'OWNER', isActive: true },
+      select: { id: true },
+    });
+
+    await Promise.all(owners.map((owner) => this.prisma.notification.create({
+      data: {
+        userId: owner.id,
+        title: 'Permintaan Void Baru',
+        message: `${requester.name} mengajukan void transaksi ${payment.paymentNumber}`,
+        entity: 'VOID_REQUEST',
+        entityId: request.id,
+        metadata: {
+          paymentId,
+          paymentNumber: payment.paymentNumber,
+          requestedById: requester.id,
+          requestedByName: requester.name,
+          reason: reason || null,
+        },
+      },
+    })));
+
+    await this.audit.log({
+      userId,
+      action: AuditAction.UPDATE,
+      entity: 'VoidRequest',
+      entityId: request.id,
+      afterData: {
+        status: 'PENDING',
+        paymentId,
+        paymentNumber: payment.paymentNumber,
+        reason: reason || null,
+      },
+    });
+
+    return request;
+  }
+
+  async listVoidRequests(status?: VoidRequestStatus) {
+    return this.prisma.voidRequest.findMany({
+      where: status ? { status } : undefined,
+      include: {
+        payment: { select: { id: true, paymentNumber: true, totalAmount: true, method: true, status: true } },
+        requestedBy: { select: { id: true, name: true, role: true } },
+        approvedBy: { select: { id: true, name: true, role: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+    });
+  }
+
+  async approveVoidRequest(voidRequestId: string, ownerId: string) {
+    const owner = await this.prisma.user.findUnique({ where: { id: ownerId }, select: { id: true, role: true, name: true } });
+    if (!owner || owner.role !== 'OWNER') throw new BadRequestException('Hanya owner yang dapat menyetujui void');
+
+    const voidRequest = await this.prisma.voidRequest.findUnique({
+      where: { id: voidRequestId },
+      include: { payment: true, requestedBy: { select: { id: true, name: true } } },
+    });
+    if (!voidRequest) throw new NotFoundException('Pengajuan void tidak ditemukan');
+    if (voidRequest.status !== 'PENDING') throw new BadRequestException('Pengajuan void sudah diproses');
+    if (voidRequest.payment.status !== 'PAID') throw new BadRequestException('Status transaksi tidak valid untuk approval void');
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      const updatedPayment = await tx.payment.update({ where: { id: voidRequest.paymentId }, data: { status: 'REFUNDED' } });
+      const updatedRequest = await tx.voidRequest.update({
+        where: { id: voidRequestId },
+        data: { status: 'APPROVED', approvedById: ownerId, decidedAt: new Date() },
+        include: {
+          payment: { select: { id: true, paymentNumber: true, totalAmount: true, status: true } },
+          requestedBy: { select: { id: true, name: true, role: true } },
+          approvedBy: { select: { id: true, name: true, role: true } },
+        },
+      });
+
+      await tx.notification.create({
+        data: {
+          userId: voidRequest.requestedBy.id,
+          title: 'Permintaan Void Disetujui',
+          message: `Void transaksi ${voidRequest.payment.paymentNumber} disetujui oleh ${owner.name}`,
+          entity: 'VOID_REQUEST',
+          entityId: voidRequestId,
+          metadata: { paymentId: voidRequest.paymentId, paymentNumber: voidRequest.payment.paymentNumber, status: 'APPROVED' },
+        },
+      });
+
+      return { updatedPayment, updatedRequest };
+    });
+
+    await this.audit.log({
+      userId: ownerId,
+      action: AuditAction.VOID_PAYMENT,
+      entity: 'Payment',
+      entityId: voidRequest.paymentId,
+      beforeData: { status: 'PAID' },
+      afterData: { status: 'REFUNDED', paymentNumber: voidRequest.payment.paymentNumber, approvedBy: owner.name, voidRequestId },
+    });
+
+    return result.updatedRequest;
+  }
+
+  async rejectVoidRequest(voidRequestId: string, ownerId: string, reason?: string) {
+    const owner = await this.prisma.user.findUnique({ where: { id: ownerId }, select: { id: true, role: true, name: true } });
+    if (!owner || owner.role !== 'OWNER') throw new BadRequestException('Hanya owner yang dapat menolak void');
+
+    const voidRequest = await this.prisma.voidRequest.findUnique({
+      where: { id: voidRequestId },
+      include: { payment: true, requestedBy: { select: { id: true, name: true } } },
+    });
+    if (!voidRequest) throw new NotFoundException('Pengajuan void tidak ditemukan');
+    if (voidRequest.status !== 'PENDING') throw new BadRequestException('Pengajuan void sudah diproses');
+
+    const updatedRequest = await this.prisma.voidRequest.update({
+      where: { id: voidRequestId },
+      data: {
+        status: 'REJECTED',
+        approvedById: ownerId,
+        decidedAt: new Date(),
+        rejectReason: reason || null,
+      },
+      include: {
+        payment: { select: { id: true, paymentNumber: true, totalAmount: true, status: true } },
+        requestedBy: { select: { id: true, name: true, role: true } },
+        approvedBy: { select: { id: true, name: true, role: true } },
+      },
+    });
+
+    await this.prisma.notification.create({
+      data: {
+        userId: voidRequest.requestedBy.id,
+        title: 'Permintaan Void Ditolak',
+        message: `Void transaksi ${voidRequest.payment.paymentNumber} ditolak oleh ${owner.name}`,
+        entity: 'VOID_REQUEST',
+        entityId: voidRequestId,
+        metadata: { paymentId: voidRequest.paymentId, paymentNumber: voidRequest.payment.paymentNumber, status: 'REJECTED', reason: reason || null },
+      },
+    });
+
+    await this.audit.log({
+      userId: ownerId,
+      action: AuditAction.UPDATE,
+      entity: 'VoidRequest',
+      entityId: voidRequestId,
+      beforeData: { status: 'PENDING' },
+      afterData: { status: 'REJECTED', paymentNumber: voidRequest.payment.paymentNumber, reason: reason || null },
+    });
+
+    return updatedRequest;
+  }
+
   async deletePayment(paymentId: string, userId: string) {
     const payment = await this.prisma.payment.findUnique({ where: { id: paymentId } });
     if (!payment) throw new NotFoundException('Payment not found');
@@ -435,6 +622,38 @@ export class PaymentsController {
   @Roles('MANAGER' as any, 'OWNER' as any)
   voidPayment(@Param('id') id: string, @CurrentUser() user: any) {
     return this.paymentsService.voidPayment(id, user.id);
+  }
+
+  @Patch(':id/void-request')
+  @Roles('MANAGER' as any)
+  requestVoid(
+    @Param('id') id: string,
+    @Body() dto: RequestVoidDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.paymentsService.requestVoid(id, user.id, dto.reason);
+  }
+
+  @Get('void-requests/list')
+  @Roles('OWNER' as any, 'MANAGER' as any)
+  listVoidRequests(@Query('status') status?: VoidRequestStatus) {
+    return this.paymentsService.listVoidRequests(status);
+  }
+
+  @Patch('void-requests/:id/approve')
+  @Roles('OWNER' as any)
+  approveVoidRequest(@Param('id') id: string, @CurrentUser() user: any) {
+    return this.paymentsService.approveVoidRequest(id, user.id);
+  }
+
+  @Patch('void-requests/:id/reject')
+  @Roles('OWNER' as any)
+  rejectVoidRequest(
+    @Param('id') id: string,
+    @Body() dto: RejectVoidDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.paymentsService.rejectVoidRequest(id, user.id, dto.reason);
   }
 
   @Patch(':id/print')

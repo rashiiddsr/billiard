@@ -209,7 +209,7 @@ export default function DeveloperTablesPage() {
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Manajemen Meja (Developer)</h1>
+        <h1 className="text-2xl font-bold">Manajemen Meja</h1>
         <button className="btn-primary" onClick={openCreate}>+ Tambah Meja</button>
       </div>
 

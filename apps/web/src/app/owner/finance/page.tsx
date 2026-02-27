@@ -29,6 +29,18 @@ export default function FinancePage() {
   const [loadingExpenses, setLoadingExpenses] = useState(true);
   const [loadingPayments, setLoadingPayments] = useState(true);
   const [detail, setDetail] = useState<any>(null);
+  const [voidRequests, setVoidRequests] = useState<any[]>([]);
+  const [rejectingRequest, setRejectingRequest] = useState<{ id: string; paymentNumber: string } | null>(null);
+  const [rejectReason, setRejectReason] = useState('');
+
+  const fetchVoidRequests = async () => {
+    try {
+      const rows = await paymentsApi.listVoidRequests('PENDING');
+      setVoidRequests(rows || []);
+    } catch {
+      toast.error('Gagal memuat approval void');
+    }
+  };
 
   const fetchReport = async () => {
     setLoadingReport(true);
@@ -81,6 +93,7 @@ export default function FinancePage() {
 
   useEffect(() => {
     usersApi.list().then((u) => setUsers((u || []).filter((x: any) => x.role === 'CASHIER'))).catch(() => undefined);
+    fetchVoidRequests();
   }, []);
 
   useEffect(() => {
@@ -144,6 +157,31 @@ export default function FinancePage() {
     URL.revokeObjectURL(url);
   };
 
+  const approveVoid = async (id: string) => {
+    try {
+      await paymentsApi.approveVoidRequest(id);
+      toast.success('Void disetujui. Transaksi berubah status menjadi void');
+      fetchVoidRequests();
+      fetchReport();
+      fetchPayments();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || 'Gagal menyetujui void');
+    }
+  };
+
+  const rejectVoid = async () => {
+    if (!rejectingRequest) return;
+    try {
+      await paymentsApi.rejectVoidRequest(rejectingRequest.id, rejectReason.trim() || undefined);
+      toast.success('Pengajuan void ditolak');
+      setRejectingRequest(null);
+      setRejectReason('');
+      fetchVoidRequests();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || 'Gagal menolak void');
+    }
+  };
+
   const totalPayments = useMemo(() => payments.reduce((s, x) => s + parseFloat(x.totalAmount || '0'), 0), [payments]);
   const getShortcutClassName = (type: 'today' | 'last7' | 'last30' | 'month') =>
     `text-xs px-3 py-1.5 rounded ${activeShortcut === type ? 'bg-blue-100 text-blue-700 hover:bg-blue-200' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`;
@@ -151,7 +189,7 @@ export default function FinancePage() {
   return (
     <div className="space-y-6 p-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Laporan & Transaksi Owner</h1>
+        <h1 className="text-2xl font-bold">Laporan & Transaksi</h1>
         <button className="btn-secondary" onClick={downloadCsv}>Download CSV</button>
       </div>
 
@@ -168,6 +206,30 @@ export default function FinancePage() {
           <button onClick={() => applyShortcut('last30')} className={getShortcutClassName('last30')}>30 hari terakhir</button>
           <button onClick={() => applyShortcut('month')} className={getShortcutClassName('month')}>Bulan ini</button>
         </div>
+      </div>
+
+      <div className="card space-y-3 border-amber-200 bg-amber-50">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-amber-800">Approval Void</h2>
+          <button className="text-xs text-amber-700 underline" onClick={fetchVoidRequests}>Refresh</button>
+        </div>
+        {voidRequests.length === 0 ? (
+          <p className="text-sm text-amber-800/80">Tidak ada pengajuan void yang menunggu approval.</p>
+        ) : (
+          <div className="space-y-2">
+            {voidRequests.map((request) => (
+              <div key={request.id} className="rounded-lg bg-white p-3 text-sm shadow-sm">
+                <p className="font-semibold">{request.payment?.paymentNumber} • {formatCurrency(request.payment?.totalAmount || 0)}</p>
+                <p className="text-slate-600">Diajukan oleh: {request.requestedBy?.name || '-'}</p>
+                <p className="text-slate-500">Alasan: {request.reason || '-'}</p>
+                <div className="mt-2 flex gap-2">
+                  <button className="rounded bg-emerald-100 px-2 py-1 text-xs text-emerald-700" onClick={() => approveVoid(request.id)}>Setujui Void</button>
+                  <button className="rounded bg-red-100 px-2 py-1 text-xs text-red-700" onClick={() => setRejectingRequest({ id: request.id, paymentNumber: request.payment?.paymentNumber || '-' })}>Tolak</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {report && !loadingReport && (
@@ -211,7 +273,7 @@ export default function FinancePage() {
       </div>
 
       <div className="space-y-2">
-        <h2 className="text-lg font-semibold">Daftar Pengeluaran (Readonly Owner)</h2>
+        <h2 className="text-lg font-semibold">Daftar Pengeluaran</h2>
         <div className="card p-0 overflow-hidden">
           <div className="table-wrapper">
             <table className="data-table">
@@ -225,6 +287,22 @@ export default function FinancePage() {
           </div>
         </div>
       </div>
+
+      {rejectingRequest && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-lg rounded-xl bg-white p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="font-semibold">Tolak Void {rejectingRequest.paymentNumber}</h3>
+              <button onClick={() => setRejectingRequest(null)}>✕</button>
+            </div>
+            <textarea className="input min-h-24 w-full" placeholder="Alasan penolakan (opsional)" value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} />
+            <div className="mt-4 flex justify-end gap-2">
+              <button className="btn-secondary" onClick={() => setRejectingRequest(null)}>Batal</button>
+              <button className="rounded bg-red-600 px-3 py-2 text-sm text-white" onClick={rejectVoid}>Tolak Pengajuan</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {detail && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">

@@ -142,6 +142,11 @@ export const paymentsApi = {
   markPrinted: (id: string) => api.patch(`/payments/${id}/print`).then((r) => r.data),
   getReceipt: (id: string) => api.get(`/payments/${id}/receipt`).then((r) => r.data),
   voidPayment: (id: string) => api.patch(`/payments/${id}/void`).then((r) => r.data),
+  requestVoid: (id: string, reason?: string) => api.patch(`/payments/${id}/void-request`, { reason }).then((r) => r.data),
+  listVoidRequests: (status?: 'PENDING' | 'APPROVED' | 'REJECTED') =>
+    api.get('/payments/void-requests/list', { params: status ? { status } : undefined }).then((r) => r.data),
+  approveVoidRequest: (id: string) => api.patch(`/payments/void-requests/${id}/approve`).then((r) => r.data),
+  rejectVoidRequest: (id: string, reason?: string) => api.patch(`/payments/void-requests/${id}/reject`, { reason }).then((r) => r.data),
   deletePayment: (id: string) => api.patch(`/payments/${id}/delete`).then((r) => r.data),
 };
 

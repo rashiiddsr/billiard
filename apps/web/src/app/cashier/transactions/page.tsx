@@ -78,7 +78,7 @@ export default function CashierTransactionsPage() {
 
   return (
     <div className="space-y-4 p-6">
-      <div className="flex items-center justify-between"><h1 className="text-2xl font-bold">Daftar Transaksi Kasir</h1><p className="text-lg font-bold text-emerald-600">Total: {formatCurrency(total)}</p></div>
+      <div className="flex items-center justify-between"><h1 className="text-2xl font-bold">Daftar Transaksi</h1><p className="text-lg font-bold text-emerald-600">Total: {formatCurrency(total)}</p></div>
 
       <div className="card p-4 space-y-3">
         <div className="grid gap-3 md:grid-cols-[auto_1fr_auto_1fr] md:items-center">

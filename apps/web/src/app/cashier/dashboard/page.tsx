@@ -40,7 +40,7 @@ export default function CashierDashboard() {
     <div className="space-y-6 p-2 md:p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h1 className="text-3xl font-bold">Dashboard Kasir</h1>
+          <h1 className="text-3xl font-bold">Dashboard</h1>
           <p className="text-slate-500">{now.toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
         </div>
         <div className="rounded-2xl bg-blue-600 px-4 py-2 font-mono text-2xl font-bold text-white shadow-lg">
@@ -78,7 +78,7 @@ export default function CashierDashboard() {
         </div>
 
         <div className="card">
-          <h2 className="mb-3 text-lg font-semibold text-amber-600">Notifikasi Kasir</h2>
+          <h2 className="mb-3 text-lg font-semibold text-amber-600">Notifikasi</h2>
           <div className="space-y-2 text-sm">
             {todayPayments.map((p) => (
               <Link key={p.id} href={`/cashier/checkout?paymentId=${p.id}`} className="block rounded-xl bg-amber-50 p-2 hover:bg-amber-100">

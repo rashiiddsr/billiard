@@ -125,7 +125,7 @@ export default function DeveloperIotPage() {
       textarea.select();
       document.execCommand('copy');
       document.body.removeChild(textarea);
-      toast.success('Token berhasil dicopy (fallback)');
+      toast.success('Token berhasil dicopy');
     } catch {
       toast.error('Clipboard tidak tersedia di browser ini');
     }
@@ -135,7 +135,7 @@ export default function DeveloperIotPage() {
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">IoT Configurated (Developer)</h1>
+          <h1 className="text-2xl font-bold">IoT Configurated</h1>
           <p className="text-slate-500">Kelola device ESP gateway, test koneksi, dan generate token private.</p>
         </div>
         <button className="btn-primary" onClick={openCreate}>+ Tambah Device</button>
