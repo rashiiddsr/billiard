@@ -32,6 +32,7 @@ export default function ExpensesPage() {
 
   const [filterStart, setFilterStart] = useState(monthStart);
   const [filterEnd, setFilterEnd] = useState(today);
+  const [activeShortcut, setActiveShortcut] = useState<'today' | 'last7' | 'last30' | 'month' | null>('month');
 
   const fetchExpenses = async () => {
     setLoading(true);
@@ -106,12 +107,14 @@ export default function ExpensesPage() {
     const end = toDateInputValue(now);
 
     if (type === 'today') {
+      setActiveShortcut(type);
       setFilterStart(end);
       setFilterEnd(end);
       return;
     }
 
     if (type === 'last7') {
+      setActiveShortcut(type);
       const start = new Date(now);
       start.setDate(now.getDate() - 6);
       setFilterStart(toDateInputValue(start));
@@ -120,6 +123,7 @@ export default function ExpensesPage() {
     }
 
     if (type === 'last30') {
+      setActiveShortcut(type);
       const start = new Date(now);
       start.setDate(now.getDate() - 29);
       setFilterStart(toDateInputValue(start));
@@ -127,9 +131,13 @@ export default function ExpensesPage() {
       return;
     }
 
+    setActiveShortcut(type);
     setFilterStart(toDateInputValue(new Date(now.getFullYear(), now.getMonth(), 1)));
     setFilterEnd(end);
   };
+
+  const getShortcutClassName = (type: 'today' | 'last7' | 'last30' | 'month') =>
+    `text-xs px-3 py-1.5 rounded ${activeShortcut === type ? 'bg-blue-100 text-blue-700 hover:bg-blue-200' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`;
 
   return (
     <div className="p-6 space-y-6">
@@ -168,15 +176,15 @@ export default function ExpensesPage() {
       <div className="card p-4 space-y-3">
         <div className="grid gap-3 md:grid-cols-[auto_1fr_auto_1fr] md:items-center">
           <label className="text-sm text-slate-600">Rentang Tanggal</label>
-          <input type="date" className="input w-full" value={filterStart} onChange={(e) => setFilterStart(e.target.value)} />
+          <input type="date" className="input w-full" value={filterStart} onChange={(e) => { setActiveShortcut(null); setFilterStart(e.target.value); }} />
           <span className="text-slate-500 text-center">s/d</span>
-          <input type="date" className="input w-full" value={filterEnd} onChange={(e) => setFilterEnd(e.target.value)} />
+          <input type="date" className="input w-full" value={filterEnd} onChange={(e) => { setActiveShortcut(null); setFilterEnd(e.target.value); }} />
         </div>
         <div className="flex flex-wrap gap-2">
-          <button onClick={() => applyShortcut('today')} className="text-xs px-3 py-1.5 rounded bg-slate-100 text-slate-700 hover:bg-slate-200">Hari ini</button>
-          <button onClick={() => applyShortcut('last7')} className="text-xs px-3 py-1.5 rounded bg-slate-100 text-slate-700 hover:bg-slate-200">7 hari terakhir</button>
-          <button onClick={() => applyShortcut('last30')} className="text-xs px-3 py-1.5 rounded bg-slate-100 text-slate-700 hover:bg-slate-200">30 hari terakhir</button>
-          <button onClick={() => applyShortcut('month')} className="text-xs px-3 py-1.5 rounded bg-blue-100 text-blue-700 hover:bg-blue-200">Bulan ini</button>
+          <button onClick={() => applyShortcut('today')} className={getShortcutClassName('today')}>Hari ini</button>
+          <button onClick={() => applyShortcut('last7')} className={getShortcutClassName('last7')}>7 hari terakhir</button>
+          <button onClick={() => applyShortcut('last30')} className={getShortcutClassName('last30')}>30 hari terakhir</button>
+          <button onClick={() => applyShortcut('month')} className={getShortcutClassName('month')}>Bulan ini</button>
         </div>
       </div>
 

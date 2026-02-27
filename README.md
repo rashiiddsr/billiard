@@ -151,9 +151,8 @@ Open http://localhost:3000
 
 | Role | Email | Password | PIN |
 |------|-------|----------|-----|
-| OWNER | owner@billiard.com | owner123 | 123456 |
-| MANAGER | manager@billiard.com | manager123 | - |
-| CASHIER | cashier@billiard.com | cashier123 | - |
+| OWNER | bayu@billiard.com | bayu123 | 123456 |
+| OWNER | apis@billiard.com | apis123 | 123456 |
 
 ---
 

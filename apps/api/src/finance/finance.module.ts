@@ -281,14 +281,14 @@ export class FinanceController {
   }
 
   @Post('expenses')
-  @Roles('OWNER' as any, 'MANAGER' as any)
+  @Roles('MANAGER' as any)
   createExpense(@Body() dto: CreateExpenseDto, @CurrentUser() user: any) {
     return this.financeService.createExpense(dto, user.id);
   }
 
 
   @Patch('expenses/:id')
-  @Roles('OWNER' as any, 'MANAGER' as any)
+  @Roles('MANAGER' as any)
   updateExpense(
     @Param('id') id: string,
     @Body() dto: UpdateExpenseDto,
@@ -299,7 +299,7 @@ export class FinanceController {
 
 
   @Delete('expenses/:id')
-  @Roles('OWNER' as any)
+  @Roles('MANAGER' as any)
   deleteExpense(
     @Param('id') id: string,
     @CurrentUser() user: any,

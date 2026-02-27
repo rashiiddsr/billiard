@@ -12,6 +12,7 @@ function toDateInputValue(date: Date) {
 
 export default function ManagerTransactionsPage() {
   const today = useMemo(() => toDateInputValue(new Date()), []);
+  const [activeShortcut, setActiveShortcut] = useState<'today' | 'last7' | 'last30' | 'month' | null>('today');
   const [startDate, setStartDate] = useState(today);
   const [endDate, setEndDate] = useState(today);
   const [users, setUsers] = useState<any[]>([]);
@@ -37,11 +38,13 @@ export default function ManagerTransactionsPage() {
     const now = new Date();
     const end = toDateInputValue(now);
     if (type === 'today') {
+      setActiveShortcut(type);
       setStartDate(end);
       setEndDate(end);
       return;
     }
     if (type === 'last7') {
+      setActiveShortcut(type);
       const start = new Date(now);
       start.setDate(now.getDate() - 6);
       setStartDate(toDateInputValue(start));
@@ -49,15 +52,20 @@ export default function ManagerTransactionsPage() {
       return;
     }
     if (type === 'last30') {
+      setActiveShortcut(type);
       const start = new Date(now);
       start.setDate(now.getDate() - 29);
       setStartDate(toDateInputValue(start));
       setEndDate(end);
       return;
     }
+    setActiveShortcut(type);
     setStartDate(toDateInputValue(new Date(now.getFullYear(), now.getMonth(), 1)));
     setEndDate(end);
   };
+
+  const getShortcutClassName = (type: 'today' | 'last7' | 'last30' | 'month') =>
+    `rounded px-3 py-1.5 text-xs ${activeShortcut === type ? 'bg-blue-100 text-blue-700 hover:bg-blue-200' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`;
 
   const total = useMemo(() => data.reduce((s, x) => s + parseFloat(x.totalAmount || '0'), 0), [data]);
   const voidPayment = async (id: string) => { await paymentsApi.voidPayment(id); toast.success('Transaksi di-void'); fetchData(); };
@@ -70,15 +78,15 @@ export default function ManagerTransactionsPage() {
       <div className="card space-y-3 p-4">
         <div className="grid gap-3 md:grid-cols-[auto_1fr_auto_1fr] md:items-center">
           <label className="text-sm text-slate-600">Rentang Tanggal</label>
-          <input type="date" className="input w-full" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+          <input type="date" className="input w-full" value={startDate} onChange={(e) => { setActiveShortcut(null); setStartDate(e.target.value); }} />
           <span className="text-center text-slate-500">s/d</span>
-          <input type="date" className="input w-full" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+          <input type="date" className="input w-full" value={endDate} onChange={(e) => { setActiveShortcut(null); setEndDate(e.target.value); }} />
         </div>
         <div className="flex flex-wrap gap-2">
-          <button onClick={() => applyShortcut('today')} className="rounded bg-slate-100 px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-200">Hari ini</button>
-          <button onClick={() => applyShortcut('last7')} className="rounded bg-slate-100 px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-200">7 hari terakhir</button>
-          <button onClick={() => applyShortcut('last30')} className="rounded bg-slate-100 px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-200">30 hari terakhir</button>
-          <button onClick={() => applyShortcut('month')} className="rounded bg-blue-100 px-3 py-1.5 text-xs text-blue-700 hover:bg-blue-200">Bulan ini</button>
+          <button onClick={() => applyShortcut('today')} className={getShortcutClassName('today')}>Hari ini</button>
+          <button onClick={() => applyShortcut('last7')} className={getShortcutClassName('last7')}>7 hari terakhir</button>
+          <button onClick={() => applyShortcut('last30')} className={getShortcutClassName('last30')}>30 hari terakhir</button>
+          <button onClick={() => applyShortcut('month')} className={getShortcutClassName('month')}>Bulan ini</button>
         </div>
         <div>
           <label className="mb-1 block text-sm text-slate-600">Kasir</label>
