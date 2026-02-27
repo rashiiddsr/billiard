@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Delete, Param, Body, UseGuards, Query } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Param, Body, UseGuards, Query } from '@nestjs/common';
 import { Module } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
@@ -47,13 +47,6 @@ export class TablesController {
   @Roles('OWNER' as any, 'DEVELOPER' as any)
   stopTesting(@Param('id') id: string) {
     return this.tablesService.stopTesting(id);
-  }
-
-
-  @Delete(':id')
-  @Roles('DEVELOPER' as any)
-  remove(@Param('id') id: string) {
-    return this.tablesService.remove(id);
   }
 }
 

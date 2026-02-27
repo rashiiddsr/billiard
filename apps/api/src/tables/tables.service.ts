@@ -189,39 +189,6 @@ export class TablesService {
     return this.prisma.table.update({ where: { id }, data: dto });
   }
 
-
-  async remove(id: string) {
-    const table = await this.prisma.table.findUnique({
-      where: { id },
-      include: {
-        billingSessions: {
-          select: { id: true, status: true },
-        },
-      },
-    });
-
-    if (!table) throw new NotFoundException('Table not found');
-
-    const hasActiveBilling = table.billingSessions.some((session) => session.status === SessionStatus.ACTIVE);
-    if (hasActiveBilling || table.status === TableStatus.OCCUPIED) {
-      throw new BadRequestException('Meja tidak bisa dihapus saat billing sedang berjalan');
-    }
-
-    if (table.billingSessions.length > 0) {
-      throw new BadRequestException('Meja tidak bisa dihapus karena sudah memiliki riwayat billing');
-    }
-
-    const testing = this.testingSessions.get(id);
-    if (testing) {
-      clearTimeout(testing.timer);
-      this.testingSessions.delete(id);
-    }
-
-    await this.prisma.table.delete({ where: { id } });
-
-    return { message: 'Meja berhasil dihapus' };
-  }
-
   async startTesting(id: string, actorRole: Role, dto?: TestTableDto) {
     const table = await this.prisma.table.findUnique({
       where: { id },
