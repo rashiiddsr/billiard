@@ -8,6 +8,13 @@ export default function StockPage() {
   const [assets, setAssets] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+
+  const [newAssetName, setNewAssetName] = useState('');
+  const [newAssetCategory, setNewAssetCategory] = useState('');
+  const [newAssetGood, setNewAssetGood] = useState('0');
+  const [newAssetBad, setNewAssetBad] = useState('0');
+  const [newAssetNotes, setNewAssetNotes] = useState('');
 
   const [assetModal, setAssetModal] = useState<any>(null);
   const [assetGood, setAssetGood] = useState('');
@@ -27,6 +34,40 @@ export default function StockPage() {
   };
 
   useEffect(() => { fetchData(); }, []);
+
+  const resetCreateForm = () => {
+    setNewAssetName('');
+    setNewAssetCategory('');
+    setNewAssetGood('0');
+    setNewAssetBad('0');
+    setNewAssetNotes('');
+  };
+
+  const submitCreateAsset = async () => {
+    if (!newAssetName.trim() || !newAssetCategory.trim()) {
+      toast.error('Nama dan kategori aset wajib diisi');
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      await stockApi.createAsset({
+        name: newAssetName.trim(),
+        category: newAssetCategory.trim(),
+        qtyGood: newAssetGood ? parseInt(newAssetGood, 10) : 0,
+        qtyBad: newAssetBad ? parseInt(newAssetBad, 10) : 0,
+        notes: newAssetNotes.trim() || undefined,
+      });
+      toast.success('Aset berhasil ditambahkan');
+      setShowCreateModal(false);
+      resetCreateForm();
+      fetchData();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || 'Gagal menambahkan aset');
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   const submitAssetUpdate = async () => {
     if (!assetGood && !assetBad) { toast.error('Masukkan jumlah'); return; }
@@ -63,7 +104,10 @@ export default function StockPage() {
 
   return (
     <div className="p-6 space-y-6">
-      <h1 className="text-2xl font-bold">Manajemen Aset</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold">Manajemen Aset</h1>
+        <button className="btn-primary" onClick={() => setShowCreateModal(true)}>+ Tambah Aset</button>
+      </div>
 
       <div className="card p-0 overflow-hidden">
         <div className="table-wrapper">
@@ -137,6 +181,47 @@ export default function StockPage() {
                 <button onClick={() => setAssetModal(null)} className="btn-secondary flex-1">Batal</button>
                 <button onClick={submitAssetUpdate} className="btn-primary flex-1" disabled={submitting}>
                   {submitting ? '...' : 'Simpan'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showCreateModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-white border border-slate-200 rounded-xl w-full max-w-md">
+            <div className="flex items-center justify-between p-4 border-b border-slate-200">
+              <h3 className="font-semibold">Tambah Aset Baru</h3>
+              <button onClick={() => { setShowCreateModal(false); resetCreateForm(); }} className="text-slate-500 hover:text-slate-700">✕</button>
+            </div>
+            <div className="p-4 space-y-4">
+              <div>
+                <label className="label">Nama Aset <span className="text-red-500">*</span></label>
+                <input className="input" placeholder="Contoh: Bola Biliar" value={newAssetName} onChange={(e) => setNewAssetName(e.target.value)} />
+              </div>
+              <div>
+                <label className="label">Kategori <span className="text-red-500">*</span></label>
+                <input className="input" placeholder="Contoh: Peralatan Meja" value={newAssetCategory} onChange={(e) => setNewAssetCategory(e.target.value)} />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="label text-green-500">Kondisi Baik</label>
+                  <input type="number" min={0} className="input" value={newAssetGood} onChange={(e) => setNewAssetGood(e.target.value)} />
+                </div>
+                <div>
+                  <label className="label text-red-500">Kondisi Rusak</label>
+                  <input type="number" min={0} className="input" value={newAssetBad} onChange={(e) => setNewAssetBad(e.target.value)} />
+                </div>
+              </div>
+              <div>
+                <label className="label">Catatan</label>
+                <input className="input" placeholder="Opsional" value={newAssetNotes} onChange={(e) => setNewAssetNotes(e.target.value)} />
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => { setShowCreateModal(false); resetCreateForm(); }} className="btn-secondary flex-1">Batal</button>
+                <button onClick={submitCreateAsset} className="btn-primary flex-1" disabled={submitting}>
+                  {submitting ? 'Menyimpan...' : 'Simpan'}
                 </button>
               </div>
             </div>
