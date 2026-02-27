@@ -153,7 +153,6 @@ export default function DeveloperTablesPage() {
 
   const hasActiveBilling = (table: any) => (table.billingSessions || []).length > 0 || table.status === 'OCCUPIED';
   const canEditTable = (table: any) => !hasActiveBilling(table);
-  const canDeleteTable = (table: any) => !hasActiveBilling(table) && !isTesting(table);
   const canStartTesting = (table: any) => table.status === 'AVAILABLE' && !hasActiveBilling(table);
   const isTesting = (table: any) => table.status === 'MAINTENANCE';
 
@@ -204,25 +203,6 @@ export default function DeveloperTablesPage() {
       load(false);
     } catch {
       toast.error('Gagal mengubah status meja');
-    }
-  };
-
-  const deleteTable = async (table: any) => {
-    if (!canDeleteTable(table)) {
-      toast.error('Meja tidak bisa dihapus saat status occupied/testing');
-      return;
-    }
-
-    if (!window.confirm(`Hapus meja ${table.name}?`)) {
-      return;
-    }
-
-    try {
-      await tablesApi.remove(table.id);
-      toast.success(`Meja ${table.name} dihapus`);
-      load(false);
-    } catch (e: any) {
-      toast.error(e?.response?.data?.message || 'Gagal menghapus meja');
     }
   };
 
@@ -352,13 +332,6 @@ export default function DeveloperTablesPage() {
                           Testing
                         </button>
                       )}
-                      <button
-                        className="text-xs px-2 py-1 bg-red-100 text-red-700 rounded hover:bg-red-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                        onClick={() => deleteTable(t)}
-                        disabled={!canDeleteTable(t)}
-                      >
-                        Hapus
-                      </button>
                     </div>
                   </td>
                 </tr>
