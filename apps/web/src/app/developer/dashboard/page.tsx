@@ -22,7 +22,7 @@ export default function DeveloperDashboardPage() {
   return (
     <div className="space-y-6 p-6">
       <div>
-        <h1 className="text-2xl font-bold">Dashboard Developer</h1>
+        <h1 className="text-2xl font-bold">Dashboard</h1>
         <p className="text-slate-500">Ringkasan manajemen meja dan koneksi IoT.</p>
       </div>
       <div className="grid md:grid-cols-3 gap-4">

@@ -32,7 +32,7 @@ const navByRole: Record<string, NavItem[]> = {
     { label: 'Dashboard', href: '/owner/dashboard', icon: <HomeIcon /> },
     { label: 'Billing Meja', href: '/owner/billing', icon: <BilliardIcon /> },
     { label: 'Laporan & Transaksi', href: '/owner/finance', icon: <ChartIcon /> },
-    { label: 'Histori Owner', href: '/owner/history', icon: <LogIcon /> },
+    { label: 'Histori', href: '/owner/history', icon: <LogIcon /> },
     { label: 'Manajemen User', href: '/owner/users', icon: <UserIcon /> },
     { label: 'Manajemen Meja', href: '/owner/tables', icon: <BilliardIcon /> },
     { label: 'Audit Log', href: '/owner/audit', icon: <LogIcon /> },

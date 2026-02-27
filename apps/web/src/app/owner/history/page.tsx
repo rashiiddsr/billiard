@@ -38,7 +38,7 @@ export default function OwnerHistoryPage() {
 
   return (
     <div className="space-y-4 p-6">
-      <h1 className="text-2xl font-bold">Histori Owner</h1>
+      <h1 className="text-2xl font-bold">Histori</h1>
       <div className="card p-0">
         <div className="table-wrapper">
           <table className="data-table">
@@ -68,7 +68,7 @@ export default function OwnerHistoryPage() {
               {sessions.length === 0 && (
                 <tr>
                   <td colSpan={5} className="py-6 text-center text-sm text-slate-500">
-                    Belum ada histori sesi owner.
+                    Belum ada histori sesi.
                   </td>
                 </tr>
               )}
@@ -81,7 +81,7 @@ export default function OwnerHistoryPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
           <div className="w-full max-w-xl rounded-xl border border-slate-200 bg-white shadow-xl">
             <div className="flex items-center justify-between border-b border-slate-200 p-4">
-              <h3 className="font-semibold">Detail Histori Owner — {selected.table?.name}</h3>
+              <h3 className="font-semibold">Detail Histori — {selected.table?.name}</h3>
               <button onClick={() => setSelected(null)} className="text-slate-500 hover:text-slate-700">✕</button>
             </div>
             <div className="space-y-3 p-4 text-sm">

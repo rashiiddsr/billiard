@@ -113,7 +113,7 @@ export default function OwnerTablesPage() {
 
   return (
     <div className="p-6 space-y-6">
-      <h1 className="text-2xl font-bold">Manajemen Meja (Owner)</h1>
+      <h1 className="text-2xl font-bold">Manajemen Meja</h1>
 
       {editingTable && (
         <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">

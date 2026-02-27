@@ -55,6 +55,12 @@ enum PaymentStatus {
   REFUNDED
 }
 
+enum VoidRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 enum PaymentMethod {
   CASH
   QRIS
@@ -112,6 +118,8 @@ model User {
   stockAdjustments  StockAdjustment[]
   menuChanges       MenuItem[]        @relation("MenuChangedBy")
   refreshTokens     RefreshToken[]
+  requestedVoidRequests VoidRequest[] @relation("VoidRequestedBy")
+  approvedVoidRequests  VoidRequest[] @relation("VoidApprovedBy")
 
   @@map("users")
 }
@@ -382,8 +390,29 @@ model Payment {
   
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
+  voidRequests     VoidRequest[]
 
   @@map("payments")
+}
+
+model VoidRequest {
+  id            String            @id @default(cuid())
+  paymentId     String
+  payment       Payment           @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  requestedById String
+  requestedBy   User              @relation("VoidRequestedBy", fields: [requestedById], references: [id])
+  approvedById  String?
+  approvedBy    User?             @relation("VoidApprovedBy", fields: [approvedById], references: [id])
+  reason        String?
+  rejectReason  String?
+  status        VoidRequestStatus @default(PENDING)
+  decidedAt     DateTime?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  @@index([paymentId, status])
+  @@index([status, createdAt])
+  @@map("void_requests")
 }
 
 model Expense {

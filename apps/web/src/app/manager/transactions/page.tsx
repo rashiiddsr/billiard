@@ -19,6 +19,8 @@ export default function ManagerTransactionsPage() {
   const [paidById, setPaidById] = useState('');
   const [data, setData] = useState<any[]>([]);
   const [detail, setDetail] = useState<any>(null);
+  const [voidModal, setVoidModal] = useState<{ paymentId: string; paymentNumber: string } | null>(null);
+  const [voidReason, setVoidReason] = useState('');
 
   const fetchData = async () => {
     try {
@@ -82,13 +84,16 @@ export default function ManagerTransactionsPage() {
     `rounded px-3 py-1.5 text-xs ${activeShortcut === type ? 'bg-blue-100 text-blue-700 hover:bg-blue-200' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`;
 
   const total = useMemo(() => data.reduce((s, x) => s + parseFloat(x.totalAmount || '0'), 0), [data]);
-  const voidPayment = async (id: string) => {
+
+  const submitVoidRequest = async () => {
+    if (!voidModal) return;
     try {
-      await paymentsApi.voidPayment(id);
-      toast.success('Transaksi di-void');
-      fetchData();
-    } catch {
-      toast.error('Gagal melakukan void transaksi');
+      await paymentsApi.requestVoid(voidModal.paymentId, voidReason.trim() || undefined);
+      toast.success('Pengajuan void terkirim ke owner');
+      setVoidModal(null);
+      setVoidReason('');
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || 'Gagal mengajukan void transaksi');
     }
   };
 
@@ -126,7 +131,29 @@ export default function ManagerTransactionsPage() {
         </div>
       </div>
 
-      <div className="card p-0"><div className="table-wrapper"><table className="data-table"><thead><tr><th>ID</th><th>Kasir</th><th>Metode</th><th>Total</th><th>Aksi</th></tr></thead><tbody>{data.map((x) => <tr key={x.id}><td className="font-mono text-xs">{x.paymentNumber}</td><td>{x.paidBy?.name || '-'}</td><td>{x.method}</td><td className="font-semibold">{formatCurrency(x.totalAmount)}</td><td className="space-x-2"><button onClick={() => openDetail(x.id)} className="rounded bg-slate-100 px-2 py-1 text-xs">Detail</button><button onClick={() => voidPayment(x.id)} className="rounded bg-red-100 px-2 py-1 text-xs text-red-600">Void</button></td></tr>)}</tbody></table></div></div>
+      <div className="card p-0"><div className="table-wrapper"><table className="data-table"><thead><tr><th>ID</th><th>Kasir</th><th>Metode</th><th>Total</th><th>Aksi</th></tr></thead><tbody>{data.map((x) => <tr key={x.id}><td className="font-mono text-xs">{x.paymentNumber}</td><td>{x.paidBy?.name || '-'}</td><td>{x.method}</td><td className="font-semibold">{formatCurrency(x.totalAmount)}</td><td className="space-x-2"><button onClick={() => openDetail(x.id)} className="rounded bg-slate-100 px-2 py-1 text-xs">Detail</button><button onClick={() => setVoidModal({ paymentId: x.id, paymentNumber: x.paymentNumber })} className="rounded bg-red-100 px-2 py-1 text-xs text-red-600">Ajukan Void</button></td></tr>)}</tbody></table></div></div>
+
+      {voidModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-lg rounded-xl bg-white p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="font-semibold">Ajukan Void {voidModal.paymentNumber}</h3>
+              <button onClick={() => setVoidModal(null)}>✕</button>
+            </div>
+            <p className="text-sm text-slate-500">Pengajuan void akan dikirim ke owner untuk approval.</p>
+            <textarea
+              className="input mt-3 min-h-24 w-full"
+              placeholder="Alasan void (opsional)"
+              value={voidReason}
+              onChange={(e) => setVoidReason(e.target.value)}
+            />
+            <div className="mt-4 flex justify-end gap-2">
+              <button className="btn-secondary" onClick={() => setVoidModal(null)}>Batal</button>
+              <button className="btn-primary" onClick={submitVoidRequest}>Kirim Pengajuan</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {detail && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">

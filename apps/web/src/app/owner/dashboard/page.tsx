@@ -40,7 +40,7 @@ export default function OwnerDashboard() {
   return (
     <div className="space-y-6 p-2 md:p-4">
       <div>
-        <h1 className="text-3xl font-bold text-slate-800">Dashboard Owner</h1>
+        <h1 className="text-3xl font-bold text-slate-800">Dashboard</h1>
         <p className="text-slate-500">Ringkasan hari ini — {new Date().toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
       </div>
 
