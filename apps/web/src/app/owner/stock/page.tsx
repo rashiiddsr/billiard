@@ -25,8 +25,7 @@ export default function OwnerStockPage() {
   return (
     <div className="p-6 space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Manajemen Aset (Read Only)</h1>
-        <p className="text-sm text-slate-500">Halaman ini hanya menampilkan daftar aset dan kondisi stok terkini.</p>
+        <h1 className="text-2xl font-bold">Manajemen Aset</h1>
       </div>
 
       <div className="card p-0 overflow-hidden">
