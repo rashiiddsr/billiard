@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { tablesApi, billingApi, authApi, ordersApi, packagesApi } from '@/lib/api';
+import { tablesApi, billingApi, authApi, ordersApi } from '@/lib/api';
 import { formatCurrency, getRemainingTime, formatTime } from '@/lib/utils';
 import { useAuth } from '@/lib/auth';
 import toast from 'react-hot-toast';
@@ -27,15 +27,12 @@ export default function BillingPage() {
   const [pin, setPin] = useState('');
   const [reAuthToken, setReAuthToken] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [packages, setPackages] = useState<any[]>([]);
-  const [selectedPackageId, setSelectedPackageId] = useState('');
 
   const fetchData = useCallback(async () => {
     try {
-      const [tablesData, sessionsData, packageData] = await Promise.all([tablesApi.list(), billingApi.getActiveSessions(), packagesApi.active()]);
+      const [tablesData, sessionsData] = await Promise.all([tablesApi.list(), billingApi.getActiveSessions()]);
       setTables(tablesData);
       setActiveSessions(sessionsData);
-      setPackages(packageData || []);
     } catch (e) {
       console.error(e);
     } finally {
@@ -77,7 +74,6 @@ export default function BillingPage() {
     setSelectedTable(table);
     setDuration(60);
     setRateType('HOURLY');
-    setSelectedPackageId('');
 
     if (isOwner) {
       setPin('');
@@ -107,7 +103,6 @@ export default function BillingPage() {
         tableId: selectedTable.id,
         durationMinutes: isOwner ? 525600 : rateType === 'FLEXIBLE' ? 60 : duration,
         rateType: isOwner ? 'HOURLY' : rateType,
-        billingPackageId: selectedPackageId || undefined,
         reAuthToken: isOwner ? reAuthToken : undefined,
       });
       toast.success(`Billing dimulai untuk ${selectedTable.name}!`);
@@ -124,7 +119,7 @@ export default function BillingPage() {
   const extendSession = async () => {
     setSubmitting(true);
     try {
-      await billingApi.extendSession(selectedSession.id, extendMinutes, selectedPackageId || undefined);
+      await billingApi.extendSession(selectedSession.id, extendMinutes);
       toast.success('Sesi diperpanjang!');
       setModal(null);
       fetchData();
@@ -326,7 +321,6 @@ export default function BillingPage() {
                         onClick={() => {
                           setSelectedSession(session);
                           setExtendMinutes(60);
-                          setSelectedPackageId('');
                           setModal('extend');
                         }}
                         disabled={(session.payments || []).length > 0}
@@ -430,15 +424,6 @@ export default function BillingPage() {
                   </button>
                 </div>
               </div>
-              {rateType === 'HOURLY' && (
-                <div>
-                  <label className="label">Atau pilih paket</label>
-                  <select className="input" value={selectedPackageId} onChange={(e) => setSelectedPackageId(e.target.value)}>
-                    <option value="">Tanpa paket</option>
-                    {packages.map((pkg) => <option key={pkg.id} value={pkg.id}>{pkg.name} • {formatCurrency(pkg.price)}</option>)}
-                  </select>
-                </div>
-              )}
               <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
                 <div className="flex justify-between text-sm">
                   <span className="text-slate-500">Durasi</span>
@@ -473,13 +458,6 @@ export default function BillingPage() {
                 ))}
               </div>
               <input type="number" className="input" value={extendMinutes} onChange={(e) => setExtendMinutes(parseInt(e.target.value) || 60)} min={60} step={60} />
-            </div>
-            <div>
-              <label className="label">Perpanjang dengan paket (opsional)</label>
-              <select className="input" value={selectedPackageId} onChange={(e) => setSelectedPackageId(e.target.value)}>
-                <option value="">Tidak pakai paket</option>
-                {packages.map((pkg) => <option key={pkg.id} value={pkg.id}>{pkg.name} • {formatCurrency(pkg.price)}</option>)}
-              </select>
             </div>
             <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
               <div className="flex justify-between">

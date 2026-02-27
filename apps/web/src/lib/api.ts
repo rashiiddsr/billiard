@@ -105,20 +105,12 @@ export const billingApi = {
   getSessions: (params?: any) => api.get('/billing/sessions', { params }).then((r) => r.data),
   getActiveSessions: () => api.get('/billing/sessions/active').then((r) => r.data),
   getSession: (id: string) => api.get(`/billing/sessions/${id}`).then((r) => r.data),
-  extendSession: (id: string, additionalMinutes: number, billingPackageId?: string) =>
-    api.patch(`/billing/sessions/${id}/extend`, { additionalMinutes, billingPackageId }).then((r) => r.data),
+  extendSession: (id: string, additionalMinutes: number) =>
+    api.patch(`/billing/sessions/${id}/extend`, { additionalMinutes }).then((r) => r.data),
   stopSession: (id: string) =>
     api.patch(`/billing/sessions/${id}/stop`).then((r) => r.data),
   moveSession: (id: string, targetTableId: string) =>
     api.patch(`/billing/sessions/${id}/move`, { targetTableId }).then((r) => r.data),
-};
-
-export const packagesApi = {
-  list: () => api.get('/packages').then((r) => r.data),
-  active: () => api.get('/packages/active').then((r) => r.data),
-  create: (data: any) => api.post('/packages', data).then((r) => r.data),
-  update: (id: string, data: any) => api.patch(`/packages/${id}`, data).then((r) => r.data),
-  remove: (id: string) => api.delete(`/packages/${id}`).then((r) => r.data),
 };
 
 // ─── Menu ────────────────────────────────────────────────────────────────────
