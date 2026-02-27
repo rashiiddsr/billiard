@@ -109,8 +109,6 @@ export const billingApi = {
     api.patch(`/billing/sessions/${id}/extend`, { additionalMinutes }).then((r) => r.data),
   stopSession: (id: string) =>
     api.patch(`/billing/sessions/${id}/stop`).then((r) => r.data),
-  moveSession: (id: string, targetTableId: string) =>
-    api.patch(`/billing/sessions/${id}/move`, { targetTableId }).then((r) => r.data),
 };
 
 // ─── Menu ────────────────────────────────────────────────────────────────────

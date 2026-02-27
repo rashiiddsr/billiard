@@ -4,7 +4,7 @@ import {
 import { AuthGuard } from '@nestjs/passport';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { BillingService } from './billing.service';
-import { CreateBillingSessionDto, ExtendBillingSessionDto, MoveBillingSessionDto } from './billing.dto';
+import { CreateBillingSessionDto, ExtendBillingSessionDto } from './billing.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -63,16 +63,6 @@ export class BillingController {
     @CurrentUser() user: any,
   ) {
     return this.billingService.extendSession(id, dto, user.id, user.role);
-  }
-
-  @Patch('sessions/:id/move')
-  @Roles('OWNER' as any, 'CASHIER' as any)
-  moveSession(
-    @Param('id') id: string,
-    @Body() dto: MoveBillingSessionDto,
-    @CurrentUser() user: any,
-  ) {
-    return this.billingService.moveSession(id, dto, user.id, user.role);
   }
 
   @Patch('sessions/:id/stop')
