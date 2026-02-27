@@ -16,8 +16,8 @@ const usedNonces = new Map<string, Date>();
 
 @Injectable()
 export class IotService {
-  // ESP GPIO mapping (16 channel)
-  static readonly ALLOWED_GPIO_PINS = [23, 19, 18, 27, 26, 25, 33, 32, 14, 13, 12, 5, 17, 16, 4, 15];
+  // Default GPIO list for relay channel 0..15. Can be customized per device by developer.
+  static readonly DEFAULT_GPIO_PINS = [23, 19, 18, 27, 26, 25, 33, 32, 14, 13, 12, 5, 17, 16, 4, 15];
   static readonly ALLOWED_RELAY_CHANNELS = Array.from({ length: 16 }, (_, i) => i);
 
   constructor(
@@ -27,26 +27,17 @@ export class IotService {
     setInterval(() => this.cleanupNonces(), 60 * 1000);
   }
 
-  isAllowedGpioPin(pin: number) {
-    return IotService.ALLOWED_GPIO_PINS.includes(pin);
-  }
-
   normalizeDeviceGpioPins(gpioPins?: number[]) {
     if (!gpioPins || gpioPins.length === 0) {
-      return [...IotService.ALLOWED_GPIO_PINS];
+      return [...IotService.DEFAULT_GPIO_PINS];
     }
 
-    if (gpioPins.length !== IotService.ALLOWED_GPIO_PINS.length) {
+    if (gpioPins.length !== IotService.DEFAULT_GPIO_PINS.length) {
       throw new BadRequestException('GPIO pin device harus berisi tepat 16 pin');
     }
 
     if (gpioPins.some((pin) => !Number.isInteger(pin))) {
       throw new BadRequestException('GPIO pin device harus berupa angka bulat');
-    }
-
-    const invalidPins = gpioPins.filter((pin) => !this.isAllowedGpioPin(pin));
-    if (invalidPins.length > 0) {
-      throw new BadRequestException('GPIO pin device hanya boleh menggunakan daftar pin standar ESP');
     }
 
     if (new Set(gpioPins).size !== gpioPins.length) {
@@ -59,7 +50,7 @@ export class IotService {
 
   getDeviceGpioPins(gpioPins: unknown) {
     if (!Array.isArray(gpioPins)) {
-      return [...IotService.ALLOWED_GPIO_PINS];
+      return [...IotService.DEFAULT_GPIO_PINS];
     }
 
     const normalized = gpioPins.map((pin) => Number(pin));
@@ -355,7 +346,7 @@ export class IotService {
       data: {
         name,
         deviceToken: tokenHash,
-        gpioPins: [...IotService.ALLOWED_GPIO_PINS],
+        gpioPins: [...IotService.DEFAULT_GPIO_PINS],
         isOnline: false,
         isActive: true,
       },

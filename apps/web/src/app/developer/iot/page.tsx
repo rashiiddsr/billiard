@@ -152,21 +152,18 @@ export default function DeveloperIotPage() {
 
             {editing && (
               <div className="space-y-2">
-                <label className="label">Mapping GPIO per Relay Channel (0-15)</label>
+                <label className="label">Daftar GPIO Relay (index 0-15)</label>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-72 overflow-auto rounded border border-slate-200 p-3">
                   {form.gpioPins.map((pin, channel) => (
                     <div key={channel} className="flex items-center gap-2">
-                      <span className="w-24 text-sm text-slate-600">Channel {channel}</span>
-                      <select className="input" value={pin} onChange={(e) => setGpioPin(channel, Number(e.target.value))}>
-                        {DEFAULT_GPIO_PINS.map((gpioPin) => {
-                          const usedElsewhere = form.gpioPins.some((selected, idx) => idx !== channel && selected === gpioPin);
-                          return (
-                            <option key={gpioPin} value={gpioPin} disabled={usedElsewhere}>
-                              GPIO {gpioPin}{usedElsewhere ? ' (terpakai)' : ''}
-                            </option>
-                          );
-                        })}
-                      </select>
+                      <span className="w-24 text-sm text-slate-600">Index {channel}</span>
+                      <input
+                        className="input"
+                        type="number"
+                        value={pin}
+                        onChange={(e) => setGpioPin(channel, Number(e.target.value))}
+                        placeholder="Contoh: 23"
+                      />
                     </div>
                   ))}
                 </div>
