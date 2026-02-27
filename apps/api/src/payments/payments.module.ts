@@ -444,7 +444,7 @@ export class PaymentsController {
   }
 
   @Get(':id/receipt')
-  @Roles('OWNER' as any, 'CASHIER' as any)
+  @Roles('OWNER' as any, 'MANAGER' as any, 'CASHIER' as any)
   getReceipt(@Param('id') id: string) {
     return this.paymentsService.getReceiptData(id);
   }

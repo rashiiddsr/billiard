@@ -20,19 +20,33 @@ export default function ManagerTransactionsPage() {
   const [data, setData] = useState<any[]>([]);
   const [detail, setDetail] = useState<any>(null);
 
-  const fetchData = () =>
-    paymentsApi
-      .list({
+  const fetchData = async () => {
+    try {
+      const r = await paymentsApi.list({
         status: 'PAID',
         paidById: paidById || undefined,
         startDate: new Date(`${startDate}T00:00:00`).toISOString(),
         endDate: new Date(`${endDate}T23:59:59`).toISOString(),
         limit: 300,
-      })
-      .then((r) => setData(r.data || []));
+      });
+      setData(r.data || []);
+    } catch {
+      toast.error('Gagal memuat daftar transaksi');
+    }
+  };
 
-  useEffect(() => { fetchData(); }, [startDate, endDate, paidById]);
-  useEffect(() => { usersApi.list().then((u) => setUsers((u || []).filter((x: any) => x.role === 'CASHIER'))); }, []);
+  useEffect(() => {
+    fetchData();
+  }, [startDate, endDate, paidById]);
+
+  useEffect(() => {
+    usersApi
+      .listCashiers()
+      .then((u) => setUsers((u || []).filter((x: any) => x.role === 'CASHIER')))
+      .catch(() => {
+        toast.error('Gagal memuat daftar kasir');
+      });
+  }, []);
 
   const applyShortcut = (type: 'today' | 'last7' | 'last30' | 'month') => {
     const now = new Date();
@@ -68,8 +82,23 @@ export default function ManagerTransactionsPage() {
     `rounded px-3 py-1.5 text-xs ${activeShortcut === type ? 'bg-blue-100 text-blue-700 hover:bg-blue-200' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`;
 
   const total = useMemo(() => data.reduce((s, x) => s + parseFloat(x.totalAmount || '0'), 0), [data]);
-  const voidPayment = async (id: string) => { await paymentsApi.voidPayment(id); toast.success('Transaksi di-void'); fetchData(); };
-  const openDetail = async (id: string) => setDetail(await paymentsApi.getReceipt(id));
+  const voidPayment = async (id: string) => {
+    try {
+      await paymentsApi.voidPayment(id);
+      toast.success('Transaksi di-void');
+      fetchData();
+    } catch {
+      toast.error('Gagal melakukan void transaksi');
+    }
+  };
+
+  const openDetail = async (id: string) => {
+    try {
+      setDetail(await paymentsApi.getReceipt(id));
+    } catch {
+      toast.error('Detail transaksi tidak dapat diakses');
+    }
+  };
 
   return (
     <div className="space-y-4 p-6">

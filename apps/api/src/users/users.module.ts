@@ -70,6 +70,14 @@ export class UsersService {
     });
   }
 
+  async findCashiers() {
+    return this.prisma.user.findMany({
+      where: { role: Role.CASHIER, isActive: true },
+      select: { id: true, name: true, role: true },
+      orderBy: { name: 'asc' },
+    });
+  }
+
   async findOne(id: string) {
     const user = await this.prisma.user.findUnique({
       where: { id },
@@ -296,6 +304,12 @@ export class UsersController {
   @Roles('OWNER' as any)
   findAll() {
     return this.usersService.findAll();
+  }
+
+  @Get('cashiers')
+  @Roles('OWNER' as any, 'MANAGER' as any)
+  findCashiers() {
+    return this.usersService.findCashiers();
   }
 
   @Get(':id')
