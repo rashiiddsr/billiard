@@ -146,12 +146,14 @@ export default function DeveloperTablesPage() {
     }
   };
 
-  const canStartTesting = (table: any) => table.isActive && table.status === 'AVAILABLE' && (table.billingSessions || []).length === 0;
+  const hasActiveBilling = (table: any) => (table.billingSessions || []).length > 0 || table.status === 'OCCUPIED';
+  const canEditTable = (table: any) => !hasActiveBilling(table);
+  const canStartTesting = (table: any) => table.status === 'AVAILABLE' && !hasActiveBilling(table);
   const isTesting = (table: any) => table.status === 'MAINTENANCE';
 
   const openTestingModal = (table: any) => {
     if (!canStartTesting(table)) {
-      toast.error('Testing hanya untuk meja OFF (tidak sedang billing)');
+      toast.error('Testing hanya bisa dilakukan saat meja free (tidak sedang billing)');
       return;
     }
     setTestingTable(table);
@@ -305,7 +307,13 @@ export default function DeveloperTablesPage() {
                   </td>
                   <td>
                     <div className="flex gap-2">
-                      <button className="text-xs px-2 py-1 bg-slate-100 rounded" onClick={() => openEdit(t)}>Edit</button>
+                      <button
+                        className="text-xs px-2 py-1 bg-slate-100 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                        onClick={() => openEdit(t)}
+                        disabled={!canEditTable(t)}
+                      >
+                        Edit
+                      </button>
                       {isTesting(t) ? (
                         <button className="text-xs px-2 py-1 bg-violet-600 text-white rounded hover:bg-violet-700" onClick={() => stopTesting(t)}>
                           Hentikan

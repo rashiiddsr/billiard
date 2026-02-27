@@ -71,12 +71,14 @@ export default function OwnerTablesPage() {
     }
   };
 
-  const canStartTesting = (table: any) => table.isActive && table.status === 'AVAILABLE' && (table.billingSessions || []).length === 0;
+  const hasActiveBilling = (table: any) => (table.billingSessions || []).length > 0 || table.status === 'OCCUPIED';
+  const canEditRate = (table: any) => !hasActiveBilling(table);
+  const canStartTesting = (table: any) => table.status === 'AVAILABLE' && !hasActiveBilling(table);
   const isTesting = (table: any) => table.status === 'MAINTENANCE';
 
   const startTesting = async (table: any) => {
     if (!canStartTesting(table)) {
-      toast.error('Testing hanya bisa untuk meja OFF (tidak sedang billing)');
+      toast.error('Testing hanya bisa saat meja free (tidak sedang billing)');
       return;
     }
 
@@ -166,7 +168,13 @@ export default function OwnerTablesPage() {
                   </td>
                   <td>
                     <div className="flex gap-2">
-                      <button className="text-xs px-2 py-1 bg-amber-100 text-amber-700 rounded hover:bg-amber-200" onClick={() => openEditRate(t)}>Edit Harga</button>
+                      <button
+                        className="text-xs px-2 py-1 bg-amber-100 text-amber-700 rounded hover:bg-amber-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                        onClick={() => openEditRate(t)}
+                        disabled={!canEditRate(t)}
+                      >
+                        Edit Harga
+                      </button>
                       {isTesting(t) ? (
                         <button className="text-xs px-2 py-1 bg-violet-600 text-white rounded hover:bg-violet-700" onClick={() => stopTesting(t)}>
                           Hentikan
