@@ -210,13 +210,11 @@ model BillingSession {
   endTime          DateTime
   actualEndTime    DateTime?
   durationMinutes  Int
-  rateType         String        @default("HOURLY") // HOURLY | FLEXIBLE | OWNER_LOCK | PACKAGE | MANUAL
+  rateType         String        @default("HOURLY") // HOURLY | MANUAL
   ratePerHour      Decimal       @db.Decimal(12, 2)
   totalAmount      Decimal       @db.Decimal(12, 2) @default(0)
   status           SessionStatus @default(ACTIVE)
   blinkCommandSent Boolean       @default(false)
-  packageName     String?
-  packageOriginalPrice Decimal?  @db.Decimal(12, 2)
   
   createdById  String
   createdBy    User    @relation("CreatedBy", fields: [createdById], references: [id])
@@ -228,53 +226,8 @@ model BillingSession {
 
   orders   Order[]
   payments Payment[]
-  packageUsages SessionPackageUsage[]
 
   @@map("billing_sessions")
-}
-
-model BillingPackage {
-  id             String   @id @default(cuid())
-  name           String   @unique
-  durationMinutes Int?
-  price          Decimal  @db.Decimal(12, 2)
-  isActive       Boolean  @default(true)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
-  items BillingPackageItem[]
-  sessionUsages SessionPackageUsage[]
-
-  @@map("billing_packages")
-}
-
-model BillingPackageItem {
-  id               String   @id @default(cuid())
-  billingPackageId String
-  billingPackage   BillingPackage @relation(fields: [billingPackageId], references: [id], onDelete: Cascade)
-  type             String   // BILLING | MENU_ITEM
-  quantity         Int      @default(1)
-  unitPrice        Decimal  @db.Decimal(12, 2)
-  menuItemId       String?
-  menuItem         MenuItem? @relation(fields: [menuItemId], references: [id])
-  createdAt        DateTime @default(now())
-
-  @@map("billing_package_items")
-}
-
-model SessionPackageUsage {
-  id               String   @id @default(cuid())
-  billingSessionId String
-  billingSession   BillingSession @relation(fields: [billingSessionId], references: [id], onDelete: Cascade)
-  billingPackageId String
-  billingPackage   BillingPackage @relation(fields: [billingPackageId], references: [id])
-  packageName      String
-  packagePrice     Decimal  @db.Decimal(12, 2)
-  originalPrice    Decimal  @db.Decimal(12, 2)
-  durationMinutes  Int?
-  createdAt        DateTime @default(now())
-
-  @@map("session_package_usages")
 }
 
 model MenuItem {
@@ -295,7 +248,6 @@ model MenuItem {
   stock     StockFnb?
   orderItems OrderItem[]
   modifiers  Modifier[]
-  packageItems BillingPackageItem[]
 
   @@map("menu_items")
 }
