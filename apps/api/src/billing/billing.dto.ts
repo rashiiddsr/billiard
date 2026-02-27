@@ -6,9 +6,9 @@ export class CreateBillingSessionDto {
   @IsString()
   tableId: string;
 
-  @ApiProperty({ description: 'Duration in minutes (validated by role/rateType in service)', minimum: 1 })
+  @ApiProperty({ description: 'Duration in minutes (must be per-hour / multiple of 60)', minimum: 60 })
   @IsNumber()
-  @Min(1)
+  @Min(60)
   durationMinutes: number;
 
   @ApiProperty({ enum: ['HOURLY', 'MANUAL'] })
@@ -28,8 +28,8 @@ export class CreateBillingSessionDto {
 }
 
 export class ExtendBillingSessionDto {
-  @ApiProperty({ description: 'Additional minutes to extend' })
+  @ApiProperty({ description: 'Additional minutes to extend (must be per-hour / multiple of 60)' })
   @IsNumber()
-  @Min(15)
+  @Min(60)
   additionalMinutes: number;
 }
