@@ -12,7 +12,7 @@ import { PrismaService } from '../common/prisma/prisma.service';
 import { AuditService } from '../common/audit/audit.service';
 import { IotService } from '../iot/iot.service';
 import { AuditAction, Role, SessionStatus, TableStatus } from '@prisma/client';
-import { CreateBillingSessionDto, ExtendBillingSessionDto } from './billing.dto';
+import { CreateBillingSessionDto, ExtendBillingSessionDto, MoveBillingSessionDto } from './billing.dto';
 import { Decimal } from '@prisma/client/runtime/library';
 
 @Injectable()
@@ -69,16 +69,19 @@ export class BillingService {
       throw new BadRequestException('Durasi start billing wajib kelipatan 60 menit (per jam)');
     }
 
+    const selectedRateType = dto.rateType || 'HOURLY';
+    const isFlexible = !isOwnerLock && selectedRateType === 'FLEXIBLE';
+
     const ratePerHour = isOwnerLock
       ? new Decimal(0)
-      : dto.rateType === 'MANUAL' && dto.manualRatePerHour
-      ? new Decimal(dto.manualRatePerHour)
       : new Decimal(table.hourlyRate.toString());
 
     const startTime = new Date();
-    const effectiveDuration = isOwnerLock ? 525600 : dto.durationMinutes; // owner lock: up to 1 year, manual stop only
+    const effectiveDuration = isOwnerLock || isFlexible ? 525600 : dto.durationMinutes; // owner/flexible: stop manual
     const endTime = new Date(startTime.getTime() + effectiveDuration * 60 * 1000);
     const totalAmount = isOwnerLock
+      ? new Decimal(0)
+      : isFlexible
       ? new Decimal(0)
       : ratePerHour.mul(effectiveDuration).div(60).toDecimalPlaces(0);
 
@@ -88,7 +91,7 @@ export class BillingService {
         startTime,
         endTime,
         durationMinutes: effectiveDuration,
-        rateType: isOwnerLock ? 'OWNER_LOCK' : (dto.rateType || 'HOURLY'),
+        rateType: isOwnerLock ? 'OWNER_LOCK' : selectedRateType,
         ratePerHour: ratePerHour.toFixed(2),
         totalAmount: totalAmount.toFixed(2),
         createdById: userId,
@@ -129,6 +132,9 @@ export class BillingService {
     }
     if (session.rateType === 'OWNER_LOCK') {
       throw new ForbiddenException('Sesi owner lock tidak bisa diperpanjang');
+    }
+    if (session.rateType === 'FLEXIBLE') {
+      throw new ForbiddenException('Sesi main bebas tidak memiliki fitur perpanjang');
     }
 
     if (dto.additionalMinutes < 60 || dto.additionalMinutes % 60 !== 0) {
@@ -187,6 +193,8 @@ export class BillingService {
     const actualMinutes = Math.ceil((now.getTime() - session.startTime.getTime()) / 60000);
     const finalAmount = session.rateType === 'OWNER_LOCK'
       ? new Decimal(0)
+      : session.rateType === 'FLEXIBLE'
+      ? new Decimal(session.ratePerHour.toString()).mul(Math.ceil(actualMinutes / 60)).toDecimalPlaces(0)
       : new Decimal(session.totalAmount.toString());
 
     const updated = await this.prisma.billingSession.update({
@@ -219,6 +227,74 @@ export class BillingService {
     });
 
     return updated;
+  }
+
+  async moveSession(sessionId: string, dto: MoveBillingSessionDto, userId: string, userRole: Role) {
+    const session = await this.prisma.billingSession.findUnique({
+      where: { id: sessionId },
+      include: { table: true },
+    });
+
+    if (!session) throw new NotFoundException('Session not found');
+    if (session.status !== SessionStatus.ACTIVE) {
+      throw new BadRequestException('Session is not active');
+    }
+
+    if (session.tableId === dto.targetTableId) {
+      throw new BadRequestException('Meja tujuan sama dengan meja saat ini');
+    }
+
+    const targetTable = await this.prisma.table.findUnique({
+      where: { id: dto.targetTableId },
+      include: { billingSessions: { where: { status: SessionStatus.ACTIVE } } },
+    });
+
+    if (!targetTable) throw new NotFoundException('Target table not found');
+    if (!targetTable.isActive) throw new BadRequestException('Target table is not active');
+    if (targetTable.status !== TableStatus.AVAILABLE) {
+      throw new BadRequestException('Meja tujuan harus berstatus Siap Pakai');
+    }
+    if (targetTable.billingSessions.length > 0) {
+      throw new BadRequestException('Meja tujuan sedang digunakan');
+    }
+
+    const isOwnerLock = session.rateType === 'OWNER_LOCK';
+    if (!isOwnerLock && userRole !== Role.OWNER) {
+      const sourceRate = new Decimal(session.table.hourlyRate.toString());
+      const targetRate = new Decimal(targetTable.hourlyRate.toString());
+      if (!sourceRate.equals(targetRate)) {
+        throw new BadRequestException('Pindah meja hanya bisa ke tarif meja yang sama');
+      }
+    }
+
+    await this.prisma.$transaction([
+      this.prisma.billingSession.update({
+        where: { id: sessionId },
+        data: { tableId: targetTable.id },
+      }),
+      this.prisma.table.update({
+        where: { id: session.tableId },
+        data: { status: TableStatus.AVAILABLE },
+      }),
+      this.prisma.table.update({
+        where: { id: targetTable.id },
+        data: { status: TableStatus.OCCUPIED },
+      }),
+    ]);
+
+    await this.iot.sendCommand(session.tableId, 'LIGHT_OFF');
+    await this.iot.sendCommand(targetTable.id, 'LIGHT_ON');
+
+    await this.audit.log({
+      userId,
+      action: AuditAction.UPDATE,
+      entity: 'BillingSession',
+      entityId: sessionId,
+      beforeData: { tableId: session.tableId, tableName: session.table.name },
+      afterData: { tableId: targetTable.id, tableName: targetTable.name },
+    });
+
+    return this.getSession(sessionId);
   }
 
   async getActiveSessions() {
@@ -347,7 +423,7 @@ export class BillingService {
     const expiredSessions = await this.prisma.billingSession.findMany({
       where: {
         status: SessionStatus.ACTIVE,
-        rateType: { not: 'OWNER_LOCK' },
+        rateType: { notIn: ['OWNER_LOCK', 'FLEXIBLE'] },
         endTime: { lte: now },
       },
     });
@@ -379,7 +455,7 @@ export class BillingService {
     const nearlyExpiredSessions = await this.prisma.billingSession.findMany({
       where: {
         status: SessionStatus.ACTIVE,
-        rateType: { not: 'OWNER_LOCK' },
+        rateType: { notIn: ['OWNER_LOCK', 'FLEXIBLE'] },
         blinkCommandSent: false,
         endTime: { gte: now, lte: fiveMinutesFromNow },
       },
