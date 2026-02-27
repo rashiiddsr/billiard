@@ -8,6 +8,7 @@ async function main() {
 
   const bayuHash = await bcrypt.hash('bayu123', 12);
   const apisHash = await bcrypt.hash('apis123', 12);
+  const developerHash = await bcrypt.hash('developer123', 12);
   const ownerPin = await bcrypt.hash('123456', 12);
 
   const bayuOwner = await prisma.user.upsert({
@@ -20,6 +21,26 @@ async function main() {
     where: { email: 'apis@billiard.com' },
     update: { name: 'apis', phoneNumber: '081365657613', passwordHash: apisHash, pin: ownerPin, role: Role.OWNER, isActive: true },
     create: { name: 'apis', email: 'apis@billiard.com', phoneNumber: '081365657613', passwordHash: apisHash, pin: ownerPin, role: Role.OWNER },
+  });
+
+  await prisma.user.upsert({
+    where: { email: 'developer.royal@billiard.com' },
+    update: {
+      name: 'developer royal',
+      phoneNumber: '081200000000',
+      passwordHash: developerHash,
+      role: Role.DEVELOPER,
+      isActive: true,
+      pin: null,
+    },
+    create: {
+      name: 'developer royal',
+      email: 'developer.royal@billiard.com',
+      phoneNumber: '081200000000',
+      passwordHash: developerHash,
+      role: Role.DEVELOPER,
+      pin: null,
+    },
   });
 
   await prisma.companyProfile.upsert({
@@ -113,6 +134,7 @@ async function main() {
   console.log('\n📋 Default credentials:');
   console.log('  Owner: bayu@billiard.com / bayu123 (No: 082388112728)');
   console.log('  Owner: apis@billiard.com / apis123 (No: 081365657613)');
+  console.log('  Developer: developer.royal@billiard.com / developer123 (No: 081200000000)');
 }
 
 main()

@@ -61,15 +61,12 @@ export class BillingService {
     await this.iot.assertTableReadyForBilling(dto.tableId);
 
     const isOwnerLock = userRole === Role.OWNER;
-    const isCashierManual = userRole === Role.CASHIER && dto.rateType === 'MANUAL';
-    const minimumDurationMinutes = isCashierManual ? 10 : 30;
+    if (!isOwnerLock && dto.durationMinutes < 60) {
+      throw new BadRequestException('Durasi billing minimal 60 menit');
+    }
 
-    if (!isOwnerLock && dto.durationMinutes < minimumDurationMinutes) {
-      throw new BadRequestException(
-        isCashierManual
-          ? 'Billing manual oleh kasir minimal 10 menit'
-          : 'Durasi billing minimal 30 menit',
-      );
+    if (!isOwnerLock && dto.durationMinutes % 60 !== 0) {
+      throw new BadRequestException('Durasi start billing wajib kelipatan 60 menit (per jam)');
     }
 
     const ratePerHour = isOwnerLock
@@ -120,7 +117,7 @@ export class BillingService {
     return session;
   }
 
-  async extendSession(sessionId: string, dto: ExtendBillingSessionDto, userId: string, userRole: Role) {
+  async extendSession(sessionId: string, dto: ExtendBillingSessionDto, userId: string, _userRole: Role) {
     const session = await this.prisma.billingSession.findUnique({
       where: { id: sessionId },
       include: { table: true },
@@ -133,8 +130,9 @@ export class BillingService {
     if (session.rateType === 'OWNER_LOCK') {
       throw new ForbiddenException('Sesi owner lock tidak bisa diperpanjang');
     }
-    if (session.rateType === 'OWNER_LOCK' && userRole !== Role.OWNER) {
-      throw new ForbiddenException('Kasir tidak dapat memodifikasi sesi owner');
+
+    if (dto.additionalMinutes < 60 || dto.additionalMinutes % 60 !== 0) {
+      throw new BadRequestException('Perpanjangan billing wajib kelipatan 60 menit (minimal 60 menit)');
     }
 
     const additionalMs = dto.additionalMinutes * 60 * 1000;
@@ -175,7 +173,7 @@ export class BillingService {
     return updated;
   }
 
-  async stopSession(sessionId: string, userId: string, userRole: Role) {
+  async stopSession(sessionId: string, userId: string, _userRole: Role) {
     const session = await this.prisma.billingSession.findUnique({
       where: { id: sessionId },
       include: { table: true, payments: { where: { status: 'PAID' } } },
@@ -185,10 +183,6 @@ export class BillingService {
     if (session.status !== SessionStatus.ACTIVE) {
       throw new BadRequestException('Session is not active');
     }
-    if (session.rateType === 'OWNER_LOCK' && userRole !== Role.OWNER) {
-      throw new ForbiddenException('Kasir tidak dapat menghentikan sesi owner');
-    }
-
     const now = new Date();
     const actualMinutes = Math.ceil((now.getTime() - session.startTime.getTime()) / 60000);
     const finalAmount = session.rateType === 'OWNER_LOCK'

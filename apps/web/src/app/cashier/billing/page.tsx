@@ -267,13 +267,22 @@ export default function BillingPage() {
                     <button onClick={() => openDetailModal(session)} className="btn-secondary py-2 text-sm">
                       Lihat Detail
                     </button>
+                    <button
+                      onClick={() => {
+                        setSelectedSession(session);
+                        setModal('stop');
+                      }}
+                      className="btn-danger col-span-2 py-2.5 text-sm"
+                    >
+                      Hentikan
+                    </button>
                   </>
                 ) : (
                   <>
                     <button
                       onClick={() => {
                         setSelectedSession(session);
-                        setExtendMinutes(30);
+                        setExtendMinutes(60);
                         setModal('extend');
                       }}
                       disabled={(session.payments || []).length > 0}
@@ -348,13 +357,13 @@ export default function BillingPage() {
               <div>
                 <label className="label">Durasi (menit)</label>
                 <div className="mb-2 grid grid-cols-5 gap-2">
-                  {[30, 60, 90, 120, 180].map((d) => (
+                  {[60, 120, 180, 240, 300].map((d) => (
                     <button key={d} onClick={() => setDuration(d)} className={`rounded-lg py-1.5 text-xs ${duration === d ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>
-                      {d}m
+                      {d / 60} jam
                     </button>
                   ))}
                 </div>
-                <input type="number" className="input" value={duration} onChange={(e) => setDuration(parseInt(e.target.value) || 60)} min={30} step={15} />
+                <input type="number" className="input" value={duration} onChange={(e) => setDuration(parseInt(e.target.value) || 60)} min={60} step={60} />
               </div>
               <div>
                 <label className="label">Tipe Rate</label>
@@ -398,15 +407,15 @@ export default function BillingPage() {
         <Modal title={`Perpanjang — ${selectedSession.table?.name}`} onClose={() => setModal(null)}>
           <div className="space-y-4">
             <div>
-              <label className="label">Tambah Waktu (menit)</label>
+              <label className="label">Tambah Waktu (jam)</label>
               <div className="mb-2 flex gap-2">
-                {[15, 30, 60, 90].map((d) => (
+                {[60, 120, 180, 240].map((d) => (
                   <button key={d} onClick={() => setExtendMinutes(d)} className={`flex-1 rounded-lg py-1.5 text-xs ${extendMinutes === d ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>
-                    +{d}m
+                    +{d / 60} jam
                   </button>
                 ))}
               </div>
-              <input type="number" className="input" value={extendMinutes} onChange={(e) => setExtendMinutes(parseInt(e.target.value) || 30)} min={15} step={15} />
+              <input type="number" className="input" value={extendMinutes} onChange={(e) => setExtendMinutes(parseInt(e.target.value) || 60)} min={60} step={60} />
             </div>
             <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
               <div className="flex justify-between">
