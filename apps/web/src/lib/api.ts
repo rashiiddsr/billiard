@@ -94,6 +94,7 @@ export const tablesApi = {
   get: (id: string) => api.get(`/tables/${id}`).then((r) => r.data),
   create: (data: any) => api.post('/tables', data).then((r) => r.data),
   update: (id: string, data: any) => api.patch(`/tables/${id}`, data).then((r) => r.data),
+  remove: (id: string) => api.delete(`/tables/${id}`).then((r) => r.data),
   testing: (id: string, durationMinutes?: number) =>
     api.post(`/tables/${id}/testing`, durationMinutes ? { durationMinutes } : {}).then((r) => r.data),
   stopTesting: (id: string) => api.post(`/tables/${id}/testing/stop`).then((r) => r.data),
