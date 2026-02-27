@@ -60,6 +60,7 @@ CREATE TABLE `tables` (
 CREATE TABLE `iot_devices` (
     `id` VARCHAR(191) NOT NULL,
     `deviceToken` VARCHAR(191) NOT NULL,
+    `gpioPins` JSON NULL,
     `isActive` BOOLEAN NOT NULL DEFAULT true,
     `lastSeen` DATETIME(3) NULL,
     `signalStrength` INTEGER NULL,
@@ -365,3 +366,7 @@ ALTER TABLE `expenses` ADD CONSTRAINT `expenses_createdById_fkey` FOREIGN KEY (`
 
 -- AddForeignKey
 ALTER TABLE `audit_logs` ADD CONSTRAINT `audit_logs_userId_fkey` FOREIGN KEY (`userId`) REFERENCES `users`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
+
+
+-- Manual migration helper (existing database):
+-- ALTER TABLE `iot_devices` ADD COLUMN `gpioPins` JSON NULL AFTER `deviceToken`;

@@ -5,7 +5,7 @@ import { iotApi, tablesApi } from '@/lib/api';
 import { formatCurrency } from '@/lib/utils';
 import toast from 'react-hot-toast';
 
-const GPIO_OPTIONS = [23, 19, 18, 27, 26, 25, 33, 32, 14, 13, 12, 5, 17, 16, 4, 15];
+const DEFAULT_GPIO_OPTIONS = [23, 19, 18, 27, 26, 25, 33, 32, 14, 13, 12, 5, 17, 16, 4, 15];
 const RELAY_CHANNEL_OPTIONS = Array.from({ length: 16 }, (_, i) => i);
 
 const formatRemaining = (seconds: number) => {
@@ -27,6 +27,11 @@ export default function DeveloperTablesPage() {
   const [testingSubmitting, setTestingSubmitting] = useState(false);
 
   const deviceMap = useMemo(() => Object.fromEntries(devices.map((d) => [d.id, d])), [devices]);
+
+  const getDeviceGpioOptions = (iotDeviceId: string) => {
+    const pins = deviceMap[iotDeviceId]?.gpioPins;
+    return Array.isArray(pins) && pins.length > 0 ? pins : DEFAULT_GPIO_OPTIONS;
+  };
 
   const load = async (showLoading = false) => {
     if (showLoading) setLoading(true);
@@ -91,7 +96,7 @@ export default function DeveloperTablesPage() {
 
     const firstDeviceId = availableDevices[0].id;
     const firstRelay = RELAY_CHANNEL_OPTIONS.find((ch) => !usedByDevice.usedRelay[firstDeviceId]?.has(ch));
-    const firstGpio = GPIO_OPTIONS.find((pin) => !usedByDevice.usedGpio[firstDeviceId]?.has(pin));
+    const firstGpio = getDeviceGpioOptions(firstDeviceId).find((pin: number) => !usedByDevice.usedGpio[firstDeviceId]?.has(pin));
 
     setEditing(null);
     setForm({ name: '', iotDeviceId: firstDeviceId, relayChannel: firstRelay ?? '', gpioPin: firstGpio ?? '', hourlyRate: '' });
@@ -112,7 +117,7 @@ export default function DeveloperTablesPage() {
 
   const onChangeDevice = (iotDeviceId: string) => {
     const nextRelay = RELAY_CHANNEL_OPTIONS.find((ch) => !usedByDevice.usedRelay[iotDeviceId]?.has(ch));
-    const nextGpio = GPIO_OPTIONS.find((pin) => !usedByDevice.usedGpio[iotDeviceId]?.has(pin));
+    const nextGpio = getDeviceGpioOptions(iotDeviceId).find((pin: number) => !usedByDevice.usedGpio[iotDeviceId]?.has(pin));
     setForm({ ...form, iotDeviceId, relayChannel: nextRelay ?? '', gpioPin: nextGpio ?? '' });
   };
 
@@ -240,7 +245,7 @@ export default function DeveloperTablesPage() {
             <div>
               <label className="label">GPIO Pin <span className="text-red-500">*</span></label>
               <select className="input" value={form.gpioPin} onChange={(e) => setForm({ ...form, gpioPin: Number(e.target.value) })}>
-                {GPIO_OPTIONS.map((pin) => (
+                {getDeviceGpioOptions(form.iotDeviceId).map((pin: number) => (
                   <option key={pin} value={pin} disabled={!!usedByDevice.usedGpio[form.iotDeviceId]?.has(pin)}>
                     {pin}{usedByDevice.usedGpio[form.iotDeviceId]?.has(pin) ? ' (terpakai)' : ''}
                   </option>

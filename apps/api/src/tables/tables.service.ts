@@ -71,12 +71,13 @@ export class TablesService {
       throw new BadRequestException('Relay channel tidak valid untuk ESP (gunakan channel 0-15)');
     }
 
-    if (!this.iotService.isAllowedGpioPin(gpioPin)) {
-      throw new BadRequestException('GPIO pin tidak valid untuk ESP (gunakan daftar pin standar)');
-    }
-
     const device = await this.prisma.iotDevice.findUnique({ where: { id: iotDeviceId } });
     if (!device) throw new BadRequestException('Device IoT tidak ditemukan');
+
+    const devicePins = this.iotService.getDeviceGpioPins(device.gpioPins);
+    if (!devicePins.includes(gpioPin)) {
+      throw new BadRequestException('GPIO pin tidak valid untuk device ESP ini');
+    }
 
     const [existingRelay, existingGpio] = await Promise.all([
       this.prisma.table.findFirst({
