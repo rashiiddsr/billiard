@@ -27,48 +27,14 @@ const escapeHtml = (value: string) =>
 export function printReceiptHtml(receiptHtml: string) {
   const win = window.open('', '_blank', 'width=320,height=760');
   if (!win) return false;
-
-  let hasPrinted = false;
-  const closeWindow = () => {
-    if (!win.closed) win.close();
-  };
-  const runPrint = () => {
-    if (hasPrinted) return;
-    hasPrinted = true;
-    win.focus();
-    win.print();
-    win.addEventListener('afterprint', closeWindow, { once: true });
-    window.setTimeout(closeWindow, 1500);
-  };
-
-  win.addEventListener('load', () => {
-    const images = Array.from(win.document.images);
-    if (images.length === 0) {
-      runPrint();
-      return;
-    }
-
-    Promise.all(
-      images.map(
-        (img) =>
-          new Promise<void>((resolve) => {
-            if (img.complete) {
-              resolve();
-              return;
-            }
-            img.addEventListener('load', () => resolve(), { once: true });
-            img.addEventListener('error', () => resolve(), { once: true });
-          }),
-      ),
-    ).then(runPrint);
-  });
-
   win.document.open();
   win.document.write(receiptHtml);
   win.document.close();
-
-  window.setTimeout(runPrint, 1200);
-
+  win.focus();
+  win.onload = () => {
+    win.print();
+    win.close();
+  };
   return true;
 }
 
