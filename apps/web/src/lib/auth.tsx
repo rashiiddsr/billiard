@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import Cookies from 'js-cookie';
-import { authApi } from './api';
+import { authApi, refreshAuthSession } from './api';
 
 export interface User {
   id: string;
@@ -55,7 +55,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       const token = Cookies.get('accessToken');
-      if (token) {
+      const refreshToken = Cookies.get('refreshToken');
+
+      if (!token && refreshToken) {
+        try {
+          await refreshAuthSession();
+        } catch {
+          // tetap lanjut, kemungkinan refresh token memang sudah tidak valid
+        }
+      }
+
+      if (Cookies.get('accessToken')) {
         try {
           const me = await authApi.me();
           if (mounted) {
@@ -106,16 +116,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!user) return;
 
-    const interval = setInterval(async () => {
+    const keepSessionAlive = async () => {
       try {
+        await refreshAuthSession();
         const me = await authApi.me();
         setAndPersistUser(me);
       } catch {
         // hindari logout tiba-tiba saat network bermasalah
       }
-    }, 5 * 60 * 1000);
+    };
 
-    return () => clearInterval(interval);
+    const interval = setInterval(keepSessionAlive, 10 * 60 * 1000);
+    const visibilityListener = () => {
+      if (document.visibilityState === 'visible') {
+        void keepSessionAlive();
+      }
+    };
+
+    document.addEventListener('visibilitychange', visibilityListener);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', visibilityListener);
+    };
   }, [user, setAndPersistUser]);
 
   return (

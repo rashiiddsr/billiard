@@ -1,13 +1,16 @@
 'use client';
 
+import Cookies from 'js-cookie';
+
 type QzSecurity = {
   setCertificatePromise: (fn: (resolve: (value?: string) => void, reject: (reason?: unknown) => void) => void) => void;
   setSignaturePromise: (fn: (toSign: string) => (resolve: (value?: string) => void, reject: (reason?: unknown) => void) => void) => void;
+  setSignatureAlgorithm?: (algorithm: string) => void;
 };
 
 type QzWebsocket = {
   isActive: () => boolean;
-  connect: (opts?: { retries?: number; delay?: number }) => Promise<void>;
+  connect: (opts?: { retries?: number; delay?: number; host?: string | string[]; secure?: boolean }) => Promise<void>;
 };
 
 type QzConfigs = {
@@ -60,6 +63,68 @@ const getQzScriptUrl = () => process.env.NEXT_PUBLIC_QZ_SCRIPT_URL?.trim() || 'h
 const getQzPrinterName = () => process.env.NEXT_PUBLIC_QZ_PRINTER?.trim() || '';
 const isQzEnabled = () => process.env.NEXT_PUBLIC_QZ_TRAY_ENABLED === 'true';
 
+const getQzCertificate = () => process.env.NEXT_PUBLIC_QZ_CERTIFICATE?.trim() || '';
+const getQzCertificateEndpoint = () => process.env.NEXT_PUBLIC_QZ_CERTIFICATE_ENDPOINT?.trim() || `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1'}/print/qz/certificate`;
+const getQzSignEndpoint = () => process.env.NEXT_PUBLIC_QZ_SIGN_ENDPOINT?.trim() || `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1'}/print/qz/sign`;
+const getQzSignApiKey = () => process.env.NEXT_PUBLIC_QZ_SIGN_API_KEY?.trim() || '';
+
+
+function getAuthHeaders() {
+  const token = Cookies.get('accessToken');
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+async function signQzPayload(payload: string) {
+  const endpoint = getQzSignEndpoint();
+  if (!endpoint) return '';
+
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(getQzSignApiKey() ? { 'X-Api-Key': getQzSignApiKey() } : {}),
+      ...getAuthHeaders(),
+    },
+    body: JSON.stringify({ payload }),
+  });
+
+  if (!response.ok) {
+    throw new Error('Gagal menandatangani request QZ Tray');
+  }
+
+  const result = await response.json();
+  return typeof result?.signature === 'string' ? result.signature : '';
+}
+
+
+let qzCertificatePromise: Promise<string> | null = null;
+
+async function resolveQzCertificate() {
+  const configured = getQzCertificate();
+  if (configured) return configured;
+
+  if (!qzCertificatePromise) {
+    qzCertificatePromise = (async () => {
+      const endpoint = getQzCertificateEndpoint();
+      if (!endpoint) return '';
+
+      const response = await fetch(endpoint, {
+        method: 'GET',
+        headers: {
+          ...(getQzSignApiKey() ? { 'X-Api-Key': getQzSignApiKey() } : {}),
+          ...getAuthHeaders(),
+        },
+      });
+
+      if (!response.ok) return '';
+      const result = await response.json();
+      return typeof result?.certificate === 'string' ? result.certificate : '';
+    })().catch(() => '');
+  }
+
+  return qzCertificatePromise;
+}
+
 let qzLoaderPromise: Promise<boolean> | null = null;
 
 async function ensureQzLoaded() {
@@ -86,11 +151,27 @@ async function printViaQzTray(payload: { title: string; text?: string; html?: st
   if (!loaded || !window.qz) return false;
 
   const qz = window.qz;
-  qz.security.setCertificatePromise((resolve) => resolve());
-  qz.security.setSignaturePromise(() => (resolve) => resolve());
+  const certificate = await resolveQzCertificate();
+
+  if (certificate) {
+    qz.security.setCertificatePromise((resolve) => resolve(certificate));
+    qz.security.setSignatureAlgorithm?.('SHA512');
+    qz.security.setSignaturePromise((toSign) => async (resolve, reject) => {
+      try {
+        const signature = await signQzPayload(toSign);
+        if (!signature) throw new Error('Signature kosong');
+        resolve(signature);
+      } catch (error) {
+        reject(error);
+      }
+    });
+  } else {
+    qz.security.setCertificatePromise((resolve) => resolve());
+    qz.security.setSignaturePromise(() => (resolve) => resolve());
+  }
 
   if (!qz.websocket.isActive()) {
-    await qz.websocket.connect({ retries: 1, delay: 0 });
+    await qz.websocket.connect({ retries: 1, delay: 0, host: ['localhost', '127.0.0.1'], secure: window.location.protocol === 'https:' });
   }
 
   const printerName = getQzPrinterName();
