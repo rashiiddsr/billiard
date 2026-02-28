@@ -167,7 +167,64 @@ Untuk adopsi **QZ Tray print** di PC kasir:
    - Print Bridge HTTP (opsional)
    - Browser print fallback (iframe)
 
-Catatan: untuk production, sebaiknya gunakan certificate/signature resmi QZ Tray agar tidak mengandalkan unsigned mode.
+#### Env yang wajib diisi untuk mode hosting (recommended)
+
+Karena aplikasi web di-hosting, **private key jangan taruh di frontend**. Simpan di API.
+
+1) Generate default certificate + private key (sekali saja):
+
+```bash
+cd apps/api
+npm run qz:generate-cert
+```
+
+Perintah di atas akan men-generate pair dan langsung menampilkan format isi `.env` (cross-platform, tidak butuh bash).
+
+2) Isi API env: (frontend cukup pakai API URL + printer)
+
+**apps/api/.env (contoh production):**
+```env
+DATABASE_URL="mysql://user:password@127.0.0.1:3306/billiard_pos"
+JWT_SECRET="ganti-dengan-random-32-char-lebih"
+JWT_REFRESH_SECRET="ganti-dengan-random-32-char-lebih"
+JWT_ACCESS_EXPIRES_IN="15m"
+JWT_REFRESH_EXPIRES_IN="7d"
+PORT=3001
+CORS_ORIGIN="https://pos.domainanda.com"
+IOT_HMAC_SECRET="ganti-dengan-secret-iot"
+IOT_NONCE_WINDOW_SECONDS=300
+
+# QZ signing (WAJIB untuk hilangkan mode untrusted/anonymous)
+QZ_CERTIFICATE="-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----"
+QZ_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
+QZ_SIGN_API_KEY="isi-api-key-random-panjang"
+```
+
+**apps/web/.env.local (contoh production):**
+```env
+NEXT_PUBLIC_API_URL=https://api.domainanda.com/api/v1
+NEXT_PUBLIC_QZ_TRAY_ENABLED=true
+NEXT_PUBLIC_QZ_PRINTER=POS-58-MM
+NEXT_PUBLIC_QZ_SCRIPT_URL=https://cdn.jsdelivr.net/npm/qz-tray@2.2.4/qz-tray.js
+
+# Opsional: jika kosong, default ke <NEXT_PUBLIC_API_URL>/print/qz/*
+NEXT_PUBLIC_QZ_CERTIFICATE_ENDPOINT=https://api.domainanda.com/api/v1/print/qz/certificate
+NEXT_PUBLIC_QZ_SIGN_ENDPOINT=https://api.domainanda.com/api/v1/print/qz/sign
+
+# Opsional: isi hanya jika QZ_SIGN_API_KEY di API ikut diaktifkan
+NEXT_PUBLIC_QZ_SIGN_API_KEY=isi-api-key-random-panjang
+```
+
+> Jika ingin paling simpel: Anda cukup kelola **env API** (`QZ_CERTIFICATE`, `QZ_PRIVATE_KEY`, `QZ_SIGN_API_KEY`).
+> Di sisi web, minimum hanya `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_QZ_TRAY_ENABLED`, dan `NEXT_PUBLIC_QZ_PRINTER`.
+> Pastikan `OpenSSL` tersedia di PATH server/development machine.
+
+#### Checklist supaya tidak popup terus
+
+- QZ Tray ter-install di **PC kasir lokal** (meski web di-hosting).
+- User kasir sudah login (endpoint signing dilindungi JWT).
+- `CORS_ORIGIN` API mengizinkan domain web produksi.
+- `QZ_CERTIFICATE` + `QZ_PRIVATE_KEY` valid dan berpasangan.
 
 ## Default Login Credentials
 

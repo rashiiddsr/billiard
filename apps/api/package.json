@@ -13,7 +13,8 @@
     "prisma:deploy": "prisma migrate deploy",
     "prisma:seed": "ts-node prisma/seed.ts",
     "prisma:studio": "prisma studio",
-    "format": "prettier --write \"src/**/*.ts\""
+    "format": "prettier --write \"src/**/*.ts\"",
+    "qz:generate-cert": "node scripts/generate-qz-cert.mjs"
   },
   "dependencies": {
     "@nestjs/common": "^10.3.0",
