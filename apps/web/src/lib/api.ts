@@ -13,6 +13,26 @@ const REFRESH_COOKIE_EXP_DAYS = 30;
 const COOKIE_OPTIONS = { sameSite: 'strict' as const, secure: typeof window !== 'undefined' ? window.location.protocol === 'https:' : false };
 let refreshPromise: Promise<any> | null = null;
 
+export async function refreshAuthSession() {
+  const refreshToken = Cookies.get('refreshToken');
+  if (!refreshToken) {
+    throw new Error('No refresh token');
+  }
+
+  if (!refreshPromise) {
+    refreshPromise = axios.post(`${API_URL}/auth/refresh`, { refreshToken }).finally(() => {
+      refreshPromise = null;
+    });
+  }
+
+  const { data } = await refreshPromise;
+  Cookies.set('accessToken', data.accessToken, { expires: ACCESS_COOKIE_EXP_DAYS, ...COOKIE_OPTIONS });
+  Cookies.set('refreshToken', data.refreshToken, { expires: REFRESH_COOKIE_EXP_DAYS, ...COOKIE_OPTIONS });
+  Cookies.set('loginAt', new Date().toISOString(), { expires: REFRESH_COOKIE_EXP_DAYS, ...COOKIE_OPTIONS });
+
+  return data;
+}
+
 // Request interceptor - add access token
 api.interceptors.request.use((config) => {
   const token = Cookies.get('accessToken');
@@ -34,19 +54,7 @@ api.interceptors.response.use(
       original._retry = true;
 
       try {
-        const refreshToken = Cookies.get('refreshToken');
-        if (!refreshToken) throw new Error('No refresh token');
-
-        if (!refreshPromise) {
-          refreshPromise = axios.post(`${API_URL}/auth/refresh`, { refreshToken }).finally(() => {
-            refreshPromise = null;
-          });
-        }
-
-        const { data } = await refreshPromise;
-        Cookies.set('accessToken', data.accessToken, { expires: ACCESS_COOKIE_EXP_DAYS, ...COOKIE_OPTIONS });
-        Cookies.set('refreshToken', data.refreshToken, { expires: REFRESH_COOKIE_EXP_DAYS, ...COOKIE_OPTIONS });
-        Cookies.set('loginAt', new Date().toISOString(), { expires: REFRESH_COOKIE_EXP_DAYS, ...COOKIE_OPTIONS });
+        const data = await refreshAuthSession();
         original.headers.Authorization = `Bearer ${data.accessToken}`;
         return api(original);
       } catch (refreshError: any) {
