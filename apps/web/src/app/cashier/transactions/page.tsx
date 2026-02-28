@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { companyApi, paymentsApi } from '@/lib/api';
 import { formatCurrency } from '@/lib/utils';
-import { centerReceiptText, escPosDoubleCenterText, formatReceiptLine, printReceiptText, separatorLine } from '@/lib/receiptPrinter';
+import { centerReceiptText, formatReceiptLine, printReceiptText, separatorLine } from '@/lib/receiptPrinter';
 import toast from 'react-hot-toast';
 
 function toDateInputValue(date: Date) {
@@ -87,19 +87,24 @@ export default function CashierTransactionsPage() {
 
   const reprintReceipt = async () => {
     if (!detail) return;
-    const paidAt = new Date(detail.paidAt).toLocaleString('id-ID');
-    const paymentMethod = String(detail.method || '').toUpperCase();
+    const packageRows = (detail.packageUsages || []).map((pkg: any) => {
+      const discount = Math.max(0, Number(pkg.originalPrice || 0) - Number(pkg.packagePrice || 0));
+      const fnbRows = (pkg.fnbItems || []).map((x: any) => `<div class="row"><span>${x.name} × ${x.qty}</span><span>${formatCurrency(x.subtotal)}</span></div>`).join('');
+      return `<div><div class="bold">${pkg.packageName}${pkg.qty > 1 ? ` × ${pkg.qty}` : ''}</div>${pkg.durationMinutes ? `<div class="row"><span>Billing ${pkg.durationMinutes} menit</span><span>${formatCurrency(pkg.billingEquivalent)}</span></div>` : ''}${fnbRows}<div class="row"><span>Diskon</span><span>-${formatCurrency(discount)}</span></div><div class="row bold"><span>Subtotal</span><span>${formatCurrency(pkg.packagePrice)}</span></div></div>`;
+    }).join('<div class="line"></div>');
+    const fnbExtraRows = (detail.fnbItems || []).length > 0
+      ? (detail.fnbItems || []).map((f: any) => `<div class="row"><span>${f.name} × ${f.qty}</span><span>${formatCurrency(f.subtotal)}</span></div>`).join('')
+      : '<div class="muted">Tidak ada F&B tambahan</div>';
+
     const rawLines: string[] = [
-      separatorLine(32, '='),
-      escPosDoubleCenterText('RE-PRINT'),
-      centerReceiptText('[ RE-PRINT COPY ]'),
-      separatorLine(32, '='),
-      escPosDoubleCenterText(companyProfile?.name || 'Billiard Club OS'),
+      centerReceiptText('RE-PRINT'),
+      centerReceiptText(companyProfile?.name || 'Billiard Club OS'),
       centerReceiptText(companyProfile?.address || ''),
+      centerReceiptText(companyProfile?.phoneNumber ? `Telp: ${companyProfile.phoneNumber}` : ''),
       separatorLine(),
       formatReceiptLine('No', detail.paymentNumber),
       formatReceiptLine('Kasir', detail.cashier),
-      formatReceiptLine('Waktu', paidAt),
+      formatReceiptLine('Waktu', new Date(detail.paidAt).toLocaleString('id-ID')),
       detail.table !== 'Standalone' ? formatReceiptLine('Meja', detail.table) : '',
       (detail.billingSession?.amount || 0) > 0 ? formatReceiptLine('Billiard', formatCurrency(detail.billingSession?.amount || 0)) : '',
       (detail.packageUsages || []).length > 0 ? separatorLine() : '',
@@ -119,19 +124,16 @@ export default function CashierTransactionsPage() {
       'F&B Tambahan',
       ...(detail.fnbItems || []).length > 0
         ? (detail.fnbItems || []).map((f: any) => formatReceiptLine(`${f.name} x${f.qty}`, formatCurrency(f.subtotal || 0)))
-        : ['-'],
+        : ['Tidak ada F&B tambahan'],
       separatorLine(),
       formatReceiptLine('TOTAL', formatCurrency(detail.total || 0)),
-      formatReceiptLine(`Metode ${paymentMethod || '-'}`, formatCurrency(detail.amountPaid || 0)),
-      paymentMethod === 'CASH' ? formatReceiptLine('Kembalian', formatCurrency(detail.change || 0)) : '',
+      formatReceiptLine('Diterima', formatCurrency(detail.amountPaid || 0)),
+      formatReceiptLine('Kembalian', formatCurrency(detail.change || 0)),
       separatorLine(),
       centerReceiptText('Terima kasih.'),
-      companyProfile?.phoneNumber ? centerReceiptText(`Keluhan? Hubungi Telp/WA ${companyProfile.phoneNumber}`) : '',
     ].filter(Boolean);
 
-    const printed = await printReceiptText(`${rawLines.join('\n')}\n\n\n`, `Reprint ${detail.paymentNumber}`, {
-      logoUrl: companyProfile?.logoUrl || null,
-    });
+    const printed = await printReceiptText(`${rawLines.join('\n')}\n\n\n`, `Reprint ${detail.paymentNumber}`);
     if (!printed) {
       toast.error('QZ Tray/Print Bridge tidak terhubung dan print browser gagal dibuka');
       return;
