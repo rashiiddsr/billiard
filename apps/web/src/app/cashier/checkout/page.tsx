@@ -234,8 +234,8 @@ export default function CheckoutPage() {
       separatorLine(),
       centerReceiptText('Terima kasih.'),
     ].filter(Boolean);
-    const printed = await printReceiptText(`${rawLines.join('\n')}\n\n\n`, `Struk ${currentReceipt.paymentNumber}`);
-    if (!printed) toast.error('QZ Tray/Print Bridge tidak terhubung dan print browser gagal dibuka');
+    const printed = printReceiptText(`${rawLines.join('\n')}\n\n\n`, `Struk ${currentReceipt.paymentNumber}`);
+    if (!printed) toast.error('Popup print diblokir browser');
     if (currentReceiptPaymentId) {
       paymentsApi.markPrinted(currentReceiptPaymentId).catch(() => null);
     }
