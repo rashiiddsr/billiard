@@ -70,28 +70,6 @@ export default function CheckoutPage() {
 
   const subtotal = billingAmt + fnbAmt;
   const packageUsageRows = selectedSessionDetail?.packageUsages || [];
-  const groupedPackageUsageRows = useMemo(() => {
-    const grouped = new Map<string, any>();
-    for (const usage of packageUsageRows) {
-      const key = usage.packageName;
-      const existing = grouped.get(key);
-      if (existing) {
-        existing.qty += 1;
-        existing.packagePrice += Number(usage.packagePrice || 0);
-        existing.originalPrice += Number(usage.originalPrice || 0);
-        existing.durationMinutes += Number(usage.durationMinutes || 0);
-      } else {
-        grouped.set(key, {
-          ...usage,
-          qty: 1,
-          packagePrice: Number(usage.packagePrice || 0),
-          originalPrice: Number(usage.originalPrice || 0),
-          durationMinutes: Number(usage.durationMinutes || 0),
-        });
-      }
-    }
-    return Array.from(grouped.values());
-  }, [packageUsageRows]);
   const packageDiscount = (selectedSessionDetail?.packageUsages || []).reduce((sum: number, usage: any) => {
     const original = Number(usage.originalPrice || 0);
     const packagePrice = Number(usage.packagePrice || 0);
@@ -181,9 +159,9 @@ export default function CheckoutPage() {
         {selectedSession ? (
           <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
             <p className="mb-2 font-semibold">Rincian Tagihan Meja</p>
-            {(groupedPackageUsageRows || []).map((usage: any, idx: number) => (
+            {(packageUsageRows || []).map((usage: any, idx: number) => (
               <div key={usage.id || idx} className="mb-2 rounded border border-blue-100 bg-blue-50 p-2">
-                <p className="text-xs font-semibold text-blue-700">{usage.packageName}{usage.qty > 1 ? ` × ${usage.qty}` : ''}</p>
+                <p className="text-xs font-semibold text-blue-700">{usage.packageName}</p>
                 {usage.durationMinutes ? <div className="flex justify-between text-slate-700"><span>Billing {usage.durationMinutes} menit</span><span>{formatCurrency((Number(selectedSessionDetail?.ratePerHour || 0) * Number(usage.durationMinutes || 0)) / 60)}</span></div> : null}
                 <div className="flex justify-between text-slate-700"><span>Harga paket</span><span>{formatCurrency(usage.packagePrice)}</span></div>
               </div>
@@ -243,14 +221,14 @@ export default function CheckoutPage() {
                   <p className="font-semibold">Rincian Paket</p>
                   {(currentReceipt.packageUsages || []).map((pkg: any, idx: number) => (
                     <div key={pkg.id || idx} className="mb-2 rounded bg-slate-50 p-2">
-                      <div className="flex justify-between"><span className="font-medium">{pkg.packageName}{pkg.qty > 1 ? ` × ${pkg.qty}` : ''}</span><span>{formatCurrency(pkg.packagePrice)}</span></div>
+                      <div className="flex justify-between"><span className="font-medium">{pkg.packageName}</span><span>{formatCurrency(pkg.packagePrice)}</span></div>
                       {pkg.durationMinutes ? <div className="flex justify-between text-slate-600"><span>Billing {pkg.durationMinutes} menit</span><span>{formatCurrency(pkg.billingEquivalent)}</span></div> : null}
                       {(pkg.fnbItems || []).map((x: any, i: number) => <div key={i} className="flex justify-between text-slate-600"><span>{x.name} × {x.qty}</span><span>{formatCurrency(x.subtotal)}</span></div>)}
                     </div>
                   ))}
                 </div>
               )}
-              <div className="border-t pt-2"><p className="font-semibold">F&B Tambahan</p>{(currentReceipt.fnbItems || []).length === 0 ? <p className="text-slate-500">Tidak ada F&B tambahan</p> : currentReceipt.fnbItems.map((f: any, i: number) => <div key={i} className="flex justify-between"><span>{f.name} × {f.qty}</span><span>{formatCurrency(f.subtotal)}</span></div>)}</div>
+              <div className="border-t pt-2"><p className="font-semibold">F&B</p>{(currentReceipt.fnbItems || []).length === 0 ? <p className="text-slate-500">Tidak ada F&B</p> : currentReceipt.fnbItems.map((f: any, i: number) => <div key={i} className="flex justify-between"><span>{f.name} × {f.qty}</span><span>{formatCurrency(f.subtotal)}</span></div>)}</div>
               <div className="flex justify-between"><span>Diskon</span><span>{formatCurrency(currentReceipt.discount || 0)}</span></div>
               <div className="mt-2 flex justify-between border-t pt-2 font-semibold"><span>TOTAL</span><span>{formatCurrency(currentReceipt.total)}</span></div>
               <div className="flex justify-between"><span>Uang Diterima</span><span>{formatCurrency(currentReceipt.amountPaid || 0)}</span></div>
