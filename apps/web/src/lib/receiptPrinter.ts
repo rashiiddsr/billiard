@@ -38,6 +38,58 @@ export function printReceiptHtml(receiptHtml: string) {
   return true;
 }
 
+export function printReceiptText(receiptText: string, title = 'Struk') {
+  const safeTitle = escapeHtml(title);
+  const safeText = escapeHtml(receiptText);
+  const win = window.open('', '_blank', 'width=420,height=760');
+  if (!win) return false;
+  win.document.open();
+  win.document.write(`<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>${safeTitle}</title>
+    <style>
+      @page { size: auto; margin: 0; }
+      body {
+        margin: 0;
+        padding: 12px;
+        font-family: 'Courier New', 'Liberation Mono', monospace;
+      }
+      pre {
+        margin: 0;
+        font-size: 12px;
+        line-height: 1.35;
+        white-space: pre;
+      }
+    </style>
+  </head>
+  <body>
+    <pre>${safeText}</pre>
+  </body>
+</html>`);
+  win.document.close();
+  win.focus();
+  win.onload = () => {
+    win.print();
+    win.close();
+  };
+  return true;
+}
+
+export function formatReceiptLine(left: string, right = '', width = 32) {
+  const cleanLeft = left.replace(/\s+/g, ' ').trim();
+  const cleanRight = right.replace(/\s+/g, ' ').trim();
+  if (!cleanRight) return cleanLeft;
+  const spacing = width - cleanLeft.length - cleanRight.length;
+  if (spacing >= 1) return `${cleanLeft}${' '.repeat(spacing)}${cleanRight}`;
+  return `${cleanLeft}\n${' '.repeat(Math.max(0, width - cleanRight.length))}${cleanRight}`;
+}
+
+export function separatorLine(width = 32, char = '-') {
+  return char.repeat(width);
+}
+
 export function buildBusinessReceiptHtml({
   title,
   headerTag,
