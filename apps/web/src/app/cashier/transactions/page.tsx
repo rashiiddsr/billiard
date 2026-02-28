@@ -109,7 +109,19 @@ export default function CashierTransactionsPage() {
                   <div className="flex justify-between"><span>Total Billiard</span><span>{formatCurrency(detail.billingSession?.amount || 0)}</span></div>
                 </>
               )}
-              <div className="mt-2 border-t pt-2"><p className="font-semibold">F&B</p>{(detail.fnbItems || []).length === 0 ? <p className="text-slate-500">Tidak ada F&B</p> : detail.fnbItems.map((f: any, i: number) => <div key={i} className="flex justify-between"><span>{f.name} × {f.qty}</span><span>{formatCurrency(f.subtotal)}</span></div>)}</div>
+              {(detail.packageUsages || []).length > 0 && (
+                <div className="mt-2 border-t pt-2">
+                  <p className="font-semibold">Rincian Paket</p>
+                  {(detail.packageUsages || []).map((pkg: any, i: number) => (
+                    <div key={pkg.id || i} className="mt-1 rounded bg-slate-50 p-2">
+                      <div className="flex justify-between"><span>{pkg.packageName}{pkg.qty > 1 ? ` × ${pkg.qty}` : ''}</span><span>{formatCurrency(pkg.packagePrice)}</span></div>
+                      {pkg.durationMinutes ? <div className="flex justify-between text-slate-600"><span>Billing {pkg.durationMinutes} menit</span><span>{formatCurrency(pkg.billingEquivalent)}</span></div> : null}
+                      {(pkg.fnbItems || []).map((f: any, idx: number) => <div key={idx} className="flex justify-between text-slate-600"><span>{f.name} × {f.qty}</span><span>{formatCurrency(f.subtotal)}</span></div>)}
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="mt-2 border-t pt-2"><p className="font-semibold">F&B Tambahan</p>{(detail.fnbItems || []).length === 0 ? <p className="text-slate-500">Tidak ada F&B tambahan</p> : detail.fnbItems.map((f: any, i: number) => <div key={i} className="flex justify-between"><span>{f.name} × {f.qty}</span><span>{formatCurrency(f.subtotal)}</span></div>)}</div>
               <div className="mt-2 flex justify-between border-t pt-2 font-semibold"><span>Total Transaksi</span><span>{formatCurrency(detail.total)}</span></div>
             </div>
           </div>

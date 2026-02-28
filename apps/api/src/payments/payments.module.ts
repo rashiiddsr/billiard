@@ -267,6 +267,51 @@ export class PaymentsService {
       notes: item.notes,
     })) || [];
 
+    const mergeItemsByName = (items: any[]) => {
+      const grouped = new Map<string, any>();
+      for (const item of items) {
+        const key = `${item.name}::${item.unitPrice}`;
+        const current = grouped.get(key);
+        if (current) {
+          current.qty += Number(item.qty || 0);
+          current.subtotal = new Decimal(current.subtotal.toString())
+            .plus(new Decimal(item.subtotal.toString()))
+            .toFixed(2);
+        } else {
+          grouped.set(key, {
+            ...item,
+            qty: Number(item.qty || 0),
+            subtotal: new Decimal(item.subtotal.toString()).toFixed(2),
+          });
+        }
+      }
+      return Array.from(grouped.values());
+    };
+
+    const mergePackageUsages = (usages: any[]) => {
+      const grouped = new Map<string, any>();
+      for (const usage of usages) {
+        const key = usage.packageName;
+        const current = grouped.get(key);
+        if (current) {
+          current.qty += 1;
+          current.packagePrice = new Decimal(current.packagePrice.toString()).plus(new Decimal(usage.packagePrice.toString())).toFixed(2);
+          current.originalPrice = new Decimal(current.originalPrice.toString()).plus(new Decimal(usage.originalPrice.toString())).toFixed(2);
+          current.durationMinutes += Number(usage.durationMinutes || 0);
+          current.billingEquivalent = new Decimal(current.billingEquivalent.toString()).plus(new Decimal(usage.billingEquivalent.toString())).toFixed(2);
+          current.fnbItems = mergeItemsByName([...(current.fnbItems || []), ...(usage.fnbItems || [])]);
+        } else {
+          grouped.set(key, {
+            ...usage,
+            qty: 1,
+            durationMinutes: Number(usage.durationMinutes || 0),
+            fnbItems: mergeItemsByName(usage.fnbItems || []),
+          });
+        }
+      }
+      return Array.from(grouped.values());
+    };
+
     if (fullPayment.billingSessionId) {
       packageUsages = await this.prisma.sessionPackageUsage.findMany({
         where: { billingSessionId: fullPayment.billingSessionId },
@@ -284,16 +329,18 @@ export class PaymentsService {
         where: { billingSessionId: fullPayment.billingSessionId, status: { not: 'CANCELLED' } },
         include: { items: { include: { menuItem: true } } },
       });
-      receiptFnbItems = allOrders.flatMap((order: any) =>
-        (order.items || []).map((item: any) => ({
+      receiptFnbItems = allOrders
+        .filter((order: any) => !String(order.notes || '').startsWith('AUTO_PACKAGE:'))
+        .flatMap((order: any) =>
+          (order.items || []).map((item: any) => ({
           name: item.menuItem.name,
           sku: item.menuItem.sku,
           qty: item.quantity,
           unitPrice: item.unitPrice,
           subtotal: item.subtotal,
           notes: item.notes,
-        })),
-      );
+          })),
+        );
 
       const extensionLogs = await this.prisma.auditLog.findMany({
         where: {
@@ -335,7 +382,7 @@ export class PaymentsService {
         amount: fullPayment.billingAmount,
         breakdown: billingBreakdown,
       } : null,
-      packageUsages: packageUsages.map((usage) => ({
+      packageUsages: mergePackageUsages(packageUsages.map((usage) => ({
         id: usage.id,
         packageName: usage.packageName,
         packagePrice: usage.packagePrice,
@@ -352,8 +399,8 @@ export class PaymentsService {
             unitPrice: x.unitPrice,
             subtotal: new Decimal(x.unitPrice.toString()).mul(x.quantity).toFixed(2),
           })),
-      })),
-      fnbItems: receiptFnbItems,
+      }))),
+      fnbItems: mergeItemsByName(receiptFnbItems),
       subtotal: fullPayment.subtotal,
       discount: fullPayment.discountAmount,
       discountReason: fullPayment.discountReason,
