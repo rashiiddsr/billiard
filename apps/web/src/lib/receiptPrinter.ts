@@ -25,7 +25,7 @@ const escapeHtml = (value: string) =>
     .replaceAll("'", '&#39;');
 
 export function printReceiptHtml(receiptHtml: string) {
-  const win = window.open('', '_blank', 'width=320,height=760');
+  const win = window.open('', '_blank', 'width=420,height=760');
   if (!win) return false;
   win.document.open();
   win.document.write(receiptHtml);
@@ -43,19 +43,16 @@ export function buildBusinessReceiptHtml({
   headerTag,
   company,
   bodyRows,
-  paperWidth = '58mm',
 }: {
   title: string;
   headerTag?: string;
   company?: { name?: string | null; address?: string | null; phoneNumber?: string | null; logoUrl?: string | null } | null;
   bodyRows: string;
-  paperWidth?: '58mm' | '80mm';
 }) {
   const logo = resolveImageUrl(company?.logoUrl);
   const companyName = escapeHtml(company?.name?.trim() || 'Billiard Club OS');
   const address = company?.address ? escapeHtml(company.address) : '';
   const phone = company?.phoneNumber ? escapeHtml(company.phoneNumber) : '';
-  const contentWidth = paperWidth === '58mm' ? '48mm' : '72mm';
 
   return `<!doctype html>
 <html>
@@ -63,36 +60,17 @@ export function buildBusinessReceiptHtml({
     <meta charset="utf-8" />
     <title>${escapeHtml(title)}</title>
     <style>
-      @page { size: ${paperWidth} auto; margin: 0; }
-      body {
-        font-family: 'Courier New', 'Liberation Mono', monospace;
-        margin: 0;
-        padding: 0;
-        color: #111827;
-        -webkit-print-color-adjust: exact;
-        print-color-adjust: exact;
-      }
-      .receipt {
-        box-sizing: border-box;
-        width: ${contentWidth};
-        margin: 0 auto;
-        padding: 1mm 0.5mm;
-      }
+      body { font-family: 'Courier New', monospace; margin: 0; padding: 0; color: #111827; }
+      .receipt { width: 78mm; margin: 0 auto; padding: 8px; }
       .center { text-align: center; }
       .muted { color: #64748b; }
       .logo { max-width: 54px; max-height: 54px; margin: 0 auto 6px; display: block; object-fit: contain; }
-      .line { border-top: 1px dashed #cbd5e1; margin: 6px 0; }
-      .row { display: table; width: 100%; table-layout: fixed; margin: 1px 0; }
-      .row > span { display: table-cell; vertical-align: top; word-break: break-word; overflow-wrap: anywhere; }
-      .row > span:first-child { width: 66%; padding-right: 2mm; }
-      .row > span:last-child { width: 34%; text-align: right; white-space: nowrap; }
+      .line { border-top: 1px dashed #cbd5e1; margin: 8px 0; }
+      .row { display: flex; justify-content: space-between; gap: 8px; margin: 2px 0; }
       .bold { font-weight: 700; }
       .tag { border: 1px solid #111827; display: inline-block; padding: 2px 8px; font-weight: 700; margin-bottom: 6px; }
-      .small { font-size: 11px; line-height: 1.25; }
+      .small { font-size: 11px; }
       .pre { white-space: pre-wrap; }
-      @media print {
-        html, body { width: ${paperWidth}; margin: 0; padding: 0; }
-      }
     </style>
   </head>
   <body>
