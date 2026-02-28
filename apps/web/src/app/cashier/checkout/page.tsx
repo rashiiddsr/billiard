@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import { billingApi, companyApi, ordersApi, paymentsApi } from '@/lib/api';
 import { formatCurrency } from '@/lib/utils';
-import { centerReceiptText, formatReceiptLine, printReceiptText, separatorLine } from '@/lib/receiptPrinter';
+import { buildBusinessReceiptHtml, centerReceiptText, formatReceiptLine, printReceiptSmart, separatorLine } from '@/lib/receiptPrinter';
 import toast from 'react-hot-toast';
 
 type PaymentMethod = 'CASH' | 'QRIS' | 'TRANSFER';
@@ -197,6 +197,27 @@ export default function CheckoutPage() {
       ? (currentReceipt.fnbItems || []).map((f: any) => `<div class="row"><span>${f.name} × ${f.qty}</span><span>${formatCurrency(f.subtotal)}</span></div>`).join('')
       : '<div class="muted">Tidak ada F&B tambahan</div>';
 
+    const receiptHtml = buildBusinessReceiptHtml({
+      title: `Struk ${currentReceipt.paymentNumber}`,
+      company: companyProfile,
+      bodyRows: `
+        <div class="row"><span>No</span><span>${currentReceipt.paymentNumber}</span></div>
+        <div class="row"><span>Kasir</span><span>${currentReceipt.cashier}</span></div>
+        <div class="row"><span>Waktu</span><span>${paidAt}</span></div>
+        ${currentReceipt.table !== 'Standalone' ? `<div class="row"><span>Meja</span><span>${currentReceipt.table}</span></div>` : ''}
+        ${(currentReceipt.billingSession?.amount || 0) > 0 ? `<div class="row"><span>Billiard</span><span>${formatCurrency(currentReceipt.billingSession?.amount || 0)}</span></div>` : ''}
+        ${(currentReceipt.packageUsages || []).length > 0 ? '<div class="line"></div><div class="bold">Rincian Paket</div>' : ''}
+        ${packageRows}
+        <div class="line"></div>
+        <div class="bold">F&B Tambahan</div>
+        ${fnbExtraRows}
+        <div class="line"></div>
+        <div class="row bold"><span>TOTAL</span><span>${formatCurrency(currentReceipt.total || 0)}</span></div>
+        <div class="row"><span>Diterima</span><span>${formatCurrency(currentReceipt.amountPaid || 0)}</span></div>
+        <div class="row"><span>Kembalian</span><span>${formatCurrency(currentReceipt.change || 0)}</span></div>
+      `,
+    });
+
     const rawLines: string[] = [
       centerReceiptText(companyProfile?.name || 'Billiard Club OS'),
       centerReceiptText(companyProfile?.address || ''),
@@ -234,7 +255,12 @@ export default function CheckoutPage() {
       separatorLine(),
       centerReceiptText('Terima kasih.'),
     ].filter(Boolean);
-    const printed = await printReceiptText(`${rawLines.join('\n')}\n\n\n`, `Struk ${currentReceipt.paymentNumber}`);
+
+    const printed = await printReceiptSmart({
+      title: `Struk ${currentReceipt.paymentNumber}`,
+      html: receiptHtml,
+      text: `${rawLines.join('\n')}\n\n\n`,
+    });
     if (!printed) toast.error('QZ Tray/Print Bridge tidak terhubung dan print browser gagal dibuka');
     if (currentReceiptPaymentId) {
       paymentsApi.markPrinted(currentReceiptPaymentId).catch(() => null);

@@ -62,6 +62,7 @@ const getDesktopPrintBridgeUrl = () => {
 const getQzScriptUrl = () => process.env.NEXT_PUBLIC_QZ_SCRIPT_URL?.trim() || 'https://cdn.jsdelivr.net/npm/qz-tray@2.2.4/qz-tray.js';
 const getQzPrinterName = () => process.env.NEXT_PUBLIC_QZ_PRINTER?.trim() || '';
 const isQzEnabled = () => process.env.NEXT_PUBLIC_QZ_TRAY_ENABLED === 'true';
+const shouldPreferRawForQz = () => process.env.NEXT_PUBLIC_QZ_PREFER_RAW === 'true';
 
 const getQzCertificate = () => process.env.NEXT_PUBLIC_QZ_CERTIFICATE?.trim() || '';
 const getQzCertificateEndpoint = () => process.env.NEXT_PUBLIC_QZ_CERTIFICATE_ENDPOINT?.trim() || `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1'}/print/qz/certificate`;
@@ -292,6 +293,26 @@ function printWithHiddenFrame(content: string) {
   iframe.srcdoc = content;
   document.body.appendChild(iframe);
   return true;
+}
+
+
+export async function printReceiptSmart({
+  title = 'Struk',
+  text,
+  html,
+}: {
+  title?: string;
+  text: string;
+  html: string;
+}) {
+  if (isQzEnabled() && shouldPreferRawForQz()) {
+    return printReceiptText(text, title);
+  }
+
+  const printedByHtml = await printReceiptHtml(html, title);
+  if (printedByHtml) return true;
+
+  return printReceiptText(text, title);
 }
 
 export function centerReceiptText(text: string, width = 32) {
