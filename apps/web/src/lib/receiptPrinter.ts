@@ -25,7 +25,7 @@ const escapeHtml = (value: string) =>
     .replaceAll("'", '&#39;');
 
 export function printReceiptHtml(receiptHtml: string) {
-  const win = window.open('', '_blank', 'width=320,height=760');
+  const win = window.open('', '_blank', 'width=420,height=760');
   if (!win) return false;
   win.document.open();
   win.document.write(receiptHtml);
@@ -43,13 +43,11 @@ export function buildBusinessReceiptHtml({
   headerTag,
   company,
   bodyRows,
-  paperWidth = '58mm',
 }: {
   title: string;
   headerTag?: string;
   company?: { name?: string | null; address?: string | null; phoneNumber?: string | null; logoUrl?: string | null } | null;
   bodyRows: string;
-  paperWidth?: '58mm' | '80mm';
 }) {
   const logo = resolveImageUrl(company?.logoUrl);
   const companyName = escapeHtml(company?.name?.trim() || 'Billiard Club OS');
@@ -62,35 +60,17 @@ export function buildBusinessReceiptHtml({
     <meta charset="utf-8" />
     <title>${escapeHtml(title)}</title>
     <style>
-      @page { size: ${paperWidth} auto; margin: 0; }
-      body {
-        font-family: 'Courier New', 'Liberation Mono', monospace;
-        margin: 0;
-        padding: 0;
-        color: #111827;
-        -webkit-print-color-adjust: exact;
-        print-color-adjust: exact;
-      }
-      .receipt {
-        box-sizing: border-box;
-        width: ${paperWidth};
-        margin: 0 auto;
-        padding: 2mm;
-      }
+      body { font-family: 'Courier New', monospace; margin: 0; padding: 0; color: #111827; }
+      .receipt { width: 78mm; margin: 0 auto; padding: 8px; }
       .center { text-align: center; }
       .muted { color: #64748b; }
       .logo { max-width: 54px; max-height: 54px; margin: 0 auto 6px; display: block; object-fit: contain; }
-      .line { border-top: 1px dashed #cbd5e1; margin: 6px 0; }
-      .row { display: flex; justify-content: space-between; gap: 8px; margin: 2px 0; align-items: flex-start; }
-      .row > span:first-child { flex: 1; min-width: 0; word-break: break-word; }
-      .row > span:last-child { flex-shrink: 0; text-align: right; white-space: nowrap; }
+      .line { border-top: 1px dashed #cbd5e1; margin: 8px 0; }
+      .row { display: flex; justify-content: space-between; gap: 8px; margin: 2px 0; }
       .bold { font-weight: 700; }
       .tag { border: 1px solid #111827; display: inline-block; padding: 2px 8px; font-weight: 700; margin-bottom: 6px; }
-      .small { font-size: 13px; line-height: 1.3; }
+      .small { font-size: 11px; }
       .pre { white-space: pre-wrap; }
-      @media print {
-        html, body { width: ${paperWidth}; }
-      }
     </style>
   </head>
   <body>
