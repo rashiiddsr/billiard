@@ -87,15 +87,7 @@ export default function CashierTransactionsPage() {
 
   const reprintReceipt = async () => {
     if (!detail) return;
-    const packageRows = (detail.packageUsages || []).map((pkg: any) => {
-      const discount = Math.max(0, Number(pkg.originalPrice || 0) - Number(pkg.packagePrice || 0));
-      const fnbRows = (pkg.fnbItems || []).map((x: any) => `<div class="row"><span>${x.name} × ${x.qty}</span><span>${formatCurrency(x.subtotal)}</span></div>`).join('');
-      return `<div><div class="bold">${pkg.packageName}${pkg.qty > 1 ? ` × ${pkg.qty}` : ''}</div>${pkg.durationMinutes ? `<div class="row"><span>Billing ${pkg.durationMinutes} menit</span><span>${formatCurrency(pkg.billingEquivalent)}</span></div>` : ''}${fnbRows}<div class="row"><span>Diskon</span><span>-${formatCurrency(discount)}</span></div><div class="row bold"><span>Subtotal</span><span>${formatCurrency(pkg.packagePrice)}</span></div></div>`;
-    }).join('<div class="line"></div>');
-    const fnbExtraRows = (detail.fnbItems || []).length > 0
-      ? (detail.fnbItems || []).map((f: any) => `<div class="row"><span>${f.name} × ${f.qty}</span><span>${formatCurrency(f.subtotal)}</span></div>`).join('')
-      : '<div class="muted">Tidak ada F&B tambahan</div>';
-
+    const paidAt = new Date(detail.paidAt).toLocaleString('id-ID');
     const rawLines: string[] = [
       centerReceiptText('RE-PRINT'),
       centerReceiptText(companyProfile?.name || 'Billiard Club OS'),
@@ -104,7 +96,7 @@ export default function CashierTransactionsPage() {
       separatorLine(),
       formatReceiptLine('No', detail.paymentNumber),
       formatReceiptLine('Kasir', detail.cashier),
-      formatReceiptLine('Waktu', new Date(detail.paidAt).toLocaleString('id-ID')),
+      formatReceiptLine('Waktu', paidAt),
       detail.table !== 'Standalone' ? formatReceiptLine('Meja', detail.table) : '',
       (detail.billingSession?.amount || 0) > 0 ? formatReceiptLine('Billiard', formatCurrency(detail.billingSession?.amount || 0)) : '',
       (detail.packageUsages || []).length > 0 ? separatorLine() : '',
@@ -133,7 +125,9 @@ export default function CashierTransactionsPage() {
       centerReceiptText('Terima kasih.'),
     ].filter(Boolean);
 
-    const printed = await printReceiptText(`${rawLines.join('\n')}\n\n\n`, `Reprint ${detail.paymentNumber}`);
+    const printed = await printReceiptText(`${rawLines.join('\n')}\n\n\n`, `Reprint ${detail.paymentNumber}`, {
+      logoUrl: companyProfile?.logoUrl || null,
+    });
     if (!printed) {
       toast.error('QZ Tray/Print Bridge tidak terhubung dan print browser gagal dibuka');
       return;

@@ -181,22 +181,6 @@ export default function CheckoutPage() {
   const printAndCloseReceipt = async () => {
     if (!currentReceipt) return;
     const paidAt = new Date(currentReceipt.paidAt).toLocaleString('id-ID');
-    const packageRows = (currentReceipt.packageUsages || []).map((pkg: any) => {
-      const discount = Math.max(0, Number(pkg.originalPrice || 0) - Number(pkg.packagePrice || 0));
-      const fnbRows = (pkg.fnbItems || [])
-        .map((x: any) => `<div class="row"><span>${x.name} × ${x.qty}</span><span>${formatCurrency(x.subtotal)}</span></div>`)
-        .join('');
-      return `<div><div class="bold">${pkg.packageName}${pkg.qty > 1 ? ` × ${pkg.qty}` : ''}</div>
-        ${pkg.durationMinutes ? `<div class="row"><span>Billing ${pkg.durationMinutes} menit</span><span>${formatCurrency(pkg.billingEquivalent)}</span></div>` : ''}
-        ${fnbRows}
-        <div class="row"><span>Diskon</span><span>-${formatCurrency(discount)}</span></div>
-        <div class="row bold"><span>Subtotal</span><span>${formatCurrency(pkg.packagePrice)}</span></div>
-      </div>`;
-    }).join('<div class="line"></div>');
-    const fnbExtraRows = (currentReceipt.fnbItems || []).length > 0
-      ? (currentReceipt.fnbItems || []).map((f: any) => `<div class="row"><span>${f.name} × ${f.qty}</span><span>${formatCurrency(f.subtotal)}</span></div>`).join('')
-      : '<div class="muted">Tidak ada F&B tambahan</div>';
-
     const rawLines: string[] = [
       centerReceiptText(companyProfile?.name || 'Billiard Club OS'),
       centerReceiptText(companyProfile?.address || ''),
@@ -234,7 +218,10 @@ export default function CheckoutPage() {
       separatorLine(),
       centerReceiptText('Terima kasih.'),
     ].filter(Boolean);
-    const printed = await printReceiptText(`${rawLines.join('\n')}\n\n\n`, `Struk ${currentReceipt.paymentNumber}`);
+
+    const printed = await printReceiptText(`${rawLines.join('\n')}\n\n\n`, `Struk ${currentReceipt.paymentNumber}`, {
+      logoUrl: companyProfile?.logoUrl || null,
+    });
     if (!printed) toast.error('QZ Tray/Print Bridge tidak terhubung dan print browser gagal dibuka');
     if (currentReceiptPaymentId) {
       paymentsApi.markPrinted(currentReceiptPaymentId).catch(() => null);
