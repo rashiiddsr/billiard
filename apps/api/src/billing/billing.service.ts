@@ -441,7 +441,15 @@ export class BillingService {
           include: { items: true },
         },
         payments: { where: { status: 'PAID' } },
-        packageUsages: true,
+        packageUsages: {
+          include: {
+            billingPackage: {
+              include: {
+                items: { include: { menuItem: true } },
+              },
+            },
+          },
+        },
       },
       orderBy: { startTime: 'asc' },
     });
@@ -464,7 +472,15 @@ export class BillingService {
           },
         },
         payments: true,
-        packageUsages: true,
+        packageUsages: {
+          include: {
+            billingPackage: {
+              include: {
+                items: { include: { menuItem: true } },
+              },
+            },
+          },
+        },
       },
     });
     if (!session) throw new NotFoundException('Session not found');

@@ -1,8 +1,10 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { paymentsApi } from '@/lib/api';
+import { companyApi, paymentsApi } from '@/lib/api';
 import { formatCurrency } from '@/lib/utils';
+import { buildBusinessReceiptHtml, printReceiptHtml } from '@/lib/receiptPrinter';
+import toast from 'react-hot-toast';
 
 function toDateInputValue(date: Date) {
   const tzOffset = date.getTimezoneOffset() * 60000;
@@ -16,6 +18,8 @@ export default function CashierTransactionsPage() {
   const [endDate, setEndDate] = useState(today);
   const [data, setData] = useState<any[]>([]);
   const [detail, setDetail] = useState<any>(null);
+  const [detailPaymentId, setDetailPaymentId] = useState<string | null>(null);
+  const [companyProfile, setCompanyProfile] = useState<any>(null);
 
   const fetchData = () => {
     paymentsApi
@@ -31,6 +35,10 @@ export default function CashierTransactionsPage() {
   useEffect(() => {
     fetchData();
   }, [startDate, endDate]);
+
+  useEffect(() => {
+    companyApi.getProfile().then(setCompanyProfile).catch(() => setCompanyProfile(null));
+  }, []);
 
   const applyShortcut = (type: 'today' | 'last7' | 'last30' | 'month') => {
     const now = new Date();
@@ -74,6 +82,44 @@ export default function CashierTransactionsPage() {
   const openDetail = async (id: string) => {
     const receipt = await paymentsApi.getReceipt(id);
     setDetail(receipt);
+    setDetailPaymentId(id);
+  };
+
+  const reprintReceipt = () => {
+    if (!detail) return;
+    const packageRows = (detail.packageUsages || []).map((pkg: any) => {
+      const discount = Math.max(0, Number(pkg.originalPrice || 0) - Number(pkg.packagePrice || 0));
+      const fnbRows = (pkg.fnbItems || []).map((x: any) => `<div class="row"><span>${x.name} × ${x.qty}</span><span>${formatCurrency(x.subtotal)}</span></div>`).join('');
+      return `<div><div class="bold">${pkg.packageName}${pkg.qty > 1 ? ` × ${pkg.qty}` : ''}</div>${pkg.durationMinutes ? `<div class="row"><span>Billing ${pkg.durationMinutes} menit</span><span>${formatCurrency(pkg.billingEquivalent)}</span></div>` : ''}${fnbRows}<div class="row"><span>Diskon</span><span>-${formatCurrency(discount)}</span></div><div class="row bold"><span>Subtotal</span><span>${formatCurrency(pkg.packagePrice)}</span></div></div>`;
+    }).join('<div class="line"></div>');
+    const fnbExtraRows = (detail.fnbItems || []).length > 0
+      ? (detail.fnbItems || []).map((f: any) => `<div class="row"><span>${f.name} × ${f.qty}</span><span>${formatCurrency(f.subtotal)}</span></div>`).join('')
+      : '<div class="muted">Tidak ada F&B tambahan</div>';
+
+    const receiptHtml = buildBusinessReceiptHtml({
+      title: `Reprint ${detail.paymentNumber}`,
+      headerTag: 'RE - PRINT',
+      company: companyProfile,
+      bodyRows: `
+        <div class="row"><span>No</span><span>${detail.paymentNumber}</span></div>
+        <div class="row"><span>Kasir</span><span>${detail.cashier}</span></div>
+        <div class="row"><span>Waktu</span><span>${new Date(detail.paidAt).toLocaleString('id-ID')}</span></div>
+        ${detail.table !== 'Standalone' ? `<div class="row"><span>Meja</span><span>${detail.table}</span></div>` : ''}
+        ${(detail.billingSession?.amount || 0) > 0 ? `<div class="line"></div><div class="row"><span>Billiard</span><span>${formatCurrency(detail.billingSession?.amount || 0)}</span></div>` : ''}
+        ${(detail.packageUsages || []).length > 0 ? `<div class="line"></div><div class="bold">Rincian Paket</div>${packageRows}` : ''}
+        <div class="line"></div><div class="bold">F&B Tambahan</div>${fnbExtraRows}
+        <div class="line"></div><div class="row bold"><span>TOTAL</span><span>${formatCurrency(detail.total)}</span></div>
+        <div class="row"><span>Uang Diterima</span><span>${formatCurrency(detail.amountPaid || 0)}</span></div>
+        <div class="row"><span>Kembalian</span><span>${formatCurrency(detail.change || 0)}</span></div>
+      `,
+    });
+
+    const printed = printReceiptHtml(receiptHtml);
+    if (!printed) {
+      toast.error('Popup print diblokir browser');
+      return;
+    }
+    if (detailPaymentId) paymentsApi.markPrinted(detailPaymentId).catch(() => null);
   };
 
   return (
@@ -100,7 +146,7 @@ export default function CashierTransactionsPage() {
       {detail && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-xl rounded-xl bg-white p-4">
-            <div className="mb-3 flex items-center justify-between"><h3 className="font-semibold">Detail Transaksi {detail.paymentNumber}</h3><button onClick={() => setDetail(null)}>✕</button></div>
+            <div className="mb-3 flex items-center justify-between"><h3 className="font-semibold">Detail Transaksi {detail.paymentNumber}</h3><button onClick={() => { setDetail(null); setDetailPaymentId(null); }}>✕</button></div>
             <div className="space-y-1 text-sm">
               {(detail.billingSession?.amount || 0) > 0 && (
                 <>
@@ -117,9 +163,8 @@ export default function CashierTransactionsPage() {
                       <div className="font-medium">{pkg.packageName}{pkg.qty > 1 ? ` × ${pkg.qty}` : ''}</div>
                       {pkg.durationMinutes ? <div className="flex justify-between text-slate-600"><span>Billing {pkg.durationMinutes} menit</span><span>{formatCurrency(pkg.billingEquivalent)}</span></div> : null}
                       {(pkg.fnbItems || []).map((f: any, idx: number) => <div key={idx} className="flex justify-between text-slate-600"><span>{f.name} × {f.qty}</span><span>{formatCurrency(f.subtotal)}</span></div>)}
-                      <div className="flex justify-between text-slate-700"><span>Total normal</span><span>{formatCurrency(pkg.originalPrice)}</span></div>
-                      <div className="flex justify-between text-slate-700"><span>Diskon paket</span><span>-{formatCurrency(Math.max(0, Number(pkg.originalPrice || 0) - Number(pkg.packagePrice || 0)))}</span></div>
-                      <div className="flex justify-between font-semibold"><span>Total bayar paket</span><span>{formatCurrency(pkg.packagePrice)}</span></div>
+                      <div className="flex justify-between text-slate-700"><span>Diskon</span><span>-{formatCurrency(Math.max(0, Number(pkg.originalPrice || 0) - Number(pkg.packagePrice || 0)))}</span></div>
+                      <div className="flex justify-between font-semibold"><span>Subtotal</span><span>{formatCurrency(pkg.packagePrice)}</span></div>
                     </div>
                   ))}
                 </div>
@@ -127,6 +172,7 @@ export default function CashierTransactionsPage() {
               <div className="mt-2 border-t pt-2"><p className="font-semibold">F&B Tambahan</p>{(detail.fnbItems || []).length === 0 ? <p className="text-slate-500">Tidak ada F&B tambahan</p> : detail.fnbItems.map((f: any, i: number) => <div key={i} className="flex justify-between"><span>{f.name} × {f.qty}</span><span>{formatCurrency(f.subtotal)}</span></div>)}</div>
               <div className="mt-2 flex justify-between border-t pt-2 font-semibold"><span>Total Transaksi</span><span>{formatCurrency(detail.total)}</span></div>
             </div>
+            <button className="btn-primary mt-4 w-full" onClick={reprintReceipt}>Cetak Ulang Struk</button>
           </div>
         </div>
       )}

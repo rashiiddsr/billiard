@@ -1,8 +1,9 @@
 'use client';
 
 import { useEffect, useMemo, useState, useCallback } from 'react';
-import { billingApi, ordersApi, paymentsApi } from '@/lib/api';
+import { billingApi, companyApi, ordersApi, paymentsApi } from '@/lib/api';
 import { formatCurrency } from '@/lib/utils';
+import { buildBusinessReceiptHtml, printReceiptHtml } from '@/lib/receiptPrinter';
 import toast from 'react-hot-toast';
 
 type PaymentMethod = 'CASH' | 'QRIS' | 'TRANSFER';
@@ -16,6 +17,8 @@ export default function CheckoutPage() {
   const [reference, setReference] = useState('');
   const [amountPaid, setAmountPaid] = useState('');
   const [currentReceipt, setCurrentReceipt] = useState<any>(null);
+  const [currentReceiptPaymentId, setCurrentReceiptPaymentId] = useState<string | null>(null);
+  const [companyProfile, setCompanyProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
@@ -37,6 +40,10 @@ export default function CheckoutPage() {
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  useEffect(() => {
+    companyApi.getProfile().then(setCompanyProfile).catch(() => setCompanyProfile(null));
+  }, []);
 
   useEffect(() => {
     const loadSessionOrders = async () => {
@@ -80,6 +87,11 @@ export default function CheckoutPage() {
         existing.packagePrice += Number(usage.packagePrice || 0);
         existing.originalPrice += Number(usage.originalPrice || 0);
         existing.durationMinutes += Number(usage.durationMinutes || 0);
+        existing.fnbItems.push(...(usage.billingPackage?.items || []).filter((x: any) => x.type === 'MENU_ITEM').map((x: any) => ({
+          name: x.menuItem?.name || 'Menu',
+          qty: x.quantity,
+          subtotal: Number(x.unitPrice || 0) * Number(x.quantity || 0),
+        })));
       } else {
         grouped.set(key, {
           ...usage,
@@ -87,6 +99,11 @@ export default function CheckoutPage() {
           packagePrice: Number(usage.packagePrice || 0),
           originalPrice: Number(usage.originalPrice || 0),
           durationMinutes: Number(usage.durationMinutes || 0),
+          fnbItems: (usage.billingPackage?.items || []).filter((x: any) => x.type === 'MENU_ITEM').map((x: any) => ({
+            name: x.menuItem?.name || 'Menu',
+            qty: x.quantity,
+            subtotal: Number(x.unitPrice || 0) * Number(x.quantity || 0),
+          })),
         });
       }
     }
@@ -148,6 +165,7 @@ export default function CheckoutPage() {
       });
       const receipt = await paymentsApi.getReceipt(payment.id);
       setCurrentReceipt(receipt);
+      setCurrentReceiptPaymentId(payment.id);
       toast.success(`Pembayaran selesai • ${payment.paymentNumber}`);
       setSelectedSession('');
       setReference('');
@@ -158,6 +176,51 @@ export default function CheckoutPage() {
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const printAndCloseReceipt = async () => {
+    if (!currentReceipt) return;
+    const paidAt = new Date(currentReceipt.paidAt).toLocaleString('id-ID');
+    const packageRows = (currentReceipt.packageUsages || []).map((pkg: any) => {
+      const discount = Math.max(0, Number(pkg.originalPrice || 0) - Number(pkg.packagePrice || 0));
+      const fnbRows = (pkg.fnbItems || [])
+        .map((x: any) => `<div class="row"><span>${x.name} × ${x.qty}</span><span>${formatCurrency(x.subtotal)}</span></div>`)
+        .join('');
+      return `<div><div class="bold">${pkg.packageName}${pkg.qty > 1 ? ` × ${pkg.qty}` : ''}</div>
+        ${pkg.durationMinutes ? `<div class="row"><span>Billing ${pkg.durationMinutes} menit</span><span>${formatCurrency(pkg.billingEquivalent)}</span></div>` : ''}
+        ${fnbRows}
+        <div class="row"><span>Diskon</span><span>-${formatCurrency(discount)}</span></div>
+        <div class="row bold"><span>Subtotal</span><span>${formatCurrency(pkg.packagePrice)}</span></div>
+      </div>`;
+    }).join('<div class="line"></div>');
+    const fnbExtraRows = (currentReceipt.fnbItems || []).length > 0
+      ? (currentReceipt.fnbItems || []).map((f: any) => `<div class="row"><span>${f.name} × ${f.qty}</span><span>${formatCurrency(f.subtotal)}</span></div>`).join('')
+      : '<div class="muted">Tidak ada F&B tambahan</div>';
+
+    const receiptHtml = buildBusinessReceiptHtml({
+      title: `Struk ${currentReceipt.paymentNumber}`,
+      company: companyProfile,
+      bodyRows: `
+        <div class="row"><span>No</span><span>${currentReceipt.paymentNumber}</span></div>
+        <div class="row"><span>Kasir</span><span>${currentReceipt.cashier}</span></div>
+        <div class="row"><span>Waktu</span><span>${paidAt}</span></div>
+        ${currentReceipt.table !== 'Standalone' ? `<div class="row"><span>Meja</span><span>${currentReceipt.table}</span></div>` : ''}
+        ${(currentReceipt.billingSession?.amount || 0) > 0 ? `<div class="line"></div><div class="row"><span>Billiard</span><span>${formatCurrency(currentReceipt.billingSession?.amount || 0)}</span></div>` : ''}
+        ${(currentReceipt.packageUsages || []).length > 0 ? `<div class="line"></div><div class="bold">Rincian Paket</div>${packageRows}` : ''}
+        <div class="line"></div><div class="bold">F&B Tambahan</div>${fnbExtraRows}
+        <div class="line"></div>
+        <div class="row bold"><span>TOTAL</span><span>${formatCurrency(currentReceipt.total)}</span></div>
+        <div class="row"><span>Uang Diterima</span><span>${formatCurrency(currentReceipt.amountPaid || 0)}</span></div>
+        <div class="row"><span>Kembalian</span><span>${formatCurrency(currentReceipt.change || 0)}</span></div>
+      `,
+    });
+    const printed = printReceiptHtml(receiptHtml);
+    if (!printed) toast.error('Popup print diblokir browser');
+    if (currentReceiptPaymentId) {
+      paymentsApi.markPrinted(currentReceiptPaymentId).catch(() => null);
+    }
+    setCurrentReceipt(null);
+    setCurrentReceiptPaymentId(null);
   };
 
   if (loading) return <div className="flex h-64 items-center justify-center"><div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-500 border-t-transparent" /></div>;
@@ -173,7 +236,7 @@ export default function CheckoutPage() {
           <select className="input" value={selectedSession} onChange={(e) => setSelectedSession(e.target.value)}>
             <option value="">— Pilih tagihan meja —</option>
             {sessions.map((s) => (
-              <option key={s.id} value={s.id}>{s.table?.name} • {s.status} • {formatCurrency(s.totalAmount)}</option>
+              <option key={s.id} value={s.id}>{s.table?.name} • {new Date(s.startTime).toLocaleString('id-ID')} • {s.status} • {formatCurrency(s.totalAmount)}</option>
             ))}
           </select>
         </div>
@@ -185,9 +248,9 @@ export default function CheckoutPage() {
               <div key={usage.id || idx} className="mb-2 rounded border border-blue-100 bg-blue-50 p-2">
                 <p className="text-xs font-semibold text-blue-700">{usage.packageName}{usage.qty > 1 ? ` × ${usage.qty}` : ''}</p>
                 {usage.durationMinutes ? <div className="flex justify-between text-slate-700"><span>Billing {usage.durationMinutes} menit</span><span>{formatCurrency((Number(selectedSessionDetail?.ratePerHour || 0) * Number(usage.durationMinutes || 0)) / 60)}</span></div> : null}
-                <div className="flex justify-between text-slate-700"><span>Total normal</span><span>{formatCurrency(usage.originalPrice)}</span></div>
-                <div className="flex justify-between text-slate-700"><span>Diskon paket</span><span>-{formatCurrency(Math.max(0, Number(usage.originalPrice || 0) - Number(usage.packagePrice || 0)))}</span></div>
-                <div className="flex justify-between text-slate-900 font-semibold"><span>Total bayar paket</span><span>{formatCurrency(usage.packagePrice)}</span></div>
+                {(usage.fnbItems || []).map((x: any, i: number) => <div key={`${usage.id || idx}-fnb-${i}`} className="flex justify-between text-slate-600"><span>{x.name} × {x.qty}</span><span>{formatCurrency(x.subtotal)}</span></div>)}
+                <div className="flex justify-between text-slate-700"><span>Diskon</span><span>-{formatCurrency(Math.max(0, Number(usage.originalPrice || 0) - Number(usage.packagePrice || 0)))}</span></div>
+                <div className="flex justify-between text-slate-900 font-semibold"><span>Subtotal</span><span>{formatCurrency(usage.packagePrice)}</span></div>
               </div>
             ))}
             <div className="flex justify-between"><span>Tagihan billing {selectedSessionDetail?.durationMinutes || 0} menit</span><span>{formatCurrency(breakdown.baseAmount)}</span></div>
@@ -248,9 +311,8 @@ export default function CheckoutPage() {
                       <div className="font-medium">{pkg.packageName}{pkg.qty > 1 ? ` × ${pkg.qty}` : ''}</div>
                       {pkg.durationMinutes ? <div className="flex justify-between text-slate-600"><span>Billing {pkg.durationMinutes} menit</span><span>{formatCurrency(pkg.billingEquivalent)}</span></div> : null}
                       {(pkg.fnbItems || []).map((x: any, i: number) => <div key={i} className="flex justify-between text-slate-600"><span>{x.name} × {x.qty}</span><span>{formatCurrency(x.subtotal)}</span></div>)}
-                      <div className="flex justify-between text-slate-700"><span>Total normal</span><span>{formatCurrency(pkg.originalPrice)}</span></div>
-                      <div className="flex justify-between text-slate-700"><span>Diskon paket</span><span>-{formatCurrency(Math.max(0, Number(pkg.originalPrice || 0) - Number(pkg.packagePrice || 0)))}</span></div>
-                      <div className="flex justify-between font-semibold"><span>Total bayar paket</span><span>{formatCurrency(pkg.packagePrice)}</span></div>
+                      <div className="flex justify-between text-slate-700"><span>Diskon</span><span>-{formatCurrency(Math.max(0, Number(pkg.originalPrice || 0) - Number(pkg.packagePrice || 0)))}</span></div>
+                      <div className="flex justify-between font-semibold"><span>Subtotal</span><span>{formatCurrency(pkg.packagePrice)}</span></div>
                     </div>
                   ))}
                 </div>
@@ -260,7 +322,7 @@ export default function CheckoutPage() {
               <div className="flex justify-between"><span>Uang Diterima</span><span>{formatCurrency(currentReceipt.amountPaid || 0)}</span></div>
               <div className="flex justify-between"><span>Kembalian</span><span>{formatCurrency(currentReceipt.change || 0)}</span></div>
             </div>
-            <button className="btn-primary mt-4 w-full" onClick={() => setCurrentReceipt(null)}>Tutup</button>
+            <button className="btn-primary mt-4 w-full" onClick={printAndCloseReceipt}>Tutup</button>
           </div>
         </div>
       )}
