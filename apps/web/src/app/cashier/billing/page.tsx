@@ -474,6 +474,21 @@ export default function BillingPage() {
                     <option value="">Pilih paket</option>
                     {packages.map((pkg) => <option key={pkg.id} value={pkg.id}>{pkg.name} • {formatCurrency(pkg.price)}</option>)}
                   </select>
+                  {selectedPackage && (
+                    <div className="mt-2 rounded-lg border border-blue-100 bg-blue-50 p-2 text-xs text-slate-700">
+                      <p className="font-semibold text-blue-700">Detail Paket {selectedPackage.name}</p>
+                      {selectedPackage.durationMinutes ? <p>• Billing {selectedPackage.durationMinutes} menit</p> : null}
+                      {(selectedPackage.items || []).filter((item: any) => item.type === 'MENU_ITEM').length === 0 ? (
+                        <p>• Tidak ada item F&B</p>
+                      ) : (
+                        (selectedPackage.items || [])
+                          .filter((item: any) => item.type === 'MENU_ITEM')
+                          .map((item: any) => (
+                            <p key={item.id}>• {item.menuItem?.name || 'Menu'} × {item.quantity}</p>
+                          ))
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -620,6 +635,18 @@ export default function BillingPage() {
                 <div className="mt-1 flex justify-between border-t border-slate-200 pt-1"><span className="text-slate-500">Total Sesi</span><span className="font-semibold">{formatCurrency(sessionDetail.totalAmount)}</span></div>
               </div>
 
+              {(sessionDetail.packageUsages || []).length > 0 && (
+                <div className="rounded-lg border border-blue-100 bg-blue-50 p-3">
+                  <p className="mb-2 font-semibold text-blue-700">Rincian Paket</p>
+                  {(sessionDetail.packageUsages || []).map((usage: any, idx: number) => (
+                    <div key={usage.id || idx} className="mb-2 rounded border border-blue-200 bg-white p-2">
+                      <div className="flex justify-between text-xs"><span className="font-semibold">{usage.packageName}</span><span>{formatCurrency(usage.packagePrice)}</span></div>
+                      {usage.durationMinutes ? <p className="text-xs text-slate-600">Billing {usage.durationMinutes} menit</p> : null}
+                    </div>
+                  ))}
+                </div>
+              )}
+
               <div className="rounded-lg border border-slate-200 p-3">
                 <p className="mb-2 font-semibold">Pesanan F&B</p>
                 {(sessionDetail.orders || []).length === 0 && <p className="text-slate-500">Belum ada pesanan F&B.</p>}
@@ -631,7 +658,7 @@ export default function BillingPage() {
                       <div key={order.id} className="rounded border border-slate-200 bg-slate-50 p-2">
                         <div className="flex items-start justify-between gap-2">
                           <div>
-                            <p className="text-xs font-semibold">{order.orderNumber} • {formatCurrency(order.total)}</p>
+                            <p className="text-xs font-semibold">{order.orderNumber} • {isPackageOrder ? 'Termasuk paket' : formatCurrency(order.total)}</p>
                             <p className="text-xs text-slate-500">{order.notes || 'Tanpa catatan'}</p>
                             {isPackageOrder && <p className="text-[11px] font-semibold text-blue-600">Item paket (tidak bisa dihapus)</p>}
                           </div>
