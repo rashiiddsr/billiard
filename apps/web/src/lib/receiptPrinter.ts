@@ -62,7 +62,6 @@ const getDesktopPrintBridgeUrl = () => {
 const getQzScriptUrl = () => process.env.NEXT_PUBLIC_QZ_SCRIPT_URL?.trim() || 'https://cdn.jsdelivr.net/npm/qz-tray@2.2.4/qz-tray.js';
 const getQzPrinterName = () => process.env.NEXT_PUBLIC_QZ_PRINTER?.trim() || '';
 const isQzEnabled = () => process.env.NEXT_PUBLIC_QZ_TRAY_ENABLED === 'true';
-const shouldPreferRawForQz = () => process.env.NEXT_PUBLIC_QZ_PREFER_RAW === 'true';
 
 const getQzCertificate = () => process.env.NEXT_PUBLIC_QZ_CERTIFICATE?.trim() || '';
 const getQzCertificateEndpoint = () => process.env.NEXT_PUBLIC_QZ_CERTIFICATE_ENDPOINT?.trim() || `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1'}/print/qz/certificate`;
@@ -146,7 +145,84 @@ async function ensureQzLoaded() {
   return qzLoaderPromise;
 }
 
-async function printViaQzTray(payload: { title: string; text?: string; html?: string }) {
+
+function bytesToRawString(bytes: Uint8Array) {
+  let out = '';
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    out += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  }
+  return out;
+}
+
+async function buildEscPosLogoCommand(logoUrl?: string | null) {
+  if (!logoUrl || typeof window === 'undefined' || typeof document === 'undefined') return '';
+
+  try {
+    const response = await fetch(logoUrl);
+    if (!response.ok) return '';
+    const blob = await response.blob();
+    const bitmap = await createImageBitmap(blob);
+
+    const maxWidth = 384;
+    const ratio = bitmap.width > maxWidth ? maxWidth / bitmap.width : 1;
+    const width = Math.max(8, Math.floor(bitmap.width * ratio));
+    const height = Math.max(8, Math.floor(bitmap.height * ratio));
+    const evenWidth = width - (width % 8);
+
+    const canvas = document.createElement('canvas');
+    canvas.width = evenWidth;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return '';
+
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+
+    const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const widthBytes = canvas.width / 8;
+    const data = new Uint8Array(8 + widthBytes * canvas.height);
+
+    data[0] = 0x1d;
+    data[1] = 0x76;
+    data[2] = 0x30;
+    data[3] = 0x00;
+    data[4] = widthBytes & 0xff;
+    data[5] = (widthBytes >> 8) & 0xff;
+    data[6] = canvas.height & 0xff;
+    data[7] = (canvas.height >> 8) & 0xff;
+
+    let ptr = 8;
+    for (let y = 0; y < canvas.height; y += 1) {
+      for (let xByte = 0; xByte < widthBytes; xByte += 1) {
+        let value = 0;
+        for (let bit = 0; bit < 8; bit += 1) {
+          const x = xByte * 8 + bit;
+          const idx = (y * canvas.width + x) * 4;
+          const r = image.data[idx];
+          const g = image.data[idx + 1];
+          const b = image.data[idx + 2];
+          const alpha = image.data[idx + 3];
+          const luminance = (0.299 * r) + (0.587 * g) + (0.114 * b);
+          const isBlack = alpha > 32 && luminance < 160;
+          if (isBlack) value |= (0x80 >> bit);
+        }
+        data[ptr] = value;
+        ptr += 1;
+      }
+    }
+
+    const centerOn = '\x1B\x61\x01';
+    const centerOff = '\x1B\x61\x00';
+    const lineFeed = '\n';
+    return `${centerOn}${bytesToRawString(data)}${lineFeed}${centerOff}`;
+  } catch {
+    return '';
+  }
+}
+
+async function printViaQzTray(payload: { title: string; text?: string; html?: string; logoUrl?: string | null }) {
   if (!isQzEnabled()) return false;
   const loaded = await ensureQzLoaded();
   if (!loaded || !window.qz) return false;
@@ -182,7 +258,8 @@ async function printViaQzTray(payload: { title: string; text?: string; html?: st
 
   if (payload.text) {
     const rawText = payload.text.endsWith('\n') ? payload.text : `${payload.text}\n`;
-    await qz.print(config, [{ type: 'raw', format: 'plain', data: `${rawText}\n\n\x1D\x56\x41\x10` }]);
+    const logoCommand = await buildEscPosLogoCommand(payload.logoUrl);
+    await qz.print(config, [{ type: 'raw', format: 'plain', data: `${logoCommand}${rawText}\n\n\x1D\x56\x41\x10` }]);
     return true;
   }
 
@@ -224,11 +301,11 @@ export async function printReceiptHtml(receiptHtml: string, title = 'Struk') {
   return printWithHiddenFrame(receiptHtml);
 }
 
-export async function printReceiptText(receiptText: string, title = 'Struk') {
+export async function printReceiptText(receiptText: string, title = 'Struk', options?: { logoUrl?: string | null }) {
   const safeTitle = escapeHtml(title);
   const safeText = escapeHtml(receiptText);
 
-  const printedByQz = await printViaQzTray({ title, text: receiptText }).catch(() => false);
+  const printedByQz = await printViaQzTray({ title, text: receiptText, logoUrl: resolveImageUrl(options?.logoUrl) }).catch(() => false);
   if (printedByQz) return true;
 
   const printedByBridge = await sendToDesktopPrintBridge({ title, text: receiptText });
@@ -295,25 +372,6 @@ function printWithHiddenFrame(content: string) {
   return true;
 }
 
-
-export async function printReceiptSmart({
-  title = 'Struk',
-  text,
-  html,
-}: {
-  title?: string;
-  text: string;
-  html: string;
-}) {
-  if (isQzEnabled() && shouldPreferRawForQz()) {
-    return printReceiptText(text, title);
-  }
-
-  const printedByHtml = await printReceiptHtml(html, title);
-  if (printedByHtml) return true;
-
-  return printReceiptText(text, title);
-}
 
 export function centerReceiptText(text: string, width = 32) {
   const cleanText = text.replace(/\s+/g, ' ').trim();
