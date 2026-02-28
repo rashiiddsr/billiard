@@ -85,7 +85,7 @@ export default function CashierTransactionsPage() {
     setDetailPaymentId(id);
   };
 
-  const reprintReceipt = () => {
+  const reprintReceipt = async () => {
     if (!detail) return;
     const packageRows = (detail.packageUsages || []).map((pkg: any) => {
       const discount = Math.max(0, Number(pkg.originalPrice || 0) - Number(pkg.packagePrice || 0));
@@ -133,9 +133,9 @@ export default function CashierTransactionsPage() {
       centerReceiptText('Terima kasih.'),
     ].filter(Boolean);
 
-    const printed = printReceiptText(`${rawLines.join('\n')}\n\n\n`, `Reprint ${detail.paymentNumber}`);
+    const printed = await printReceiptText(`${rawLines.join('\n')}\n\n\n`, `Reprint ${detail.paymentNumber}`);
     if (!printed) {
-      toast.error('Popup print diblokir browser');
+      toast.error('QZ Tray/Print Bridge tidak terhubung dan print browser gagal dibuka');
       return;
     }
     if (detailPaymentId) paymentsApi.markPrinted(detailPaymentId).catch(() => null);
