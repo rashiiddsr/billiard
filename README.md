@@ -111,16 +111,6 @@ IOT_GATEWAY_DEVICE_ID=""
 **apps/web/.env.local:**
 ```env
 NEXT_PUBLIC_API_URL=http://localhost:3001/api/v1
-# Optional: QZ Tray as primary desktop printing path
-NEXT_PUBLIC_QZ_TRAY_ENABLED=true
-NEXT_PUBLIC_QZ_PRINTER=POS-58
-# Optional override (default already points to jsdelivr qz-tray js)
-NEXT_PUBLIC_QZ_SCRIPT_URL=https://cdn.jsdelivr.net/npm/qz-tray@2.2.4/qz-tray.js
-# Wajib untuk trusted mode (agar tidak muncul anonymous/untrusted prompt)
-NEXT_PUBLIC_QZ_CERTIFICATE=-----BEGIN CERTIFICATE-----...
-NEXT_PUBLIC_QZ_SIGNATURE_URL=http://localhost:3001/api/v1/print/qz-sign
-# Optional: desktop print bridge endpoint (fallback path)
-NEXT_PUBLIC_PRINT_BRIDGE_URL=http://127.0.0.1:18181/print
 ```
 
 ### 4. Database Setup
@@ -156,24 +146,6 @@ npm run dev
 Open http://localhost:3000
 
 ---
-
-### Desktop Receipt Printing (QZ Tray)
-
-Untuk adopsi **QZ Tray print** di PC kasir:
-
-1. Install dan jalankan QZ Tray di Windows PC kasir.
-2. Set env web:
-   - `NEXT_PUBLIC_QZ_TRAY_ENABLED=true`
-   - `NEXT_PUBLIC_QZ_PRINTER=<nama printer thermal di Windows>`
-3. Saat tombol **Tutup** di checkout atau **Cetak Ulang Struk** di transaksi ditekan, frontend akan mencoba urutan:
-   - QZ Tray (silent desktop print)
-   - Print Bridge HTTP (opsional)
-   - Browser print fallback (iframe)
-
-Catatan: untuk production, sebaiknya gunakan certificate/signature resmi QZ Tray agar tidak mengandalkan unsigned mode.
-Catatan: popup **"An anonymous request wants to print"** muncul jika request QZ tidak signed (untrusted website).
-Agar tombol **Remember this decision** bisa dipakai, aktifkan trusted mode dengan `NEXT_PUBLIC_QZ_CERTIFICATE` + `NEXT_PUBLIC_QZ_SIGNATURE_URL`.
-
 
 ## Default Login Credentials
 

@@ -1,32 +1,5 @@
 'use client';
 
-type QzSecurity = {
-  setCertificatePromise: (fn: (resolve: (value?: string) => void, reject: (reason?: unknown) => void) => void) => void;
-  setSignaturePromise: (fn: (toSign: string) => (resolve: (value?: string) => void, reject: (reason?: unknown) => void) => void) => void;
-};
-
-type QzWebsocket = {
-  isActive: () => boolean;
-  connect: (opts?: { retries?: number; delay?: number }) => Promise<void>;
-};
-
-type QzConfigs = {
-  create: (printer?: string | null, options?: Record<string, unknown>) => unknown;
-};
-
-type QzApi = {
-  websocket: QzWebsocket;
-  security: QzSecurity;
-  configs: QzConfigs;
-  print: (config: unknown, data: unknown[]) => Promise<void>;
-};
-
-declare global {
-  interface Window {
-    qz?: QzApi;
-  }
-}
-
 const getApiOrigin = () => {
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
   try {
@@ -51,147 +24,27 @@ const escapeHtml = (value: string) =>
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&#39;');
 
-const getDesktopPrintBridgeUrl = () => {
-  const url = process.env.NEXT_PUBLIC_PRINT_BRIDGE_URL?.trim();
-  return url && /^https?:\/\//.test(url) ? url : '';
-};
-
-const getQzScriptUrl = () => process.env.NEXT_PUBLIC_QZ_SCRIPT_URL?.trim() || 'https://cdn.jsdelivr.net/npm/qz-tray@2.2.4/qz-tray.js';
-const getQzPrinterName = () => process.env.NEXT_PUBLIC_QZ_PRINTER?.trim() || '';
-const isQzEnabled = () => process.env.NEXT_PUBLIC_QZ_TRAY_ENABLED === 'true';
-
-const getQzCertificate = () => process.env.NEXT_PUBLIC_QZ_CERTIFICATE?.trim() || '';
-const getQzSignatureUrl = () => {
-  const url = process.env.NEXT_PUBLIC_QZ_SIGNATURE_URL?.trim();
-  return url && /^https?:\/\//.test(url) ? url : '';
-};
-
-let hasLoggedQzTrustWarning = false;
-
-let qzLoaderPromise: Promise<boolean> | null = null;
-
-async function ensureQzLoaded() {
-  if (typeof window === 'undefined' || typeof document === 'undefined') return false;
-  if (window.qz) return true;
-
-  if (!qzLoaderPromise) {
-    qzLoaderPromise = new Promise<boolean>((resolve) => {
-      const script = document.createElement('script');
-      script.src = getQzScriptUrl();
-      script.async = true;
-      script.onload = () => resolve(!!window.qz);
-      script.onerror = () => resolve(false);
-      document.head.appendChild(script);
-    });
-  }
-
-  return qzLoaderPromise;
+export function printReceiptHtml(receiptHtml: string) {
+  const win = window.open('', '_blank', 'width=320,height=760');
+  if (!win) return false;
+  win.document.open();
+  win.document.write(receiptHtml);
+  win.document.close();
+  win.focus();
+  win.onload = () => {
+    win.print();
+    win.close();
+  };
+  return true;
 }
 
-async function printViaQzTray(payload: { title: string; text?: string; html?: string }) {
-  if (!isQzEnabled()) return false;
-  const loaded = await ensureQzLoaded();
-  if (!loaded || !window.qz) return false;
-
-  const qz = window.qz;
-  const certificate = getQzCertificate();
-  const signatureUrl = getQzSignatureUrl();
-  if (!certificate || !signatureUrl) {
-    if (!hasLoggedQzTrustWarning) {
-      console.warn('[print] QZ Tray dilewati karena certificate/signature URL belum dikonfigurasi.');
-      hasLoggedQzTrustWarning = true;
-    }
-    return false;
-  }
-
-  qz.security.setCertificatePromise((resolve) => resolve(certificate));
-  qz.security.setSignaturePromise((toSign) => async (resolve, reject) => {
-    try {
-      const response = await fetch(signatureUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ data: toSign }),
-      });
-      if (!response.ok) {
-        reject(new Error('QZ signature service error'));
-        return;
-      }
-      const payload = await response.json().catch(() => null) as { signature?: string } | null;
-      const signature = payload?.signature;
-      if (!signature) {
-        reject(new Error('QZ signature tidak ditemukan')); 
-        return;
-      }
-      resolve(signature);
-    } catch (error) {
-      reject(error);
-    }
-  });
-
-  if (!qz.websocket.isActive()) {
-    await qz.websocket.connect({ retries: 1, delay: 0 });
-  }
-
-  const printerName = getQzPrinterName();
-  const config = qz.configs.create(printerName || null, {
-    copies: 1,
-  });
-
-  if (payload.text) {
-    const rawText = payload.text.endsWith('\n') ? payload.text : `${payload.text}\n`;
-    await qz.print(config, [{ type: 'raw', format: 'plain', data: `${rawText}\n\n\x1D\x56\x41\x10` }]);
-    return true;
-  }
-
-  if (payload.html) {
-    await qz.print(config, [{ type: 'pixel', format: 'html', flavor: 'plain', data: payload.html }]);
-    return true;
-  }
-
-  return false;
-}
-
-async function sendToDesktopPrintBridge(payload: { title: string; text?: string; html?: string }) {
-  const bridgeUrl = getDesktopPrintBridgeUrl();
-  if (!bridgeUrl) return false;
-
-  try {
-    const response = await fetch(bridgeUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        type: 'receipt',
-        source: 'billiard-web',
-        ...payload,
-      }),
-    });
-    return response.ok;
-  } catch {
-    return false;
-  }
-}
-
-export async function printReceiptHtml(receiptHtml: string, title = 'Struk') {
-  const printedByQz = await printViaQzTray({ title, html: receiptHtml }).catch(() => false);
-  if (printedByQz) return true;
-
-  const printedByBridge = await sendToDesktopPrintBridge({ title, html: receiptHtml });
-  if (printedByBridge) return true;
-
-  return printWithHiddenFrame(receiptHtml);
-}
-
-export async function printReceiptText(receiptText: string, title = 'Struk') {
+export function printReceiptText(receiptText: string, title = 'Struk') {
   const safeTitle = escapeHtml(title);
   const safeText = escapeHtml(receiptText);
-
-  const printedByQz = await printViaQzTray({ title, text: receiptText }).catch(() => false);
-  if (printedByQz) return true;
-
-  const printedByBridge = await sendToDesktopPrintBridge({ title, text: receiptText });
-  if (printedByBridge) return true;
-
-  return printWithHiddenFrame(`<!doctype html>
+  const win = window.open('', '_blank', 'width=420,height=760');
+  if (!win) return false;
+  win.document.open();
+  win.document.write(`<!doctype html>
 <html>
   <head>
     <meta charset="utf-8" />
@@ -215,42 +68,15 @@ export async function printReceiptText(receiptText: string, title = 'Struk') {
     <pre>${safeText}</pre>
   </body>
 </html>`);
-}
-
-function printWithHiddenFrame(content: string) {
-  if (typeof window === 'undefined' || typeof document === 'undefined') return false;
-  const iframe = document.createElement('iframe');
-  iframe.style.position = 'fixed';
-  iframe.style.right = '0';
-  iframe.style.bottom = '0';
-  iframe.style.width = '1px';
-  iframe.style.height = '1px';
-  iframe.style.opacity = '0';
-  iframe.style.pointerEvents = 'none';
-  iframe.style.border = '0';
-
-  const cleanup = () => {
-    window.setTimeout(() => {
-      iframe.remove();
-    }, 1000);
+  win.document.close();
+  win.focus();
+  win.onload = () => {
+    win.print();
+    win.close();
   };
-
-  iframe.onload = () => {
-    const targetWindow = iframe.contentWindow;
-    if (!targetWindow) {
-      cleanup();
-      return;
-    }
-    targetWindow.onafterprint = cleanup;
-    targetWindow.focus();
-    targetWindow.print();
-    window.setTimeout(cleanup, 5000);
-  };
-
-  iframe.srcdoc = content;
-  document.body.appendChild(iframe);
   return true;
 }
+
 
 export function centerReceiptText(text: string, width = 32) {
   const cleanText = text.replace(/\s+/g, ' ').trim();
@@ -266,8 +92,7 @@ export function formatReceiptLine(left: string, right = '', width = 32) {
   if (!cleanRight) return cleanLeft;
   const spacing = width - cleanLeft.length - cleanRight.length;
   if (spacing >= 1) return `${cleanLeft}${' '.repeat(spacing)}${cleanRight}`;
-  return `${cleanLeft}
-${' '.repeat(Math.max(0, width - cleanRight.length))}${cleanRight}`;
+  return `${cleanLeft}\n${' '.repeat(Math.max(0, width - cleanRight.length))}${cleanRight}`;
 }
 
 export function separatorLine(width = 32, char = '-') {
