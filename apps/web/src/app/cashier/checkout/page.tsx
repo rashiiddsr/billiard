@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import { billingApi, companyApi, ordersApi, paymentsApi } from '@/lib/api';
 import { formatCurrency } from '@/lib/utils';
-import { buildBusinessReceiptHtml, printReceiptHtml } from '@/lib/receiptPrinter';
+import { centerReceiptText, formatReceiptLine, printReceiptText, separatorLine } from '@/lib/receiptPrinter';
 import toast from 'react-hot-toast';
 
 type PaymentMethod = 'CASH' | 'QRIS' | 'TRANSFER';
@@ -197,24 +197,44 @@ export default function CheckoutPage() {
       ? (currentReceipt.fnbItems || []).map((f: any) => `<div class="row"><span>${f.name} × ${f.qty}</span><span>${formatCurrency(f.subtotal)}</span></div>`).join('')
       : '<div class="muted">Tidak ada F&B tambahan</div>';
 
-    const receiptHtml = buildBusinessReceiptHtml({
-      title: `Struk ${currentReceipt.paymentNumber}`,
-      company: companyProfile,
-      bodyRows: `
-        <div class="row"><span>No</span><span>${currentReceipt.paymentNumber}</span></div>
-        <div class="row"><span>Kasir</span><span>${currentReceipt.cashier}</span></div>
-        <div class="row"><span>Waktu</span><span>${paidAt}</span></div>
-        ${currentReceipt.table !== 'Standalone' ? `<div class="row"><span>Meja</span><span>${currentReceipt.table}</span></div>` : ''}
-        ${(currentReceipt.billingSession?.amount || 0) > 0 ? `<div class="line"></div><div class="row"><span>Billiard</span><span>${formatCurrency(currentReceipt.billingSession?.amount || 0)}</span></div>` : ''}
-        ${(currentReceipt.packageUsages || []).length > 0 ? `<div class="line"></div><div class="bold">Rincian Paket</div>${packageRows}` : ''}
-        <div class="line"></div><div class="bold">F&B Tambahan</div>${fnbExtraRows}
-        <div class="line"></div>
-        <div class="row bold"><span>TOTAL</span><span>${formatCurrency(currentReceipt.total)}</span></div>
-        <div class="row"><span>Uang Diterima</span><span>${formatCurrency(currentReceipt.amountPaid || 0)}</span></div>
-        <div class="row"><span>Kembalian</span><span>${formatCurrency(currentReceipt.change || 0)}</span></div>
-      `,
-    });
-    const printed = printReceiptHtml(receiptHtml);
+    const rawLines: string[] = [
+      centerReceiptText(companyProfile?.name || 'Billiard Club OS'),
+      centerReceiptText(companyProfile?.address || ''),
+      centerReceiptText(companyProfile?.phoneNumber ? `Telp: ${companyProfile.phoneNumber}` : ''),
+      separatorLine(),
+      formatReceiptLine('No', currentReceipt.paymentNumber),
+      formatReceiptLine('Kasir', currentReceipt.cashier),
+      formatReceiptLine('Waktu', paidAt),
+      currentReceipt.table !== 'Standalone' ? formatReceiptLine('Meja', currentReceipt.table) : '',
+      (currentReceipt.billingSession?.amount || 0) > 0 ? formatReceiptLine('Billiard', formatCurrency(currentReceipt.billingSession?.amount || 0)) : '',
+      (currentReceipt.packageUsages || []).length > 0 ? separatorLine() : '',
+      (currentReceipt.packageUsages || []).length > 0 ? 'Rincian Paket' : '',
+      ...(currentReceipt.packageUsages || []).flatMap((pkg: any) => {
+        const discount = Math.max(0, Number(pkg.originalPrice || 0) - Number(pkg.packagePrice || 0));
+        const lines = [pkg.packageName + (pkg.qty > 1 ? ` x${pkg.qty}` : '')];
+        if (pkg.durationMinutes) {
+          lines.push(formatReceiptLine(`Billing ${pkg.durationMinutes}m`, formatCurrency(pkg.billingEquivalent || 0)));
+        }
+        for (const item of pkg.fnbItems || []) {
+          lines.push(formatReceiptLine(`${item.name} x${item.qty}`, formatCurrency(item.subtotal || 0)));
+        }
+        lines.push(formatReceiptLine('Diskon', `-${formatCurrency(discount)}`));
+        lines.push(formatReceiptLine('Subtotal', formatCurrency(pkg.packagePrice || 0)));
+        lines.push(separatorLine());
+        return lines;
+      }),
+      'F&B Tambahan',
+      ...(currentReceipt.fnbItems || []).length > 0
+        ? (currentReceipt.fnbItems || []).map((f: any) => formatReceiptLine(`${f.name} x${f.qty}`, formatCurrency(f.subtotal || 0)))
+        : ['Tidak ada F&B tambahan'],
+      separatorLine(),
+      formatReceiptLine('TOTAL', formatCurrency(currentReceipt.total || 0)),
+      formatReceiptLine('Diterima', formatCurrency(currentReceipt.amountPaid || 0)),
+      formatReceiptLine('Kembalian', formatCurrency(currentReceipt.change || 0)),
+      separatorLine(),
+      centerReceiptText('Terima kasih.'),
+    ].filter(Boolean);
+    const printed = printReceiptText(`${rawLines.join('\n')}\n\n\n`, `Struk ${currentReceipt.paymentNumber}`);
     if (!printed) toast.error('Popup print diblokir browser');
     if (currentReceiptPaymentId) {
       paymentsApi.markPrinted(currentReceiptPaymentId).catch(() => null);
