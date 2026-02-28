@@ -6,7 +6,7 @@ import { AxiosError } from 'axios';
 import { companyApi } from '@/lib/api';
 import { useCompany } from '@/lib/company';
 
-const logoNote = 'Rekomendasi logo: format PNG/SVG, rasio 1:1, minimal 512x512px agar optimal untuk sidebar, favicon, dan elemen UI lainnya.';
+const logoNote = 'Rekomendasi logo: PNG/JPG rasio 1:1, ideal 512x512px (minimum 256x256px). Sistem akan menyesuaikan ukuran untuk web, sidebar, favicon, dan struk thermal; kualitas sumber tetap memengaruhi hasil cetak logo.';
 
 const getApiOrigin = () => {
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
