@@ -3,13 +3,15 @@
 import { useEffect, useMemo, useState } from 'react';
 import { companyApi, paymentsApi } from '@/lib/api';
 import { formatCurrency } from '@/lib/utils';
-import { buildBusinessReceiptHtml, printReceiptHtml } from '@/lib/receiptPrinter';
+import { buildBusinessReceiptHtml, centerReceiptText, formatReceiptLine, printReceiptHtml, printReceiptText, separatorLine } from '@/lib/receiptPrinter';
 import toast from 'react-hot-toast';
 
 function toDateInputValue(date: Date) {
   const tzOffset = date.getTimezoneOffset() * 60000;
   return new Date(date.getTime() - tzOffset).toISOString().split('T')[0];
 }
+
+type PrintMode = 'STANDARD' | 'RAW_TEXT';
 
 export default function CashierTransactionsPage() {
   const today = useMemo(() => toDateInputValue(new Date()), []);
@@ -20,6 +22,7 @@ export default function CashierTransactionsPage() {
   const [detail, setDetail] = useState<any>(null);
   const [detailPaymentId, setDetailPaymentId] = useState<string | null>(null);
   const [companyProfile, setCompanyProfile] = useState<any>(null);
+  const [printMode, setPrintMode] = useState<PrintMode>('STANDARD');
 
   const fetchData = () => {
     paymentsApi
@@ -38,6 +41,17 @@ export default function CashierTransactionsPage() {
 
   useEffect(() => {
     companyApi.getProfile().then(setCompanyProfile).catch(() => setCompanyProfile(null));
+  }, []);
+
+  useEffect(() => {
+    const savedMode = window.localStorage.getItem('receipt-print-mode');
+    if (savedMode === 'RAW_TEXT' || savedMode === 'STANDARD') {
+      setPrintMode(savedMode);
+      return;
+    }
+    if (window.innerWidth >= 1024) {
+      setPrintMode('RAW_TEXT');
+    }
   }, []);
 
   const applyShortcut = (type: 'today' | 'last7' | 'last30' | 'month') => {
@@ -114,7 +128,46 @@ export default function CashierTransactionsPage() {
       `,
     });
 
-    const printed = printReceiptHtml(receiptHtml);
+    const rawLines: string[] = [
+      centerReceiptText('RE-PRINT'),
+      centerReceiptText(companyProfile?.name || 'Billiard Club OS'),
+      centerReceiptText(companyProfile?.address || ''),
+      centerReceiptText(companyProfile?.phoneNumber ? `Telp: ${companyProfile.phoneNumber}` : ''),
+      separatorLine(),
+      formatReceiptLine('No', detail.paymentNumber),
+      formatReceiptLine('Kasir', detail.cashier),
+      formatReceiptLine('Waktu', new Date(detail.paidAt).toLocaleString('id-ID')),
+      detail.table !== 'Standalone' ? formatReceiptLine('Meja', detail.table) : '',
+      (detail.billingSession?.amount || 0) > 0 ? formatReceiptLine('Billiard', formatCurrency(detail.billingSession?.amount || 0)) : '',
+      (detail.packageUsages || []).length > 0 ? separatorLine() : '',
+      (detail.packageUsages || []).length > 0 ? 'Rincian Paket' : '',
+      ...(detail.packageUsages || []).flatMap((pkg: any) => {
+        const discount = Math.max(0, Number(pkg.originalPrice || 0) - Number(pkg.packagePrice || 0));
+        const lines = [pkg.packageName + (pkg.qty > 1 ? ` x${pkg.qty}` : '')];
+        if (pkg.durationMinutes) lines.push(formatReceiptLine(`Billing ${pkg.durationMinutes}m`, formatCurrency(pkg.billingEquivalent || 0)));
+        for (const item of pkg.fnbItems || []) {
+          lines.push(formatReceiptLine(`${item.name} x${item.qty}`, formatCurrency(item.subtotal || 0)));
+        }
+        lines.push(formatReceiptLine('Diskon', `-${formatCurrency(discount)}`));
+        lines.push(formatReceiptLine('Subtotal', formatCurrency(pkg.packagePrice || 0)));
+        lines.push(separatorLine());
+        return lines;
+      }),
+      'F&B Tambahan',
+      ...(detail.fnbItems || []).length > 0
+        ? (detail.fnbItems || []).map((f: any) => formatReceiptLine(`${f.name} x${f.qty}`, formatCurrency(f.subtotal || 0)))
+        : ['Tidak ada F&B tambahan'],
+      separatorLine(),
+      formatReceiptLine('TOTAL', formatCurrency(detail.total || 0)),
+      formatReceiptLine('Diterima', formatCurrency(detail.amountPaid || 0)),
+      formatReceiptLine('Kembalian', formatCurrency(detail.change || 0)),
+      separatorLine(),
+      centerReceiptText('Terima kasih.'),
+    ].filter(Boolean);
+
+    const printed = printMode === 'RAW_TEXT'
+      ? printReceiptText(`${rawLines.join('\n')}\n\n\n`, `Reprint ${detail.paymentNumber}`)
+      : printReceiptHtml(receiptHtml);
     if (!printed) {
       toast.error('Popup print diblokir browser');
       return;
@@ -139,6 +192,22 @@ export default function CashierTransactionsPage() {
           <button onClick={() => applyShortcut('last30')} className={getShortcutClassName('last30')}>30 hari terakhir</button>
           <button onClick={() => applyShortcut('month')} className={getShortcutClassName('month')}>Bulan ini</button>
         </div>
+      </div>
+
+      <div className="card p-4">
+        <label className="mb-1 block text-sm font-semibold text-amber-900">Mode Cetak Struk</label>
+        <select
+          className="input max-w-sm bg-white"
+          value={printMode}
+          onChange={(e) => {
+            const nextMode = e.target.value as PrintMode;
+            setPrintMode(nextMode);
+            window.localStorage.setItem('receipt-print-mode', nextMode);
+          }}
+        >
+          <option value="STANDARD">Standar (HP / printer biasa)</option>
+          <option value="RAW_TEXT">Raw Text (PC / Generic Text Only)</option>
+        </select>
       </div>
 
       <div className="card p-0"><div className="table-wrapper"><table className="data-table"><thead><tr><th>ID</th><th>Waktu</th><th>Metode</th><th>Total</th><th>Aksi</th></tr></thead><tbody>{data.map((x) => <tr key={x.id}><td className="font-mono text-xs">{x.paymentNumber}</td><td>{new Date(x.createdAt).toLocaleString('id-ID')}</td><td>{x.method}</td><td className="font-semibold">{formatCurrency(x.totalAmount)}</td><td><button onClick={() => openDetail(x.id)} className="rounded bg-slate-100 px-2 py-1 text-xs">Detail</button></td></tr>)}</tbody></table></div></div>

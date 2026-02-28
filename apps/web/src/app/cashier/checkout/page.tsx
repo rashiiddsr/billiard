@@ -3,10 +3,11 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import { billingApi, companyApi, ordersApi, paymentsApi } from '@/lib/api';
 import { formatCurrency } from '@/lib/utils';
-import { buildBusinessReceiptHtml, printReceiptHtml } from '@/lib/receiptPrinter';
+import { buildBusinessReceiptHtml, centerReceiptText, formatReceiptLine, printReceiptHtml, printReceiptText, separatorLine } from '@/lib/receiptPrinter';
 import toast from 'react-hot-toast';
 
 type PaymentMethod = 'CASH' | 'QRIS' | 'TRANSFER';
+type PrintMode = 'STANDARD' | 'RAW_TEXT';
 
 export default function CheckoutPage() {
   const [sessions, setSessions] = useState<any[]>([]);
@@ -19,6 +20,7 @@ export default function CheckoutPage() {
   const [currentReceipt, setCurrentReceipt] = useState<any>(null);
   const [currentReceiptPaymentId, setCurrentReceiptPaymentId] = useState<string | null>(null);
   const [companyProfile, setCompanyProfile] = useState<any>(null);
+  const [printMode, setPrintMode] = useState<PrintMode>('STANDARD');
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
@@ -139,6 +141,17 @@ export default function CheckoutPage() {
     }
   }, [method, total]);
 
+  useEffect(() => {
+    const savedMode = window.localStorage.getItem('receipt-print-mode');
+    if (savedMode === 'RAW_TEXT' || savedMode === 'STANDARD') {
+      setPrintMode(savedMode);
+      return;
+    }
+    if (window.innerWidth >= 1024) {
+      setPrintMode('RAW_TEXT');
+    }
+  }, []);
+
   const createCheckout = async () => {
     if (!selectedSession) {
       toast.error('Pilih tagihan terlebih dahulu');
@@ -214,7 +227,46 @@ export default function CheckoutPage() {
         <div class="row"><span>Kembalian</span><span>${formatCurrency(currentReceipt.change || 0)}</span></div>
       `,
     });
-    const printed = printReceiptHtml(receiptHtml);
+    const rawLines: string[] = [
+      centerReceiptText(companyProfile?.name || 'Billiard Club OS'),
+      centerReceiptText(companyProfile?.address || ''),
+      centerReceiptText(companyProfile?.phoneNumber ? `Telp: ${companyProfile.phoneNumber}` : ''),
+      separatorLine(),
+      formatReceiptLine('No', currentReceipt.paymentNumber),
+      formatReceiptLine('Kasir', currentReceipt.cashier),
+      formatReceiptLine('Waktu', paidAt),
+      currentReceipt.table !== 'Standalone' ? formatReceiptLine('Meja', currentReceipt.table) : '',
+      (currentReceipt.billingSession?.amount || 0) > 0 ? formatReceiptLine('Billiard', formatCurrency(currentReceipt.billingSession?.amount || 0)) : '',
+      (currentReceipt.packageUsages || []).length > 0 ? separatorLine() : '',
+      (currentReceipt.packageUsages || []).length > 0 ? 'Rincian Paket' : '',
+      ...(currentReceipt.packageUsages || []).flatMap((pkg: any) => {
+        const discount = Math.max(0, Number(pkg.originalPrice || 0) - Number(pkg.packagePrice || 0));
+        const lines = [pkg.packageName + (pkg.qty > 1 ? ` x${pkg.qty}` : '')];
+        if (pkg.durationMinutes) {
+          lines.push(formatReceiptLine(`Billing ${pkg.durationMinutes}m`, formatCurrency(pkg.billingEquivalent || 0)));
+        }
+        for (const item of pkg.fnbItems || []) {
+          lines.push(formatReceiptLine(`${item.name} x${item.qty}`, formatCurrency(item.subtotal || 0)));
+        }
+        lines.push(formatReceiptLine('Diskon', `-${formatCurrency(discount)}`));
+        lines.push(formatReceiptLine('Subtotal', formatCurrency(pkg.packagePrice || 0)));
+        lines.push(separatorLine());
+        return lines;
+      }),
+      'F&B Tambahan',
+      ...(currentReceipt.fnbItems || []).length > 0
+        ? (currentReceipt.fnbItems || []).map((f: any) => formatReceiptLine(`${f.name} x${f.qty}`, formatCurrency(f.subtotal || 0)))
+        : ['Tidak ada F&B tambahan'],
+      separatorLine(),
+      formatReceiptLine('TOTAL', formatCurrency(currentReceipt.total || 0)),
+      formatReceiptLine('Diterima', formatCurrency(currentReceipt.amountPaid || 0)),
+      formatReceiptLine('Kembalian', formatCurrency(currentReceipt.change || 0)),
+      separatorLine(),
+      centerReceiptText('Terima kasih.'),
+    ].filter(Boolean);
+    const printed = printMode === 'RAW_TEXT'
+      ? printReceiptText(`${rawLines.join('\n')}\n\n\n`, `Struk ${currentReceipt.paymentNumber}`)
+      : printReceiptHtml(receiptHtml);
     if (!printed) toast.error('Popup print diblokir browser');
     if (currentReceiptPaymentId) {
       paymentsApi.markPrinted(currentReceiptPaymentId).catch(() => null);
@@ -267,6 +319,22 @@ export default function CheckoutPage() {
         <div className="mb-4 flex gap-2">{(['CASH', 'QRIS', 'TRANSFER'] as PaymentMethod[]).map((m) => <button key={m} onClick={() => setMethod(m)} className={`flex-1 rounded-lg py-2 text-sm font-medium ${method === m ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>{m}</button>)}</div>
 
         {(method === 'QRIS' || method === 'TRANSFER') && <input type="text" className="input mb-4" placeholder="Referensi pembayaran (wajib)" value={reference} onChange={(e) => setReference(e.target.value)} />}
+        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+          <label className="mb-1 block font-semibold">Mode Cetak Struk</label>
+          <select
+            className="input bg-white"
+            value={printMode}
+            onChange={(e) => {
+              const nextMode = e.target.value as PrintMode;
+              setPrintMode(nextMode);
+              window.localStorage.setItem('receipt-print-mode', nextMode);
+            }}
+          >
+            <option value="STANDARD">Standar (HP / printer biasa)</option>
+            <option value="RAW_TEXT">Raw Text (PC / Generic Text Only)</option>
+          </select>
+          <p className="mt-1 text-xs">Gunakan <b>Raw Text</b> jika di PC hasil print hanya tulisan tanpa garis/kotak.</p>
+        </div>
         <input type="number" className="input mb-4" placeholder="Uang diterima" value={amountPaid} onChange={(e) => setAmountPaid(e.target.value)} readOnly={method !== 'CASH'} />
         {method === 'CASH' && <div className="mb-3 flex flex-wrap gap-2">{quickCash.map((amt) => <button key={amt} onClick={() => setAmountPaid(String(amt))} className="rounded bg-slate-100 px-2 py-1 text-xs text-slate-700 hover:bg-slate-200">{formatCurrency(amt)}</button>)}</div>}
 
