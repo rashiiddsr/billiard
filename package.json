@@ -8,13 +8,10 @@
   ],
   "scripts": {
     "dev": "concurrently \"npm run dev:api\" \"npm run dev:web\"",
-    "dev:api": "cd apps/api && npm run start:dev",
+    "dev:api": "cd apps/api && npm run build && npm run start",
     "dev:web": "cd apps/web && npm run dev",
     "build:api": "cd apps/api && npm run build",
-    "build:web": "cd apps/web && npm run build",
-    "db:migrate": "cd apps/api && npx prisma migrate dev",
-    "db:seed": "cd apps/api && npm run prisma:seed",
-    "db:studio": "cd apps/api && npx prisma studio"
+    "build:web": "cd apps/web && npm run build"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"
