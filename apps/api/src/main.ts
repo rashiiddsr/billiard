@@ -5,9 +5,26 @@ import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { join } from 'path';
 import * as express from 'express';
+import { getEnvFilePaths, loadEnvFilesIntoProcessEnv, resolveEnvValue } from './common/config/env.utils';
+
+
+const envPaths = getEnvFilePaths();
+const loadedEnvFiles = loadEnvFilesIntoProcessEnv(envPaths);
+
+if (!process.env.DATABASE_URL) {
+  const dbFromFile = resolveEnvValue('DATABASE_URL', envPaths);
+  if (dbFromFile) {
+    process.env.DATABASE_URL = dbFromFile;
+  }
+}
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  if (loadedEnvFiles.length) {
+    console.log(`🧩 Loaded .env files: ${loadedEnvFiles.join(', ')}`);
+  }
+  console.log(`🗄️ DATABASE_URL loaded: ${Boolean(process.env.DATABASE_URL)}`);
 
   // Security
   app.use(helmet({
