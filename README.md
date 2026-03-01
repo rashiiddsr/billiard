@@ -107,7 +107,6 @@ IOT_NONCE_WINDOW_SECONDS=300
 IOT_GATEWAY_DEVICE_ID=""
 ```
 
-
 **apps/web/.env.local:**
 ```env
 NEXT_PUBLIC_API_URL=http://localhost:3001/api/v1
@@ -178,6 +177,10 @@ Perintah di atas akan men-generate pair dan langsung menampilkan format isi `.en
 **apps/api/.env (contoh production):**
 ```env
 DATABASE_URL="mysql://user:password@127.0.0.1:3306/billiard_pos"
+JWT_SECRET="ganti-dengan-random-32-char-lebih"
+JWT_REFRESH_SECRET="ganti-dengan-random-32-char-lebih"
+JWT_ACCESS_EXPIRES_IN="15m"
+JWT_REFRESH_EXPIRES_IN="7d"
 PORT=3001
 CORS_ORIGIN="https://pos.domainanda.com"
 IOT_HMAC_SECRET="ganti-dengan-secret-iot"
