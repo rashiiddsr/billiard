@@ -10,13 +10,19 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     config: ConfigService,
     private prisma: PrismaService,
   ) {
+    const jwtSecret = config.get<string>('JWT_SECRET') || process.env.JWT_SECRET;
+
+    if (!jwtSecret) {
+      throw new Error('JWT_SECRET is not configured. Set it in environment variables or .env file.');
+    }
+
     super({
       jwtFromRequest: ExtractJwt.fromExtractors([
         ExtractJwt.fromAuthHeaderAsBearerToken(),
         (request: any) => request?.query?.access_token || null,
       ]),
       ignoreExpiration: false,
-      secretOrKey: config.get('JWT_SECRET'),
+      secretOrKey: jwtSecret,
     });
   }
 
