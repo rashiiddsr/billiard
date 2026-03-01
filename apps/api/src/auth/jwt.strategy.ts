@@ -3,7 +3,6 @@ import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../common/prisma/prisma.service';
-import { getEnvFilePaths, resolveEnvValue } from '../common/config/env.utils';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
@@ -11,20 +10,13 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     config: ConfigService,
     private prisma: PrismaService,
   ) {
-    const jwtSecret = config.get<string>('JWT_SECRET') || resolveEnvValue('JWT_SECRET');
-
-    if (!jwtSecret) {
-      const searchedPaths = getEnvFilePaths().join(', ');
-      throw new Error(`JWT_SECRET is not configured. Checked process.env and .env files: ${searchedPaths}`);
-    }
-
     super({
       jwtFromRequest: ExtractJwt.fromExtractors([
         ExtractJwt.fromAuthHeaderAsBearerToken(),
         (request: any) => request?.query?.access_token || null,
       ]),
       ignoreExpiration: false,
-      secretOrKey: jwtSecret,
+      secretOrKey: config.get('JWT_SECRET'),
     });
   }
 
