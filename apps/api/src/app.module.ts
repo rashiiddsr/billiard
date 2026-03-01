@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerModule } from '@nestjs/throttler';
+import { getEnvFilePaths } from './common/config/env.utils';
 import { PrismaModule } from './common/prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
@@ -21,7 +22,12 @@ import { PrintModule } from './print/print.module';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
+    ConfigModule.forRoot({
+      isGlobal: true,
+      cache: true,
+      expandVariables: true,
+      envFilePath: getEnvFilePaths(),
+    }),
     ScheduleModule.forRoot(),
     ThrottlerModule.forRoot([{
       ttl: parseInt(process.env.THROTTLE_TTL || '60') * 1000,

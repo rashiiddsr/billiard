@@ -5,6 +5,7 @@ import { BillingController } from './billing.controller';
 import { BillingService } from './billing.service';
 import { IotModule } from '../iot/iot.module';
 import { AuditService } from '../common/audit/audit.service';
+import { resolveEnvValue } from '../common/config/env.utils';
 
 @Module({
   imports: [
@@ -12,7 +13,7 @@ import { AuditService } from '../common/audit/audit.service';
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
-        secret: config.get('JWT_SECRET'),
+        secret: config.get<string>('JWT_SECRET') || resolveEnvValue('JWT_SECRET'),
       }),
     }),
   ],
