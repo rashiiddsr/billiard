@@ -89,13 +89,14 @@ export default function CashierTransactionsPage() {
     if (!detail) return;
     const paidAt = new Date(detail.paidAt).toLocaleString('id-ID');
     const paymentMethod = String(detail.method || '').toUpperCase();
+    const footerText = companyProfile?.phoneNumber
+      ? `Terima kasih atas kunjungan Anda. Hubungi CS via Telp/WA: ${companyProfile.phoneNumber}`
+      : 'Terima kasih atas kunjungan Anda.';
     const rawLines: string[] = [
       separatorLine(32, '='),
       escPosDoubleCenterText('RE-PRINT'),
-      centerReceiptText('[ SALINAN STRUK ]'),
       separatorLine(32, '='),
-      escPosDoubleCenterText('STRUK PEMBAYARAN'),
-      escPosDoubleCenterText(companyProfile?.name || 'Billiard Club OS'),
+      centerReceiptText(companyProfile?.name || 'Billiard Club OS'),
       centerReceiptText(companyProfile?.address || ''),
       separatorLine(),
       formatReceiptLine('No', detail.paymentNumber),
@@ -126,9 +127,7 @@ export default function CashierTransactionsPage() {
       formatReceiptLine(`Metode ${paymentMethod || '-'}`, formatCurrency(detail.amountPaid || 0)),
       paymentMethod === 'CASH' ? formatReceiptLine('Kembalian', formatCurrency(detail.change || 0)) : '',
       separatorLine(),
-      centerReceiptText('Terima kasih atas kunjungan Anda.'),
-      companyProfile?.phoneNumber ? centerReceiptText(`Butuh bantuan, komplain, atau reservasi ulang?`) : '',
-      companyProfile?.phoneNumber ? centerReceiptText(`Hubungi CS via Telp/WA: ${companyProfile.phoneNumber}`) : '',
+      centerReceiptText(footerText),
     ].filter(Boolean);
 
     const printed = await printReceiptText(`${rawLines.join('\n')}\n\n\n`, `Reprint ${detail.paymentNumber}`, {
