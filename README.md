@@ -41,7 +41,6 @@ billiard-pos/
 │   │   │   └── tables/       # Billiard tables
 │   │   └── prisma/
 │   │       ├── schema.prisma
-│   │       └── seed.ts
 │   └── web/          # Next.js frontend
 │       └── src/
 │           ├── app/
@@ -122,17 +121,9 @@ NEXT_PUBLIC_PRINT_BRIDGE_URL=http://127.0.0.1:18181/print
 
 ### 4. Database Setup
 
-```bash
-cd apps/api
-
-# Run migrations
-npx prisma migrate dev --name init
-
-# Seed initial data
-npm run prisma:seed
-```
-
-Atau jika ingin import manual ke MySQL, gunakan backup schema di:
+Semua struktur database dan data default sekarang dibangun dari file SQL bawaan.
+Data default yang otomatis tersedia hanya akun login (2 owner + 1 developer).
+Import manual file berikut ke MySQL:
 
 ```bash
 schema/schema.sql
@@ -143,7 +134,8 @@ schema/schema.sql
 ```bash
 # Terminal 1 - API (port 3001)
 cd apps/api
-npm run start:dev
+npm run build
+npm run start
 
 # Terminal 2 - Web (port 3000)
 cd apps/web
@@ -232,6 +224,9 @@ NEXT_PUBLIC_QZ_SIGN_API_KEY=isi-api-key-random-panjang
 |------|-------|----------|-----|
 | OWNER | bayu@billiard.com | bayu123 | 123456 |
 | OWNER | apis@billiard.com | apis123 | 123456 |
+| DEVELOPER | developer.royal@billiard.com | developer123 | - |
+
+> Catatan: data default bawaan hanya akun di atas. Data kategori, menu, stok, meja, dan aset diinput manual dari aplikasi.
 
 ---
 
@@ -434,7 +429,7 @@ const char* WIFI_SSID = "YOUR_WIFI";
 const char* WIFI_PASS = "YOUR_PASS";
 const char* API_BASE = "http://192.168.1.10:3001/api/v1";
 
-// Dari seed / database
+// Dari database
 const char* DEVICE_ID = "cm...";
 const char* DEVICE_TOKEN = "iot-device-1-secret-...";
 const char* HMAC_SECRET = "change-this-iot-secret";
@@ -672,8 +667,7 @@ This runs server-side — **independent of any browser connection**.
 # API
 cd apps/api
 npm run build
-npm run prisma:deploy
-npm start
+npm run start
 
 # Web
 cd apps/web
@@ -682,12 +676,3 @@ npm start
 ```
 
 ---
-
-## Seeded Data
-
-After `npm run prisma:seed`:
-- 3 users (owner/manager/cashier)
-- 10 billiard tables (Meja 1-10, rate Rp30k-40k/jam)
-- 1 IoT gateway device (single ESP architecture, token rotated each seed run)
-- 20 menu items across 5 categories
-- 5 operational assets

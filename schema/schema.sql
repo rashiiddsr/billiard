@@ -423,6 +423,18 @@ ALTER TABLE `expenses` ADD CONSTRAINT `expenses_createdById_fkey` FOREIGN KEY (`
 ALTER TABLE `audit_logs` ADD CONSTRAINT `audit_logs_userId_fkey` FOREIGN KEY (`userId`) REFERENCES `users`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
 
 
+-- Default built-in accounts (manual import baseline)
+-- Passwords:
+-- - bayu@billiard.com -> bayu123
+-- - apis@billiard.com -> apis123
+-- - developer.royal@billiard.com -> developer123
+-- PIN (owner): 123456
+INSERT INTO `users` (`id`, `name`, `email`, `phoneNumber`, `profileImageUrl`, `passwordHash`, `pin`, `role`, `isActive`, `createdAt`, `updatedAt`) VALUES
+  ('user-owner-bayu', 'bayu', 'bayu@billiard.com', '082388112728', NULL, '$2b$12$2mNJTqvA1IGXvrBIkun8J.cLLkinW7KeB5qSBeocgnT9HJ.9twXu6', '$2b$12$50DQwVT/SybEkO8VQ4j9jOKfu5GB7Qr9k/d3RQEgR8Mwj6pcZSW0e', 'OWNER', true, NOW(3), NOW(3)),
+  ('user-owner-apis', 'apis', 'apis@billiard.com', '081365657613', NULL, '$2b$12$dYyZyp4mVfyrQulXHoBZguQQ1229F9pDSruj59vB0qTAHWkN2UnrC', '$2b$12$50DQwVT/SybEkO8VQ4j9jOKfu5GB7Qr9k/d3RQEgR8Mwj6pcZSW0e', 'OWNER', true, NOW(3), NOW(3)),
+  ('user-developer-royal', 'developer royal', 'developer.royal@billiard.com', '081200000000', NULL, '$2b$12$ZNRqny6R.KJIQVnzPWif4.b1jz28x/m.8LfxCZiav8vDMXh12paoK', NULL, 'DEVELOPER', true, NOW(3), NOW(3));
+
+
 -- Manual migration helper (existing database):
 -- ALTER TABLE `iot_devices` ADD COLUMN `gpioPins` JSON NULL AFTER `deviceToken`;
 -- ALTER TABLE `billing_sessions` ADD COLUMN `packageName` VARCHAR(191) NULL AFTER `blinkCommandSent`;

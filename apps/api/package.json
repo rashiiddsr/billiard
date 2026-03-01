@@ -6,13 +6,6 @@
     "prebuild": "prisma generate",
     "build": "nest build",
     "start": "node dist/main",
-    "prestart:dev": "prisma generate",
-    "start:dev": "nest start --watch",
-    "start:debug": "nest start --debug --watch",
-    "prisma:migrate": "prisma migrate dev",
-    "prisma:deploy": "prisma migrate deploy",
-    "prisma:seed": "ts-node prisma/seed.ts",
-    "prisma:studio": "prisma studio",
     "format": "prettier --write \"src/**/*.ts\"",
     "qz:generate-cert": "node scripts/generate-qz-cert.mjs"
   },
@@ -46,8 +39,5 @@
     "prisma": "^5.8.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.3.3"
-  },
-  "prisma": {
-    "seed": "ts-node prisma/seed.ts"
   }
 }
