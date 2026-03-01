@@ -69,7 +69,7 @@ const getQzSignEndpoint = () => process.env.NEXT_PUBLIC_QZ_SIGN_ENDPOINT?.trim()
 const getQzSignApiKey = () => process.env.NEXT_PUBLIC_QZ_SIGN_API_KEY?.trim() || '';
 
 
-function getAuthHeaders() {
+function getAuthHeaders(): Record<string, string> {
   const token = Cookies.get('accessToken');
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
@@ -78,13 +78,18 @@ async function signQzPayload(payload: string) {
   const endpoint = getQzSignEndpoint();
   if (!endpoint) return '';
 
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...getAuthHeaders(),
+  };
+  const apiKey = getQzSignApiKey();
+  if (apiKey) {
+    headers['X-Api-Key'] = apiKey;
+  }
+
   const response = await fetch(endpoint, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(getQzSignApiKey() ? { 'X-Api-Key': getQzSignApiKey() } : {}),
-      ...getAuthHeaders(),
-    },
+    headers,
     body: JSON.stringify({ payload }),
   });
 
@@ -108,12 +113,17 @@ async function resolveQzCertificate() {
       const endpoint = getQzCertificateEndpoint();
       if (!endpoint) return '';
 
+      const headers: Record<string, string> = {
+        ...getAuthHeaders(),
+      };
+      const apiKey = getQzSignApiKey();
+      if (apiKey) {
+        headers['X-Api-Key'] = apiKey;
+      }
+
       const response = await fetch(endpoint, {
         method: 'GET',
-        headers: {
-          ...(getQzSignApiKey() ? { 'X-Api-Key': getQzSignApiKey() } : {}),
-          ...getAuthHeaders(),
-        },
+        headers,
       });
 
       if (!response.ok) return '';
@@ -150,7 +160,7 @@ function bytesToRawString(bytes: Uint8Array) {
   let out = '';
   const chunk = 0x8000;
   for (let i = 0; i < bytes.length; i += chunk) {
-    out += String.fromCharCode(...bytes.subarray(i, i + chunk));
+    out += String.fromCharCode(...Array.from(bytes.subarray(i, i + chunk)));
   }
   return out;
 }
