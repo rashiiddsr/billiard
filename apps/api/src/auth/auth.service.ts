@@ -5,11 +5,11 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { AuditService } from '../common/audit/audit.service';
 import * as bcrypt from 'bcrypt';
 import { AuditAction, Role } from '@prisma/client';
-import { JWT_CONFIG } from '../common/config/jwt.config';
 
 // Simple in-memory failed attempt tracker (use Redis in production)
 const failedAttempts = new Map<string, { count: number; lastAt: Date }>();
@@ -21,6 +21,7 @@ export class AuthService {
   constructor(
     private prisma: PrismaService,
     private jwtService: JwtService,
+    private config: ConfigService,
     private audit: AuditService,
   ) {}
 
@@ -113,7 +114,7 @@ export class AuthService {
     // Return short-lived re-auth token
     const token = this.jwtService.sign(
       { sub: userId, reAuth: true },
-      { secret: JWT_CONFIG.secret, expiresIn: '5m' },
+      { secret: this.config.get('JWT_SECRET'), expiresIn: '5m' },
     );
 
     return { reAuthToken: token, expiresIn: 300 };
@@ -122,7 +123,7 @@ export class AuthService {
   async refreshTokens(refreshToken: string) {
     try {
       const payload = this.jwtService.verify(refreshToken, {
-        secret: JWT_CONFIG.refreshSecret,
+        secret: this.config.get('JWT_REFRESH_SECRET'),
       });
 
       const stored = await this.prisma.refreshToken.findUnique({
@@ -159,13 +160,13 @@ export class AuthService {
     const payload = { sub: userId, email, role };
 
     const accessToken = this.jwtService.sign(payload, {
-      secret: JWT_CONFIG.secret,
-      expiresIn: JWT_CONFIG.accessExpiresIn,
+      secret: this.config.get('JWT_SECRET'),
+      expiresIn: this.config.get('JWT_ACCESS_EXPIRES_IN') || '15m',
     });
 
     const refreshToken = this.jwtService.sign(payload, {
-      secret: JWT_CONFIG.refreshSecret,
-      expiresIn: JWT_CONFIG.refreshExpiresIn,
+      secret: this.config.get('JWT_REFRESH_SECRET'),
+      expiresIn: this.config.get('JWT_REFRESH_EXPIRES_IN') || '7d',
     });
 
     const expiresAt = new Date();
