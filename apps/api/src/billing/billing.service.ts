@@ -7,13 +7,13 @@ import {
 } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { JwtService } from '@nestjs/jwt';
-import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { AuditService } from '../common/audit/audit.service';
 import { IotService } from '../iot/iot.service';
 import { AuditAction, Role, SessionStatus, TableStatus } from '@prisma/client';
 import { CreateBillingSessionDto, ExtendBillingSessionDto, MoveBillingSessionDto } from './billing.dto';
 import { Decimal } from '@prisma/client/runtime/library';
+import { JWT_CONFIG } from '../common/config/jwt.config';
 
 @Injectable()
 export class BillingService {
@@ -22,7 +22,6 @@ export class BillingService {
     private audit: AuditService,
     private iot: IotService,
     private jwtService: JwtService,
-    private config: ConfigService,
   ) {}
 
   async createSession(dto: CreateBillingSessionDto, userId: string, userRole: Role) {
@@ -33,7 +32,7 @@ export class BillingService {
       }
       try {
         const payload = this.jwtService.verify(dto.reAuthToken, {
-          secret: this.config.get('JWT_SECRET'),
+          secret: JWT_CONFIG.secret,
         });
         if (!payload.reAuth || payload.sub !== userId) {
           throw new UnauthorizedException('Invalid re-auth token');
