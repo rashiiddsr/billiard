@@ -95,10 +95,6 @@ cp .env.example .env.local
 **apps/api/.env:**
 ```env
 DATABASE_URL="mysql://root:password@localhost:3306/billiard_pos"
-JWT_SECRET="change-this-in-production-32chars+"
-JWT_REFRESH_SECRET="change-this-refresh-secret-32chars+"
-JWT_ACCESS_EXPIRES_IN="15m"
-JWT_REFRESH_EXPIRES_IN="7d"
 PORT=3001
 CORS_ORIGIN="http://localhost:3000"
 IOT_HMAC_SECRET="change-this-iot-secret"
@@ -106,6 +102,13 @@ IOT_NONCE_WINDOW_SECONDS=300
 # Optional: enable single-ESP gateway mode (all tables routed to this device ID)
 IOT_GATEWAY_DEVICE_ID=""
 ```
+
+
+> **JWT configuration note**
+>
+> `JWT_SECRET`, `JWT_REFRESH_SECRET`, `JWT_ACCESS_EXPIRES_IN`, and `JWT_REFRESH_EXPIRES_IN` are currently hardcoded in: `apps/api/src/common/config/jwt.config.ts`.
+>
+> If you need to change JWT secrets or expiry, edit that file directly and redeploy the API.
 
 **apps/web/.env.local:**
 ```env
@@ -177,10 +180,6 @@ Perintah di atas akan men-generate pair dan langsung menampilkan format isi `.en
 **apps/api/.env (contoh production):**
 ```env
 DATABASE_URL="mysql://user:password@127.0.0.1:3306/billiard_pos"
-JWT_SECRET="ganti-dengan-random-32-char-lebih"
-JWT_REFRESH_SECRET="ganti-dengan-random-32-char-lebih"
-JWT_ACCESS_EXPIRES_IN="15m"
-JWT_REFRESH_EXPIRES_IN="7d"
 PORT=3001
 CORS_ORIGIN="https://pos.domainanda.com"
 IOT_HMAC_SECRET="ganti-dengan-secret-iot"
@@ -657,7 +656,7 @@ This runs server-side — **independent of any browser connection**.
 ## Production Deployment
 
 ### Environment Variables (Production)
-- Use strong random values for JWT_SECRET, JWT_REFRESH_SECRET, IOT_HMAC_SECRET
+- Use strong random values for IOT_HMAC_SECRET (JWT secrets are currently hardcoded in `apps/api/src/common/config/jwt.config.ts`).
 - Set NODE_ENV=production
 - Configure CORS_ORIGIN to your actual domain
 - Use Redis for nonce storage (replace in-memory Map)
