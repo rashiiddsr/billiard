@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import Cookies from 'js-cookie';
-import { authApi, refreshAuthSession, clearAuthStorage, redirectToLogin, isAccessTokenNearExpiry } from './api';
+import { authApi, refreshAuthSession, clearAuthStorage } from './api';
 
 export interface User {
   id: string;
@@ -27,9 +27,8 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-// BUG FIX #3a: Sesuaikan cookie expiry dengan JWT lifetime yang sebenarnya
-const ACCESS_COOKIE_EXP_DAYS = 15 / (24 * 60); // 15 menit
-const REFRESH_COOKIE_EXP_DAYS = 7;              // 7 hari
+const ACCESS_COOKIE_EXP_DAYS = 8 / 24; // 8 jam
+const REFRESH_COOKIE_EXP_DAYS = 30;    // 30 hari
 
 const getCookieOptions = () => ({
   sameSite: 'strict' as const,
@@ -44,6 +43,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let mounted = true;
 
     const bootstrapAuth = async () => {
+      // Coba load user dari cookie dulu agar UI langsung muncul
       const stored = Cookies.get('user');
       if (stored) {
         try {
@@ -57,24 +57,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const accessToken = Cookies.get('accessToken');
       const refreshToken = Cookies.get('refreshToken');
 
-      // BUG FIX #3g: Kalau access token tidak ada tapi refresh token ada → refresh dulu
+      // Tidak ada token sama sekali → tidak perlu fetch apapun
+      if (!accessToken && !refreshToken) {
+        if (mounted) setLoading(false);
+        return;
+      }
+
+      // Access token habis tapi refresh token masih ada → refresh dulu
       if (!accessToken && refreshToken) {
         try {
           await refreshAuthSession();
         } catch {
-          // Refresh gagal → auth.tsx sudah redirect ke login via refreshAuthSession
+          // Refresh token juga expired → biarkan, interceptor redirect ke login saat request berikutnya
         }
       }
 
-      // BUG FIX #3h: Kalau token ada tapi sudah near expiry saat buka tab → refresh proaktif
-      if (Cookies.get('accessToken') && isAccessTokenNearExpiry()) {
-        try {
-          await refreshAuthSession();
-        } catch {
-          // Biarkan interceptor handle
-        }
-      }
-
+      // Ambil data user terbaru dari server kalau belum ada di cookie
       if (Cookies.get('accessToken') && !stored) {
         try {
           const me = await authApi.me();
@@ -83,7 +81,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             Cookies.set('user', JSON.stringify(me), { expires: REFRESH_COOKIE_EXP_DAYS, ...getCookieOptions() });
           }
         } catch {
-          // interceptor akan handle 401
+          // Biarkan interceptor handle
         }
       }
 
@@ -96,13 +94,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = useCallback(async (email: string, password: string) => {
     const data = await authApi.login(email, password);
-    const now = new Date().toISOString();
     Cookies.set('accessToken', data.accessToken, { expires: ACCESS_COOKIE_EXP_DAYS, ...getCookieOptions() });
     Cookies.set('refreshToken', data.refreshToken, { expires: REFRESH_COOKIE_EXP_DAYS, ...getCookieOptions() });
     Cookies.set('user', JSON.stringify(data.user), { expires: REFRESH_COOKIE_EXP_DAYS, ...getCookieOptions() });
-    Cookies.set('loginAt', now, { expires: REFRESH_COOKIE_EXP_DAYS, ...getCookieOptions() });
-    // BUG FIX #3d: Simpan tokenIssuedAt setiap login dan refresh
-    Cookies.set('tokenIssuedAt', now, { expires: REFRESH_COOKIE_EXP_DAYS, ...getCookieOptions() });
     setUser(data.user);
   }, []);
 
@@ -118,47 +112,44 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(nextUser);
   }, []);
 
-  // BUG FIX #3i: Proactive refresh setiap 12 menit (sebelum 15 menit JWT expire)
-  // Sebelumnya: interval 5 menit tapi threshold 55 menit — tidak pernah refresh tepat waktu!
+  // Proactive refresh: cek setiap 30 menit, refresh kalau access token sudah > 7 jam
   useEffect(() => {
     if (!user) return;
 
     let inFlight = false;
 
-    const doProactiveRefresh = async () => {
+    const tryRefresh = async () => {
       if (inFlight) return;
-      // Hanya refresh kalau token memang sudah near expiry
-      if (!isAccessTokenNearExpiry()) return;
 
-      inFlight = true;
-      try {
-        await refreshAuthSession();
-      } catch {
-        // Interceptor akan handle redirect ke login jika refresh gagal
-      } finally {
-        inFlight = false;
+      // Cukup cek apakah masih ada access token di cookie
+      // Kalau tidak ada berarti sudah expire (8 jam) → refresh
+      const hasAccess = !!Cookies.get('accessToken');
+      const hasRefresh = !!Cookies.get('refreshToken');
+
+      if (!hasAccess && hasRefresh) {
+        inFlight = true;
+        try {
+          await refreshAuthSession();
+        } catch {
+          // Interceptor akan handle redirect
+        } finally {
+          inFlight = false;
+        }
       }
     };
 
-    // Cek saat tab kembali aktif
-    const visibilityListener = () => {
-      if (document.visibilityState === 'visible') {
-        void doProactiveRefresh();
-      }
+    // Cek saat tab kembali aktif (misal kasir buka tab lain lama)
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void tryRefresh();
     };
 
-    // BUG FIX: Interval 3 menit (sebelumnya 5 menit tapi threshold salah)
-    // Proactive refresh akan terjadi di menit ke-13 (sebelum token expire di menit ke-15)
-    const interval = setInterval(() => {
-      if (document.visibilityState === 'visible') {
-        void doProactiveRefresh();
-      }
-    }, 3 * 60 * 1000); // cek tiap 3 menit
+    // Cek tiap 30 menit
+    const interval = setInterval(tryRefresh, 30 * 60 * 1000);
+    document.addEventListener('visibilitychange', onVisible);
 
-    document.addEventListener('visibilitychange', visibilityListener);
     return () => {
       clearInterval(interval);
-      document.removeEventListener('visibilitychange', visibilityListener);
+      document.removeEventListener('visibilitychange', onVisible);
     };
   }, [user]);
 
