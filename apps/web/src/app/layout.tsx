@@ -1,0 +1,41 @@
+import type { Metadata } from 'next';
+import './globals.css';
+import { AuthProvider } from '@/lib/auth';
+import { Toaster } from 'react-hot-toast';
+import { CompanyProvider } from '@/lib/company';
+import { ChunkErrorHandler } from '@/components/shared/ChunkErrorHandler';
+
+export const metadata: Metadata = {
+  title: 'Billiard POS',
+  description: 'Billiard Billing + Cafe POS + IoT System',
+  icons: {
+    icon: '/favicon.svg',
+    shortcut: '/favicon.svg',
+    apple: '/favicon.svg',
+  },
+};
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="id">
+      <body className="bg-white text-slate-800 antialiased">
+        <ChunkErrorHandler />
+        <AuthProvider>
+          <CompanyProvider>
+            {children}
+          </CompanyProvider>
+          <Toaster
+            position="top-right"
+            toastOptions={{
+              style: {
+                background: '#ffffff',
+                color: '#334155',
+                border: '1px solid #e2e8f0',
+              },
+            }}
+          />
+        </AuthProvider>
+      </body>
+    </html>
+  );
+}

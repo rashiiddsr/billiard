@@ -1,0 +1,218 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { usersApi } from '@/lib/api';
+import { formatDate } from '@/lib/utils';
+import toast from 'react-hot-toast';
+
+type Role = 'MANAGER' | 'CASHIER';
+
+const getApiOrigin = () => {
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
+  try {
+    return new URL(apiUrl).origin;
+  } catch {
+    return 'http://localhost:3001';
+  }
+};
+
+const resolveProfileImage = (path?: string | null) => {
+  if (!path) return null;
+  if (path.startsWith('http://') || path.startsWith('https://')) return path;
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  return `${getApiOrigin()}${normalizedPath}`;
+};
+
+export default function UsersPage() {
+  const [users, setUsers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [editUser, setEditUser] = useState<any>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [password, setPassword] = useState('');
+  const [role, setRole] = useState<Role>('CASHIER');
+
+  useEffect(() => { fetchUsers(); }, []);
+
+  const fetchUsers = async () => {
+    setLoading(true);
+    try {
+      const data = await usersApi.list();
+      setUsers(data);
+    } catch (e) {
+      toast.error('Gagal memuat users');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const openCreate = () => {
+    setEditUser(null);
+    setName(''); setEmail(''); setPhoneNumber(''); setPassword(''); setRole('CASHIER');
+    setShowForm(true);
+  };
+
+  const openEdit = (user: any) => {
+    setEditUser(user);
+    setName(user.name); setEmail(user.email); setPhoneNumber(user.phoneNumber || ''); setPassword(''); setRole(user.role);
+    setShowForm(true);
+  };
+
+  const submit = async () => {
+    if (!name || !email || !phoneNumber) { toast.error('Nama, email, dan nomor HP wajib diisi'); return; }
+    if (!editUser && !password) { toast.error('Password wajib untuk user baru'); return; }
+    setSubmitting(true);
+    try {
+      const data: any = { name, email, phoneNumber, role };
+      if (password) data.password = password;
+
+      if (editUser) {
+        await usersApi.update(editUser.id, data);
+        toast.success('User diperbarui');
+      } else {
+        await usersApi.create(data);
+        toast.success('User dibuat');
+      }
+      setShowForm(false);
+      fetchUsers();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || 'Gagal');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const toggleActive = async (user: any) => {
+    try {
+      await usersApi.update(user.id, { isActive: !user.isActive });
+      toast.success(`User ${!user.isActive ? 'diaktifkan' : 'dinonaktifkan'}`);
+      fetchUsers();
+    } catch (e) {
+      toast.error('Gagal');
+    }
+  };
+
+  const roleColor: Record<Role, string> = {
+    MANAGER: 'bg-blue-100 text-blue-700',
+    CASHIER: 'bg-emerald-100 text-emerald-700',
+  };
+
+  const filteredUsers = users.filter((user) => user.role === 'MANAGER' || user.role === 'CASHIER');
+
+  return (
+    <div className="p-6 space-y-6">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold">Manajemen User</h1>
+        <button onClick={openCreate} className="btn-primary">+ Tambah User</button>
+      </div>
+
+      {showForm && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-white border border-slate-200 rounded-xl w-full max-w-md">
+            <div className="flex items-center justify-between p-4 border-b border-slate-200">
+              <h3 className="font-semibold">{editUser ? 'Edit User' : 'Tambah User Baru'}</h3>
+              <button onClick={() => setShowForm(false)} className="text-slate-500 hover:text-slate-700">✕</button>
+            </div>
+            <div className="p-4 space-y-4">
+              <div>
+                <label className="label">Nama <span className="text-red-500">*</span></label>
+                <input className="input" value={name} onChange={(e) => setName(e.target.value)} />
+              </div>
+              <div>
+                <label className="label">Email <span className="text-red-500">*</span></label>
+                <input type="email" className="input" value={email} onChange={(e) => setEmail(e.target.value)} />
+              </div>
+
+              <div>
+                <label className="label">Nomor HP <span className="text-red-500">*</span></label>
+                <input className="input" value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value)} />
+              </div>
+              <div>
+                <label className="label">Password {!editUser && <span className="text-red-500">*</span>} {editUser && '(kosongkan jika tidak diubah)'}</label>
+                <input type="password" className="input" value={password} onChange={(e) => setPassword(e.target.value)} />
+              </div>
+              <div>
+                <label className="label">Role <span className="text-red-500">*</span></label>
+                <select className="input" value={role} onChange={(e) => setRole(e.target.value as Role)}>
+                  <option value="CASHIER">CASHIER</option>
+                  <option value="MANAGER">MANAGER</option>
+                </select>
+              </div>
+              <div className="flex gap-2 pt-2">
+                <button onClick={() => setShowForm(false)} className="btn-secondary flex-1">Batal</button>
+                <button onClick={submit} className="btn-primary flex-1" disabled={submitting}>
+                  {submitting ? 'Menyimpan...' : 'Simpan'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="card p-0 overflow-hidden">
+        <div className="table-wrapper">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Nama</th>
+                <th>Email</th>
+                <th>Nomor HP</th>
+                <th>Role</th>
+                <th>Status</th>
+                <th>Dibuat</th>
+                <th>Aksi</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr><td colSpan={7} className="text-center py-8 text-slate-500">Memuat...</td></tr>
+              ) : filteredUsers.length === 0 ? (
+                <tr><td colSpan={7} className="text-center py-8 text-slate-500">Tidak ada user</td></tr>
+              ) : (
+                filteredUsers.map((user) => {
+                  const profileImage = resolveProfileImage(user.profileImageUrl);
+                  return (
+                    <tr key={user.id}>
+                      <td>
+                        <div className="flex items-center gap-3">
+                          {profileImage ? (
+                            <img src={profileImage} alt={user.name} className="h-9 w-9 rounded-full object-cover" />
+                          ) : (
+                            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-blue-600 to-cyan-500 text-xs font-bold text-white">
+                              {user.name?.slice(0, 2).toUpperCase()}
+                            </div>
+                          )}
+                          <span className="font-medium">{user.name}</span>
+                        </div>
+                      </td>
+                      <td className="text-slate-500">{user.email}</td>
+                      <td className="text-slate-500">{user.phoneNumber || '-'}</td>
+                      <td>
+                        <span className={`badge ${roleColor[user.role as Role]}`}>{user.role}</span>
+                      </td>
+                      <td>
+                        <button type="button" onClick={() => toggleActive(user)} className={`toggle-switch ${user.isActive ? 'active' : ''}`} title={user.isActive ? 'Aktif' : 'Nonaktif'} />
+                      </td>
+                      <td className="text-slate-500 text-sm">{formatDate(user.createdAt)}</td>
+                      <td>
+                        <div className="flex gap-2">
+                          <button onClick={() => openEdit(user)} className="text-xs px-2 py-1 bg-slate-100 hover:bg-slate-200 rounded">
+                            Edit
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}

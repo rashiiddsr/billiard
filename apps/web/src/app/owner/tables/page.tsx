@@ -1,0 +1,222 @@
+'use client';
+
+import { useEffect, useRef, useState, useCallback } from 'react';
+import { tablesApi } from '@/lib/api';
+import { formatCurrency } from '@/lib/utils';
+import toast from 'react-hot-toast';
+
+const formatRemaining = (seconds: number) => {
+  const safe = Math.max(0, seconds || 0);
+  const m = Math.floor(safe / 60);
+  const s = safe % 60;
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+};
+
+export default function OwnerTablesPage() {
+  const [tables, setTables] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [editingTable, setEditingTable] = useState<any | null>(null);
+  const [hourlyRate, setHourlyRate] = useState('');
+  const [submittingRate, setSubmittingRate] = useState(false);
+  const [isTabVisible, setIsTabVisible] = useState(true);
+  const isFetchingRef = useRef(false);
+  const isTabVisibleRef = useRef(true);
+
+  const load = useCallback(async (showLoading = false) => {
+    if (!isTabVisibleRef.current || isFetchingRef.current) return;
+
+    isFetchingRef.current = true;
+    if (showLoading) setLoading(true);
+    try {
+      setTables(await tablesApi.list(true));
+    } catch {
+      toast.error('Gagal memuat meja');
+    } finally {
+      isFetchingRef.current = false;
+      if (showLoading) setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      const visible = document.visibilityState === 'visible';
+      setIsTabVisible(visible);
+      isTabVisibleRef.current = visible;
+      if (visible) void load(false);
+    };
+
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', onVisibilityChange);
+  }, [load]);
+
+  useEffect(() => { load(true); }, []);
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setTables((prev) => prev.map((table) => ({
+        ...table,
+        testingRemainingSeconds: Math.max(0, Number(table.testingRemainingSeconds || 0) - 1),
+      })));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+  useEffect(() => {
+    const timer = setInterval(() => {
+      void load(false);
+    }, 20000);
+    return () => clearInterval(timer);
+  }, [load]);
+
+  const openEditRate = (table: any) => {
+    setEditingTable(table);
+    setHourlyRate(String(Number(table.hourlyRate)));
+  };
+
+  const updateRate = async () => {
+    if (!editingTable) return;
+    const parsedRate = Number(hourlyRate);
+    if (Number.isNaN(parsedRate) || parsedRate < 0) {
+      toast.error('Harga/jam wajib berupa angka valid');
+      return;
+    }
+
+    setSubmittingRate(true);
+    try {
+      await tablesApi.update(editingTable.id, { hourlyRate: parsedRate });
+      toast.success('Harga meja diperbarui');
+      setEditingTable(null);
+      load(false);
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || 'Gagal update harga');
+    } finally {
+      setSubmittingRate(false);
+    }
+  };
+
+  const hasActiveBilling = (table: any) => (table.billingSessions || []).length > 0 || table.status === 'OCCUPIED';
+  const canEditRate = (table: any) => !hasActiveBilling(table);
+  const canStartTesting = (table: any) => table.status === 'AVAILABLE' && !hasActiveBilling(table);
+  const isTesting = (table: any) => table.status === 'MAINTENANCE';
+
+  const startTesting = async (table: any) => {
+    if (!canStartTesting(table)) {
+      toast.error('Testing hanya bisa saat meja free (tidak sedang billing)');
+      return;
+    }
+
+    try {
+      await tablesApi.testing(table.id);
+      toast.success(`Meja ${table.name} sedang di testing`);
+      load(false);
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || 'Gagal menjalankan testing lampu');
+    }
+  };
+
+  const stopTesting = async (table: any) => {
+    try {
+      await tablesApi.stopTesting(table.id);
+      toast.success(`Testing ${table.name} dihentikan`);
+      load(false);
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || 'Gagal menghentikan testing lampu');
+    }
+  };
+
+  const toggleActive = async (table: any) => {
+    try {
+      await tablesApi.update(table.id, { isActive: !table.isActive });
+      toast.success(`Meja ${!table.isActive ? 'diaktifkan' : 'dinonaktifkan'}`);
+      load(false);
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || 'Gagal ubah status');
+    }
+  };
+
+  return (
+    <div className="p-6 space-y-6">
+      <h1 className="text-2xl font-bold">Manajemen Meja</h1>
+
+      {editingTable && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl border border-slate-200 w-full max-w-md">
+            <div className="flex items-center justify-between p-4 border-b border-slate-200">
+              <h3 className="font-semibold">Edit Harga Meja</h3>
+              <button onClick={() => setEditingTable(null)} className="text-slate-500 hover:text-slate-700">✕</button>
+            </div>
+            <div className="p-4 space-y-4">
+              <div>
+                <label className="label">Nama Meja</label>
+                <input className="input" value={editingTable.name} disabled />
+              </div>
+              <div>
+                <label className="label">Harga/Jam (Rp) <span className="text-red-500">*</span></label>
+                <input
+                  type="number"
+                  className="input"
+                  value={hourlyRate}
+                  onChange={(e) => setHourlyRate(e.target.value)}
+                  placeholder="25000"
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                <button className="btn-secondary" onClick={() => setEditingTable(null)}>Batal</button>
+                <button className="btn-primary" onClick={updateRate} disabled={submittingRate}>
+                  {submittingRate ? 'Menyimpan...' : 'Simpan'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="card p-0 overflow-hidden">
+        <div className="table-wrapper">
+          <table className="data-table">
+            <thead>
+              <tr><th>ID</th><th>Nama</th><th>Harga/Jam</th><th>Status</th><th>Aksi</th></tr>
+            </thead>
+            <tbody>
+              {loading ? <tr><td colSpan={5} className="text-center py-6">Memuat...</td></tr> : tables.map((t) => (
+                <tr key={t.id}>
+                  <td className="font-mono text-xs">{t.id}</td>
+                  <td>{t.name}</td>
+                  <td>{formatCurrency(Number(t.hourlyRate))}</td>
+                  <td>
+                    <div className="flex items-center gap-2">
+                      <button type="button" onClick={() => toggleActive(t)} className={`toggle-switch ${t.isActive ? 'active' : ''}`} title={t.isActive ? 'Aktif' : 'Nonaktif'} />
+                      {isTesting(t) && <span className="text-xs font-semibold text-violet-700">Sedang di testing ({formatRemaining(t.testingRemainingSeconds)})</span>}
+                    </div>
+                  </td>
+                  <td>
+                    <div className="flex gap-2">
+                      <button
+                        className="text-xs px-2 py-1 bg-amber-100 text-amber-700 rounded hover:bg-amber-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                        onClick={() => openEditRate(t)}
+                        disabled={!canEditRate(t)}
+                      >
+                        Edit Harga
+                      </button>
+                      {isTesting(t) ? (
+                        <button className="text-xs px-2 py-1 bg-violet-600 text-white rounded hover:bg-violet-700" onClick={() => stopTesting(t)}>
+                          Hentikan
+                        </button>
+                      ) : (
+                        <button
+                          className="text-xs px-2 py-1 bg-violet-100 text-violet-700 rounded hover:bg-violet-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                          onClick={() => startTesting(t)}
+                          disabled={!canStartTesting(t)}
+                        >
+                          Testing
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
