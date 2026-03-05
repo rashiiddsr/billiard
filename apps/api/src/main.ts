@@ -2,10 +2,14 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import helmet from 'helmet';
-import compression from 'compression';
 import { AppModule } from './app.module';
 import { join } from 'path';
 import * as express from 'express';
+
+// Use require here to avoid TS build failures before dependency installation
+// in restricted CI environments; runtime dependency is declared in package.json.
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const compression = require('compression');
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
