@@ -16,6 +16,34 @@ const failedAttempts = new Map<string, { count: number; lastAt: Date }>();
 const MAX_FAILED = 5;
 const LOCKOUT_MINUTES = 15;
 
+function resolveExpiryDate(expiresIn: string | number | undefined, fallbackDays: number) {
+  const now = Date.now();
+
+  if (typeof expiresIn === 'number' && Number.isFinite(expiresIn)) {
+    return new Date(now + expiresIn * 1000);
+  }
+
+  if (typeof expiresIn === 'string') {
+    const raw = expiresIn.trim();
+    const numeric = Number(raw);
+    if (Number.isFinite(numeric)) {
+      return new Date(now + numeric * 1000);
+    }
+
+    const match = raw.match(/^(\d+)\s*([smhd])$/i);
+    if (match) {
+      const value = Number(match[1]);
+      const unit = match[2].toLowerCase();
+      const multiplier = unit === 's' ? 1000 : unit === 'm' ? 60_000 : unit === 'h' ? 3_600_000 : 86_400_000;
+      return new Date(now + value * multiplier);
+    }
+  }
+
+  const fallback = new Date(now);
+  fallback.setDate(fallback.getDate() + fallbackDays);
+  return fallback;
+}
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -161,16 +189,16 @@ export class AuthService {
 
     const accessToken = this.jwtService.sign(payload, {
       secret: this.config.get('JWT_SECRET'),
-      expiresIn: this.config.get('JWT_ACCESS_EXPIRES_IN') || '15m',
+      expiresIn: this.config.get('JWT_ACCESS_EXPIRES_IN') || '8h',
     });
 
+    const refreshExpiry = this.config.get<string>('JWT_REFRESH_EXPIRES_IN') || '30d';
     const refreshToken = this.jwtService.sign(payload, {
       secret: this.config.get('JWT_REFRESH_SECRET'),
-      expiresIn: this.config.get('JWT_REFRESH_EXPIRES_IN') || '7d',
+      expiresIn: refreshExpiry,
     });
 
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 7);
+    const expiresAt = resolveExpiryDate(refreshExpiry, 30);
 
     await this.prisma.refreshToken.create({
       data: { token: refreshToken, userId, expiresAt },
