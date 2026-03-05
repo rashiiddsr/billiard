@@ -79,6 +79,100 @@ export default function CashierTransactionsPage() {
 
   const total = useMemo(() => data.reduce((s, x) => s + parseFloat(x.totalAmount || '0'), 0), [data]);
 
+  const escapeCsvValue = (value: unknown) => {
+    const normalized = value === null || value === undefined ? '' : String(value);
+    const escaped = normalized.replace(/"/g, '""');
+    return /[",\n]/.test(escaped) ? `"${escaped}"` : escaped;
+  };
+
+  const buildCsvRow = (row: unknown[]) => row.map((cell) => escapeCsvValue(cell)).join(',');
+
+  const downloadTransactionsCsv = async () => {
+    const receipts = await Promise.all(
+      data.map(async (payment) => {
+        try {
+          return await paymentsApi.getReceipt(payment.id);
+        } catch {
+          return null;
+        }
+      }),
+    );
+
+    const rows = receipts.flatMap((receipt, idx) => {
+      const payment = data[idx];
+      if (!payment) return [];
+
+      const itemRows: string[] = [];
+
+      (receipt?.packageUsages || []).forEach((pkg: any) => {
+        (pkg.fnbItems || []).forEach((item: any) => {
+          itemRows.push(
+            buildCsvRow([
+              payment.paymentNumber,
+              new Date(payment.createdAt).toLocaleString('id-ID'),
+              payment.method,
+              payment.billingSession?.table?.name || 'Standalone',
+              `Paket: ${pkg.packageName}`,
+              item.name,
+              item.qty,
+              item.subtotal,
+              payment.totalAmount,
+            ]),
+          );
+        });
+      });
+
+      (receipt?.fnbItems || []).forEach((item: any) => {
+        itemRows.push(
+          buildCsvRow([
+            payment.paymentNumber,
+            new Date(payment.createdAt).toLocaleString('id-ID'),
+            payment.method,
+            payment.billingSession?.table?.name || 'Standalone',
+            'F&B Tambahan',
+            item.name,
+            item.qty,
+            item.subtotal,
+            payment.totalAmount,
+          ]),
+        );
+      });
+
+      if (itemRows.length === 0) {
+        itemRows.push(
+          buildCsvRow([
+            payment.paymentNumber,
+            new Date(payment.createdAt).toLocaleString('id-ID'),
+            payment.method,
+            payment.billingSession?.table?.name || 'Standalone',
+            'Tanpa Item F&B',
+            '-',
+            0,
+            0,
+            payment.totalAmount,
+          ]),
+        );
+      }
+
+      return itemRows;
+    });
+
+    const csv = [
+      `Laporan Detail Transaksi Kasir,${startDate},${endDate}`,
+      buildCsvRow(['No. Transaksi', 'Waktu', 'Metode', 'Meja', 'Kategori Detail', 'Nama Item', 'Qty', 'Subtotal Item', 'Total Transaksi']),
+      ...(rows.length > 0 ? rows : [buildCsvRow(['Tidak ada transaksi', '-', '-', '-', '-', '-', 0, 0, 0])]),
+    ].join('\n');
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `transaksi-kasir-detail-${startDate}-${endDate}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+    toast.success('CSV detail transaksi berhasil diunduh');
+  };
+
   const openDetail = async (id: string) => {
     const receipt = await paymentsApi.getReceipt(id);
     setDetail(receipt);
@@ -142,7 +236,13 @@ export default function CashierTransactionsPage() {
 
   return (
     <div className="space-y-4 p-6">
-      <div className="flex items-center justify-between"><h1 className="text-2xl font-bold">Daftar Transaksi</h1><p className="text-lg font-bold text-emerald-600">Total: {formatCurrency(total)}</p></div>
+      <div className="flex items-center justify-between gap-3">
+        <h1 className="text-2xl font-bold">Daftar Transaksi</h1>
+        <div className="flex items-center gap-3">
+          <p className="text-lg font-bold text-emerald-600">Total: {formatCurrency(total)}</p>
+          <button className="btn-secondary" onClick={downloadTransactionsCsv}>Unduh CSV Detail</button>
+        </div>
+      </div>
 
       <div className="card p-4 space-y-3">
         <div className="grid gap-3 md:grid-cols-[auto_1fr_auto_1fr] md:items-center">

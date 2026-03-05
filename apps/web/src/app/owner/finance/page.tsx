@@ -136,25 +136,148 @@ export default function FinancePage() {
     setEndDate(end);
   };
 
-  const downloadCsv = () => {
+  const escapeCsvValue = (value: unknown) => {
+    const normalized = value === null || value === undefined ? '' : String(value);
+    const escaped = normalized.replace(/"/g, '""');
+    return /[",\n]/.test(escaped) ? `"${escaped}"` : escaped;
+  };
+
+  const buildCsvRow = (row: unknown[]) => row.map((cell) => escapeCsvValue(cell)).join(',');
+
+  const downloadCsv = async () => {
     if (!report) return;
-    const rows = [
+    const summaryRows = [
       ['Mulai', startDate],
       ['Selesai', endDate],
       ['Total Pendapatan', report.revenue.total],
       ['Pendapatan Billiard', report.revenue.billiard],
       ['Pendapatan FNB', report.revenue.fnb],
+      ['Total Diskon', report.revenue.discount],
+      ['Total Pajak', report.revenue.tax],
       ['Total Pengeluaran', report.expenses.total],
       ['Profit Bersih', report.netProfit],
     ];
-    const csv = ['Metrik,Nilai', ...rows.map((r) => `${r[0]},${r[1]}`)].join('\n');
+
+    const paymentMethodRows: unknown[][] = (report.paymentMethods || []).map((method: any) => [
+      method.method,
+      method.count,
+      method.total,
+    ]);
+
+    const perTableRows: unknown[][] = (report.perTable || []).map((table: any) => [
+      table.tableName,
+      table.sessions,
+      table.revenue,
+    ]);
+
+    const receipts = await Promise.all(
+      payments.map(async (payment) => {
+        try {
+          return await paymentsApi.getReceipt(payment.id);
+        } catch {
+          return null;
+        }
+      }),
+    );
+
+    const productSalesMap = new Map<string, { qty: number; revenue: number }>();
+    receipts.forEach((receipt) => {
+      if (!receipt) return;
+
+      (receipt.fnbItems || []).forEach((item: any) => {
+        const key = item.name || 'Produk Tanpa Nama';
+        const existing = productSalesMap.get(key) || { qty: 0, revenue: 0 };
+        existing.qty += Number(item.qty || 0);
+        existing.revenue += Number(item.subtotal || 0);
+        productSalesMap.set(key, existing);
+      });
+
+      (receipt.packageUsages || []).forEach((pkg: any) => {
+        (pkg.fnbItems || []).forEach((item: any) => {
+          const key = item.name || 'Produk Tanpa Nama';
+          const existing = productSalesMap.get(key) || { qty: 0, revenue: 0 };
+          existing.qty += Number(item.qty || 0);
+          existing.revenue += Number(item.subtotal || 0);
+          productSalesMap.set(key, existing);
+        });
+      });
+    });
+
+    const productRows: unknown[][] = Array.from(productSalesMap.entries())
+      .map(([name, metrics]) => [name, metrics.qty, metrics.revenue])
+      .sort((a, b) => Number(b[2]) - Number(a[2]));
+
+    const totalRevenue = Number(report.revenue.total || 0);
+    const totalExpense = Number(report.expenses.total || 0);
+    const totalTransaction = payments.length;
+    const averageTransaction = totalTransaction > 0 ? totalRevenue / totalTransaction : 0;
+    const profitMargin = totalRevenue > 0 ? (Number(report.netProfit || 0) / totalRevenue) * 100 : 0;
+
+    const sections: string[] = [
+      'RINGKASAN KEUANGAN',
+      buildCsvRow(['Metrik', 'Nilai']),
+      ...summaryRows.map((row) => buildCsvRow(row)),
+      '',
+      'UANG MASUK PER METODE',
+      buildCsvRow(['Metode', 'Jumlah Transaksi', 'Total Uang Masuk']),
+      ...(paymentMethodRows.length > 0 ? paymentMethodRows.map((row: unknown[]) => buildCsvRow(row)) : [buildCsvRow(['Tidak ada data', 0, 0])]),
+      '',
+      'DETAIL TRANSAKSI',
+      buildCsvRow(['Nomor', 'Tanggal', 'Kasir', 'Metode', 'Meja', 'Total', 'Billing', 'FNB', 'Status']),
+      ...(payments.length > 0
+        ? payments.map((payment) =>
+            buildCsvRow([
+              payment.paymentNumber,
+              new Date(payment.createdAt).toLocaleString('id-ID'),
+              payment.paidBy?.name || '-',
+              payment.method,
+              payment.billingSession?.table?.name || 'Standalone',
+              payment.totalAmount,
+              payment.billingAmount,
+              payment.fnbAmount,
+              payment.status,
+            ]),
+          )
+        : [buildCsvRow(['Tidak ada transaksi', '-', '-', '-', '-', 0, 0, 0, '-'])]),
+      '',
+      'PENGELUARAN',
+      buildCsvRow(['Tanggal', 'Kategori', 'Jumlah', 'Catatan', 'Dibuat Oleh']),
+      ...(expenses.length > 0
+        ? expenses.map((expense) =>
+            buildCsvRow([
+              formatDateShort(expense.date),
+              expense.category,
+              expense.amount,
+              expense.notes || '-',
+              expense.createdBy?.name || '-',
+            ]),
+          )
+        : [buildCsvRow(['Tidak ada pengeluaran', '-', 0, '-', '-'])]),
+      '',
+      'STOK PRODUK YANG LAKU',
+      buildCsvRow(['Produk', 'Qty Terjual', 'Omzet Produk']),
+      ...(productRows.length > 0 ? productRows.map((row: unknown[]) => buildCsvRow(row)) : [buildCsvRow(['Tidak ada produk terjual', 0, 0])]),
+      '',
+      'ANALISIS LAIN',
+      buildCsvRow(['Metrik', 'Nilai']),
+      buildCsvRow(['Jumlah Transaksi', totalTransaction]),
+      buildCsvRow(['Rata-rata Nilai Transaksi', averageTransaction.toFixed(2)]),
+      buildCsvRow(['Margin Profit (%)', profitMargin.toFixed(2)]),
+      '',
+      'ANALISIS MEJA',
+      buildCsvRow(['Meja', 'Jumlah Sesi', 'Pendapatan Billing']),
+      ...(perTableRows.length > 0 ? perTableRows.map((row: unknown[]) => buildCsvRow(row)) : [buildCsvRow(['Tidak ada sesi meja', 0, 0])]),
+    ];
+
+    const csv = sections.join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `laporan-keuangan-${startDate}-${endDate}.csv`;
+    link.download = `cash-flow-lengkap-${startDate}-${endDate}.csv`;
     link.click();
     URL.revokeObjectURL(url);
+    toast.success('CSV cash flow lengkap berhasil diunduh');
   };
 
   const approveVoid = async (id: string) => {
