@@ -2,6 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import helmet from 'helmet';
+import compression from 'compression';
 import { AppModule } from './app.module';
 import { join } from 'path';
 import * as express from 'express';
@@ -13,8 +14,25 @@ async function bootstrap() {
   app.use(helmet({
     crossOriginResourcePolicy: { policy: 'cross-origin' },
   }));
+
+  // BUG FIX #2b: Tambahkan compression untuk respons API lebih cepat
+  // Ini sangat membantu di Hostinger yang bandwidthnya terbatas
+  app.use(compression());
+
   app.enableCors({
-    origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
+    // BUG FIX #2c: Support multiple origin (localhost + production)
+    origin: (origin, callback) => {
+      const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:3000')
+        .split(',')
+        .map((o) => o.trim());
+
+      // Izinkan jika tidak ada origin (request dari server/curl) atau ada di whitelist
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error(`CORS: origin ${origin} tidak diizinkan`));
+      }
+    },
     credentials: true,
   });
 
@@ -32,20 +50,21 @@ async function bootstrap() {
 
   app.setGlobalPrefix('api/v1');
 
-  // Swagger
-  const config = new DocumentBuilder()
-    .setTitle('Billiard POS API')
-    .setDescription('Billiard Billing + Cafe POS + IoT System')
-    .setVersion('1.0')
-    .addBearerAuth()
-    .build();
-  const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api/docs', app, document);
+  // Swagger (nonaktifkan di production untuk performa)
+  if (process.env.NODE_ENV !== 'production') {
+    const config = new DocumentBuilder()
+      .setTitle('Billiard POS API')
+      .setDescription('Billiard Billing + Cafe POS + IoT System')
+      .setVersion('1.0')
+      .addBearerAuth()
+      .build();
+    const document = SwaggerModule.createDocument(app, config);
+    SwaggerModule.setup('api/docs', app, document);
+  }
 
   const port = process.env.PORT || 3001;
   await app.listen(port);
-  console.log(`🚀 API running on http://localhost:${port}`);
-  console.log(`📚 Swagger: http://localhost:${port}/api/docs`);
+  console.log(`🚀 API running on port ${port}`);
 }
 
 bootstrap();

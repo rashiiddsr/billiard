@@ -9,39 +9,57 @@ export const api = axios.create({
   timeout: parseInt(process.env.NEXT_PUBLIC_API_TIMEOUT_MS || '15000', 10),
 });
 
-const ACCESS_COOKIE_EXP_DAYS = 1 / 24; // 1 jam
-const REFRESH_COOKIE_EXP_DAYS = 30;
-const COOKIE_OPTIONS = { sameSite: 'strict' as const, secure: typeof window !== 'undefined' ? window.location.protocol === 'https:' : false };
+// BUG FIX #3a: Cookie expiry disesuaikan dengan JWT expiry yang sebenarnya
+// Access token JWT = 15 menit, refresh token JWT = 7 hari
+const ACCESS_COOKIE_EXP_DAYS = 15 / (24 * 60); // 15 menit (bukan 1 jam!)
+const REFRESH_COOKIE_EXP_DAYS = 7;              // 7 hari (bukan 30 hari!)
+
+const COOKIE_OPTIONS = {
+  sameSite: 'strict' as const,
+  secure: typeof window !== 'undefined' ? window.location.protocol === 'https:' : false,
+};
+
+// Mutex: cegah multiple refresh request sekaligus (single tab maupun race condition)
 let refreshPromise: Promise<any> | null = null;
-const ACCESS_EXPIRY_BUFFER_MINUTES = 5;
-const REFRESH_401_SOFT_RETRY_LIMIT = 2;
+
+// BUG FIX #3b: Buffer proactive refresh = 2 menit sebelum 15 menit expire
+// (sebelumnya dihitung dari 60 menit — salah karena JWT hanya 15 menit)
+const ACCESS_TOKEN_LIFETIME_MINUTES = 15;
+const ACCESS_EXPIRY_BUFFER_MINUTES = 2;
+const PROACTIVE_REFRESH_AFTER_MS =
+  (ACCESS_TOKEN_LIFETIME_MINUTES - ACCESS_EXPIRY_BUFFER_MINUTES) * 60 * 1000; // 13 menit
+
+// BUG FIX #3c: Naikkan limit retry refresh 401 agar tidak logout karena network glitch sesaat
+const REFRESH_401_SOFT_RETRY_LIMIT = 4; // sebelumnya 2 — terlalu rendah
 const REFRESH_401_COUNTER_KEY = 'refresh401Count';
 
-function clearAuthStorage() {
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+export function clearAuthStorage() {
   Cookies.remove('accessToken');
   Cookies.remove('refreshToken');
   Cookies.remove('loginAt');
   Cookies.remove('user');
+  Cookies.remove('tokenIssuedAt');
 }
 
-function redirectToLogin() {
+export function redirectToLogin() {
   if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
     window.location.href = '/login';
   }
 }
 
-function isSessionNearExpiryByLoginAt() {
-  const loginAt = Cookies.get('loginAt');
-  if (!loginAt) return true;
-
-  const loginAtMs = new Date(loginAt).getTime();
-  if (Number.isNaN(loginAtMs)) return true;
-
-  const refreshAfterMs = (60 - ACCESS_EXPIRY_BUFFER_MINUTES) * 60 * 1000;
-  return Date.now() - loginAtMs >= refreshAfterMs;
+// BUG FIX #3d: Ganti isSessionNearExpiryByLoginAt → pakai tokenIssuedAt
+// (loginAt hanya di-set saat login pertama, bukan setiap refresh — jadi hitung-hitungannya salah)
+export function isAccessTokenNearExpiry(): boolean {
+  const issuedAt = Cookies.get('tokenIssuedAt');
+  if (!issuedAt) return true;
+  const issuedAtMs = new Date(issuedAt).getTime();
+  if (Number.isNaN(issuedAtMs)) return true;
+  return Date.now() - issuedAtMs >= PROACTIVE_REFRESH_AFTER_MS;
 }
 
-function getRefresh401Count() {
+function getRefresh401Count(): number {
   if (typeof window === 'undefined') return 0;
   const raw = window.sessionStorage.getItem(REFRESH_401_COUNTER_KEY);
   const parsed = Number(raw || '0');
@@ -58,45 +76,41 @@ function resetRefresh401Count() {
   window.sessionStorage.removeItem(REFRESH_401_COUNTER_KEY);
 }
 
-function shouldForceLogoutOnRefresh401() {
-  const nearExpiry = isSessionNearExpiryByLoginAt();
-  const nextCount = getRefresh401Count() + 1;
-  setRefresh401Count(nextCount);
-
-  return nearExpiry || nextCount >= REFRESH_401_SOFT_RETRY_LIMIT;
-}
+// ─── Core refresh ────────────────────────────────────────────────────────────
 
 export async function refreshAuthSession() {
   const refreshToken = Cookies.get('refreshToken');
   if (!refreshToken) {
-    throw new Error('No refresh token');
+    // BUG FIX #3e: Kalau tidak ada refresh token, langsung redirect login
+    // (sebelumnya throw generic Error yang tidak di-handle dengan benar di interceptor)
+    clearAuthStorage();
+    redirectToLogin();
+    throw new Error('No refresh token — redirecting to login');
   }
 
+  // Mutex: reuse promise yang sedang berjalan agar tidak kirim dua refresh sekaligus
   if (!refreshPromise) {
-    refreshPromise = axios.post(`${API_URL}/auth/refresh`, { refreshToken }).catch((error: AxiosError) => {
-      if (error.response?.status === 401) {
-        if (shouldForceLogoutOnRefresh401()) {
-          clearAuthStorage();
-          redirectToLogin();
-        }
-      }
-      throw error;
-    }).finally(() => {
-      refreshPromise = null;
-    });
+    refreshPromise = axios
+      .post(`${API_URL}/auth/refresh`, { refreshToken })
+      .finally(() => {
+        refreshPromise = null;
+      });
   }
 
   const { data } = await refreshPromise;
 
+  const now = new Date().toISOString();
   Cookies.set('accessToken', data.accessToken, { expires: ACCESS_COOKIE_EXP_DAYS, ...COOKIE_OPTIONS });
   Cookies.set('refreshToken', data.refreshToken, { expires: REFRESH_COOKIE_EXP_DAYS, ...COOKIE_OPTIONS });
-  Cookies.set('loginAt', new Date().toISOString(), { expires: REFRESH_COOKIE_EXP_DAYS, ...COOKIE_OPTIONS });
+  Cookies.set('tokenIssuedAt', now, { expires: REFRESH_COOKIE_EXP_DAYS, ...COOKIE_OPTIONS });
+  // loginAt tetap dipertahankan untuk keperluan audit, tidak diubah
   resetRefresh401Count();
 
   return data;
 }
 
-// Request interceptor - add access token
+// ─── Request interceptor ─────────────────────────────────────────────────────
+
 api.interceptors.request.use((config) => {
   const token = Cookies.get('accessToken');
   if (token) {
@@ -105,7 +119,8 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// Response interceptor - handle 401 and token refresh
+// ─── Response interceptor ────────────────────────────────────────────────────
+
 api.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
@@ -121,18 +136,20 @@ api.interceptors.response.use(
         original.headers.Authorization = `Bearer ${data.accessToken}`;
         return api(original);
       } catch (refreshError: any) {
-        const refreshFailedByAuth = refreshError?.response?.status === 401;
-        if (!refreshFailedByAuth) {
-          return Promise.reject(error);
-        }
-
+        // BUG FIX #3f: Kalau refresh gagal karena apapun (network error / 401 / no token),
+        // selalu redirect ke login — tidak ada gunanya terus retry
         clearAuthStorage();
         redirectToLogin();
+        return Promise.reject(refreshError);
       }
     }
 
+    // Kalau request refresh itu sendiri yang 401
     if (status === 401 && isRefreshRequest) {
-      if (shouldForceLogoutOnRefresh401()) {
+      const nextCount = getRefresh401Count() + 1;
+      setRefresh401Count(nextCount);
+
+      if (nextCount >= REFRESH_401_SOFT_RETRY_LIMIT) {
         clearAuthStorage();
         redirectToLogin();
       }
@@ -270,8 +287,6 @@ export const usersApi = {
     headers: { 'Content-Type': 'multipart/form-data' },
   }).then((r) => r.data),
 };
-
-
 
 // ─── Company ─────────────────────────────────────────────────────────────────
 export const companyApi = {
