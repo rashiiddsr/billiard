@@ -25,6 +25,18 @@ export class BillingService {
     private config: ConfigService,
   ) {}
 
+  private getElapsedMinutes(startTime: Date, endTime: Date = new Date()) {
+    return Math.max(1, Math.ceil((endTime.getTime() - startTime.getTime()) / 60000));
+  }
+
+  private calculateFlexibleAmount(ratePerHour: Decimal, minutes: number) {
+    if (minutes <= 60) {
+      return ratePerHour.toDecimalPlaces(0);
+    }
+    const prorated = ratePerHour.mul(minutes).div(60);
+    return prorated.div(5000).ceil().mul(5000).toDecimalPlaces(0);
+  }
+
   async createSession(dto: CreateBillingSessionDto, userId: string, userRole: Role) {
     // OWNER must provide re-auth token
     if (userRole === Role.OWNER) {
@@ -318,11 +330,11 @@ export class BillingService {
       throw new BadRequestException('Session is not active');
     }
     const now = new Date();
-    const actualMinutes = Math.ceil((now.getTime() - session.startTime.getTime()) / 60000);
+    const actualMinutes = this.getElapsedMinutes(session.startTime, now);
     const finalAmount = session.rateType === 'OWNER_LOCK'
       ? new Decimal(0)
       : session.rateType === 'FLEXIBLE'
-      ? new Decimal(session.ratePerHour.toString()).mul(Math.ceil(actualMinutes / 60)).toDecimalPlaces(0)
+      ? this.calculateFlexibleAmount(new Decimal(session.ratePerHour.toString()), actualMinutes)
       : new Decimal(session.totalAmount.toString());
 
     const updated = await this.prisma.billingSession.update({
@@ -330,6 +342,7 @@ export class BillingService {
       data: {
         status: SessionStatus.COMPLETED,
         actualEndTime: now,
+        durationMinutes: actualMinutes,
         totalAmount: finalAmount.toFixed(2),
       },
     });
@@ -430,7 +443,7 @@ export class BillingService {
   }
 
   async getActiveSessions() {
-    return this.prisma.billingSession.findMany({
+    const sessions = await this.prisma.billingSession.findMany({
       where: { status: SessionStatus.ACTIVE },
       include: {
         table: {
@@ -455,6 +468,17 @@ export class BillingService {
         },
       },
       orderBy: { startTime: 'asc' },
+    });
+
+    return sessions.map((session) => {
+      if (session.rateType !== 'FLEXIBLE') return session;
+      const elapsedMinutes = this.getElapsedMinutes(session.startTime);
+      const temporaryAmount = this.calculateFlexibleAmount(new Decimal(session.ratePerHour.toString()), elapsedMinutes);
+      return {
+        ...session,
+        elapsedMinutes,
+        temporaryAmount: temporaryAmount.toFixed(2),
+      };
     });
   }
 
@@ -510,11 +534,17 @@ export class BillingService {
     });
 
     const extensionTotal = extensionItems.reduce((sum, item) => sum + item.additionalAmount, 0);
-    const sessionTotal = Number(session.totalAmount || 0);
+    const isFlexible = session.rateType === 'FLEXIBLE';
+    const elapsedMinutes = this.getElapsedMinutes(session.startTime, session.actualEndTime || new Date());
+    const sessionTotal = isFlexible
+      ? Number(this.calculateFlexibleAmount(new Decimal(session.ratePerHour.toString()), elapsedMinutes).toFixed(2))
+      : Number(session.totalAmount || 0);
     const baseAmount = Math.max(0, sessionTotal - extensionTotal);
 
     return {
       ...session,
+      elapsedMinutes,
+      temporaryAmount: isFlexible ? sessionTotal : undefined,
       billingBreakdown: {
         baseAmount,
         extensionTotal,

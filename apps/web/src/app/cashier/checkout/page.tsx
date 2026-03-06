@@ -22,6 +22,18 @@ export default function CheckoutPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
+
+  const calculateFlexibleTemporaryAmount = (session: any, refNow: Date = new Date()) => {
+    const rate = Number(session?.ratePerHour || 0);
+    const startedAt = new Date(session?.startTime || refNow).getTime();
+    const endedAt = session?.actualEndTime ? new Date(session.actualEndTime).getTime() : refNow.getTime();
+    const elapsedMinutes = Math.max(1, Math.ceil((endedAt - startedAt) / 60000));
+    if (elapsedMinutes <= 60) return { amount: Math.round(rate), elapsedMinutes };
+    const prorated = (rate * elapsedMinutes) / 60;
+    const rounded = Math.ceil(prorated / 5000) * 5000;
+    return { amount: rounded, elapsedMinutes };
+  };
+
   const fetchData = useCallback(async () => {
     try {
       const [active, completed] = await Promise.all([
@@ -63,7 +75,16 @@ export default function CheckoutPage() {
 
   const selectedSessionData = sessions.find((s) => s.id === selectedSession);
   const selectedOrdersData = sessionOrders;
-  const billingAmt = selectedSessionDetail ? parseFloat(selectedSessionDetail.totalAmount) : (selectedSessionData ? parseFloat(selectedSessionData.totalAmount) : 0);
+  const isActiveFlexibleSession = selectedSessionDetail?.rateType === 'FLEXIBLE' && selectedSessionDetail?.status === 'ACTIVE';
+  const billingAmt = selectedSessionDetail
+    ? (selectedSessionDetail.rateType === 'FLEXIBLE'
+      ? Number(selectedSessionDetail.temporaryAmount || calculateFlexibleTemporaryAmount(selectedSessionDetail).amount)
+      : parseFloat(selectedSessionDetail.totalAmount))
+    : (selectedSessionData
+      ? (selectedSessionData.rateType === 'FLEXIBLE'
+        ? Number(selectedSessionData.temporaryAmount || calculateFlexibleTemporaryAmount(selectedSessionData).amount)
+        : parseFloat(selectedSessionData.totalAmount))
+      : 0);
   const fnbAmt = selectedOrdersData.reduce((s: number, o: any) => s + parseFloat(o.subtotal || '0'), 0);
 
   const breakdown = useMemo(() => {
@@ -142,6 +163,10 @@ export default function CheckoutPage() {
   const createCheckout = async () => {
     if (!selectedSession) {
       toast.error('Pilih tagihan terlebih dahulu');
+      return;
+    }
+    if (isActiveFlexibleSession) {
+      toast.error('Sesi fleksibel masih aktif. Hentikan sesi billing terlebih dahulu.');
       return;
     }
     if ((method === 'QRIS' || method === 'TRANSFER') && !reference.trim()) {
@@ -246,7 +271,7 @@ export default function CheckoutPage() {
           <select className="input" value={selectedSession} onChange={(e) => setSelectedSession(e.target.value)}>
             <option value="">— Pilih tagihan meja —</option>
             {sessions.map((s) => (
-              <option key={s.id} value={s.id}>{s.table?.name} • {new Date(s.startTime).toLocaleString('id-ID')} • {s.status} • {formatCurrency(s.totalAmount)}</option>
+              <option key={s.id} value={s.id}>{s.table?.name} • {new Date(s.startTime).toLocaleString('id-ID')} • {s.status} • {formatCurrency(s.rateType === 'FLEXIBLE' ? Number(s.temporaryAmount || calculateFlexibleTemporaryAmount(s).amount) : s.totalAmount)}</option>
             ))}
           </select>
         </div>
@@ -263,7 +288,7 @@ export default function CheckoutPage() {
                 <div className="flex justify-between text-slate-900 font-semibold"><span>Subtotal</span><span>{formatCurrency(usage.packagePrice)}</span></div>
               </div>
             ))}
-            <div className="flex justify-between"><span>Tagihan billing {selectedSessionDetail?.durationMinutes || 0} menit</span><span>{formatCurrency(breakdown.baseAmount)}</span></div>
+            <div className="flex justify-between"><span>Tagihan billing {selectedSessionDetail?.rateType === 'FLEXIBLE' ? (selectedSessionDetail?.elapsedMinutes || calculateFlexibleTemporaryAmount(selectedSessionDetail).elapsedMinutes) : (selectedSessionDetail?.durationMinutes || 0)} menit {selectedSessionDetail?.rateType === 'FLEXIBLE' ? '≈' : ''}</span><span>{formatCurrency(breakdown.baseAmount)}</span></div>
             {breakdown.extensions.map((item: any, idx: number) => (
               <div key={item.id || idx} className="flex justify-between text-slate-600"><span>Perpanjangan #{idx + 1} (+{item.additionalMinutes} menit)</span><span>{formatCurrency(item.additionalAmount)}</span></div>
             ))}
@@ -273,6 +298,12 @@ export default function CheckoutPage() {
             <div className="mt-1 flex justify-between border-t border-slate-200 pt-1"><span>Total</span><span className="font-semibold">{formatCurrency(total)}</span></div>
           </div>
         ) : null}
+
+        {isActiveFlexibleSession && (
+          <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
+            Sesi fleksibel masih berjalan. Hentikan sesi dari halaman Billing Meja sebelum checkout.
+          </div>
+        )}
 
         <div className="mb-4 flex gap-2">{(['CASH', 'QRIS', 'TRANSFER'] as PaymentMethod[]).map((m) => <button key={m} onClick={() => setMethod(m)} className={`flex-1 rounded-lg py-2 text-sm font-medium ${method === m ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>{m}</button>)}</div>
 
@@ -294,7 +325,7 @@ export default function CheckoutPage() {
           <div className="mt-2 flex justify-between border-t border-slate-200 pt-2 text-base font-bold"><span>TOTAL</span><span className="text-emerald-600">{formatCurrency(total)}</span></div>
         </div>
 
-        <button onClick={createCheckout} disabled={submitting || total <= 0} className="btn-primary w-full py-3 text-base">{submitting ? 'Memproses...' : 'Konfirmasi Pembayaran'}</button>
+        <button onClick={createCheckout} disabled={submitting || total <= 0 || isActiveFlexibleSession} className="btn-primary w-full py-3 text-base">{submitting ? 'Memproses...' : 'Konfirmasi Pembayaran'}</button>
       </div>
 
       {currentReceipt && (
