@@ -1,5 +1,5 @@
 import {
-  Controller, Get, Post, Patch, Param, Body, UseGuards, Query,
+  Controller, Get, Post, Patch, Delete, Param, Body, UseGuards, Query,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
@@ -24,7 +24,7 @@ export class BillingController {
   }
 
   @Get('sessions')
-  @Roles('OWNER' as any, 'CASHIER' as any)
+  @Roles('OWNER' as any, 'CASHIER' as any, 'MANAGER' as any)
   listSessions(
     @Query('status') status?: SessionStatus,
     @Query('tableId') tableId?: string,
@@ -50,9 +50,15 @@ export class BillingController {
   }
 
   @Get('sessions/:id')
-  @Roles('OWNER' as any, 'CASHIER' as any)
+  @Roles('OWNER' as any, 'CASHIER' as any, 'MANAGER' as any)
   getSession(@Param('id') id: string) {
     return this.billingService.getSession(id);
+  }
+
+  @Delete('sessions/:id')
+  @Roles('OWNER' as any, 'MANAGER' as any)
+  removeCompletedUnpaidSession(@Param('id') id: string, @CurrentUser() user: any) {
+    return this.billingService.removeCompletedUnpaidSession(id, user.id);
   }
 
   @Patch('sessions/:id/extend')

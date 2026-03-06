@@ -57,6 +57,7 @@ const navByRole: Record<string, NavItem[]> = {
     { label: 'Manajemen Aset', href: '/manager/stock', icon: <BoxIcon /> },
     { label: 'Pengeluaran', href: '/manager/expenses', icon: <WalletIcon /> },
     { label: 'Daftar Transaksi', href: '/manager/transactions', icon: <LogIcon /> },
+    { label: 'Manajemen Billing', href: '/manager/billing-management', icon: <BilliardIcon /> },
     { label: 'Profil', href: '/manager/profile', icon: <UserIcon /> },
   ],
 };

@@ -553,6 +553,55 @@ export class BillingService {
     };
   }
 
+
+
+  async removeCompletedUnpaidSession(sessionId: string, userId: string) {
+    const session = await this.prisma.billingSession.findUnique({
+      where: { id: sessionId },
+      include: {
+        payments: { where: { status: 'PAID' } },
+        orders: { where: { status: { not: 'CANCELLED' } } },
+        table: true,
+      },
+    });
+
+    if (!session) throw new NotFoundException('Session not found');
+    if (session.status !== SessionStatus.COMPLETED) {
+      throw new BadRequestException('Hanya billing yang sudah selesai yang dapat dihapus');
+    }
+    if (session.payments.length > 0) {
+      throw new BadRequestException('Billing sudah dibayar dan tidak dapat dihapus');
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      if (session.orders.length > 0) {
+        await tx.orderItemModifier.deleteMany({
+          where: { orderItem: { order: { billingSessionId: session.id } } },
+        });
+        await tx.orderItem.deleteMany({ where: { order: { billingSessionId: session.id } } });
+        await tx.order.deleteMany({ where: { billingSessionId: session.id } });
+      }
+
+      await tx.sessionPackageUsage.deleteMany({ where: { billingSessionId: session.id } });
+      await tx.billingSession.delete({ where: { id: session.id } });
+    });
+
+    await this.audit.log({
+      userId,
+      action: AuditAction.DELETE,
+      entity: 'BillingSession',
+      entityId: sessionId,
+      beforeData: {
+        tableId: session.tableId,
+        tableName: session.table?.name,
+        status: session.status,
+        totalAmount: session.totalAmount,
+      },
+      afterData: { removed: true },
+    });
+
+    return { success: true };
+  }
   async listSessions(filters: {
     status?: SessionStatus;
     tableId?: string;

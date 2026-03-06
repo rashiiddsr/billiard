@@ -128,6 +128,7 @@ export const billingApi = {
     api.patch(`/billing/sessions/${id}/stop`).then((r) => r.data),
   moveSession: (id: string, targetTableId: string) =>
     api.patch(`/billing/sessions/${id}/move`, { targetTableId }).then((r) => r.data),
+  deleteSession: (id: string) => api.delete(`/billing/sessions/${id}`).then((r) => r.data),
 };
 
 export const packagesApi = {

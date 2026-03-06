@@ -2,8 +2,9 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { menuApi, ordersApi, billingApi, paymentsApi } from '@/lib/api';
+import { menuApi, ordersApi, billingApi, paymentsApi, companyApi } from '@/lib/api';
 import { formatCurrency } from '@/lib/utils';
+import { centerReceiptText, formatReceiptLine, printReceiptText, separatorLine, wrapAndCenterReceiptText } from '@/lib/receiptPrinter';
 import toast from 'react-hot-toast';
 
 type PaymentMethod = 'CASH' | 'QRIS' | 'TRANSFER';
@@ -40,6 +41,8 @@ export default function OrdersPage() {
   const [reference, setReference] = useState('');
   const [amountPaid, setAmountPaid] = useState('');
   const [receipt, setReceipt] = useState<any>(null);
+  const [receiptPaymentId, setReceiptPaymentId] = useState<string | null>(null);
+  const [companyProfile, setCompanyProfile] = useState<any>(null);
 
   const fetchData = useCallback(async () => {
     try {
@@ -71,6 +74,10 @@ export default function OrdersPage() {
   }, [presetSession]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  useEffect(() => {
+    companyApi.getProfile().then(setCompanyProfile).catch(() => setCompanyProfile(null));
+  }, []);
 
   const filteredItems = menuItems.filter((item) => {
     const matchCat = !selectedCategory || item.category === selectedCategory;
@@ -162,6 +169,7 @@ export default function OrdersPage() {
 
       const receiptData = await paymentsApi.getReceipt(payment.id);
       setReceipt(receiptData);
+      setReceiptPaymentId(payment.id);
 
       toast.success(`Checkout selesai • ID transaksi ${payment.paymentNumber}`);
       setShowCheckoutModal(false);
@@ -182,6 +190,44 @@ export default function OrdersPage() {
     }
   }, [method, cartTotal, showCheckoutModal]);
 
+
+
+  const printAndCloseStandaloneReceipt = async () => {
+    if (!receipt) return;
+    const paidAt = new Date(receipt.paidAt).toLocaleString('id-ID');
+    const paymentMethod = String(receipt.method || '').toUpperCase();
+    const footerText = companyProfile?.phoneNumber
+      ? `Terima kasih atas kunjungan Anda. Hubungi CS via Telp/WA: ${companyProfile.phoneNumber}`
+      : 'Terima kasih atas kunjungan Anda.';
+
+    const rawLines: string[] = [
+      centerReceiptText(companyProfile?.name || 'Billiard Club OS'),
+      ...wrapAndCenterReceiptText(companyProfile?.address || ''),
+      separatorLine(),
+      formatReceiptLine('No', receipt.paymentNumber),
+      formatReceiptLine('Kasir', receipt.cashier),
+      formatReceiptLine('Waktu', paidAt),
+      'F&B Standalone',
+      ...(receipt.fnbItems || []).length > 0
+        ? (receipt.fnbItems || []).map((f: any) => formatReceiptLine(`${f.name} x${f.qty}`, formatCurrency(f.subtotal || 0)))
+        : ['-'],
+      separatorLine(),
+      formatReceiptLine('TOTAL', formatCurrency(receipt.total || 0)),
+      formatReceiptLine(`Metode ${paymentMethod || '-'}`, formatCurrency(receipt.amountPaid || 0)),
+      paymentMethod === 'CASH' ? formatReceiptLine('Kembalian', formatCurrency(receipt.change || 0)) : '',
+      separatorLine(),
+      ...wrapAndCenterReceiptText(footerText),
+    ].filter(Boolean);
+
+    const printed = await printReceiptText(`${rawLines.join('\n')}\n\n\n`, `Struk ${receipt.paymentNumber}`, {
+      logoUrl: companyProfile?.logoUrl || null,
+    });
+
+    if (!printed) toast.error('QZ Tray/Print Bridge tidak terhubung dan print browser gagal dibuka');
+    if (receiptPaymentId) paymentsApi.markPrinted(receiptPaymentId).catch(() => null);
+    setReceipt(null);
+    setReceiptPaymentId(null);
+  };
   if (loading) {
     return <div className="flex h-64 items-center justify-center"><div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-500 border-t-transparent" /></div>;
   }
@@ -301,7 +347,7 @@ export default function OrdersPage() {
               <div className="flex justify-between"><span>Uang Diterima</span><span>{formatCurrency(receipt.amountPaid || 0)}</span></div>
               <div className="flex justify-between"><span>Kembalian</span><span>{formatCurrency(receipt.change || 0)}</span></div>
             </div>
-            <button className="btn-primary mt-4 w-full" onClick={() => setReceipt(null)}>Tutup</button>
+            <button className="btn-primary mt-4 w-full" onClick={printAndCloseStandaloneReceipt}>Tutup</button>
           </div>
         </div>
       )}
