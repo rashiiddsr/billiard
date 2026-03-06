@@ -637,9 +637,18 @@ export class PaymentsService {
     if (normalizedStatus) where.status = normalizedStatus;
     if (filters.paidById) where.paidById = filters.paidById;
     if (filters.startDate || filters.endDate) {
-      where.createdAt = {};
-      if (filters.startDate) where.createdAt.gte = filters.startDate;
-      if (filters.endDate) where.createdAt.lte = filters.endDate;
+      const dateRange: any = {};
+      if (filters.startDate) dateRange.gte = filters.startDate;
+      if (filters.endDate) dateRange.lte = filters.endDate;
+
+      if (!normalizedStatus || normalizedStatus === 'PAID') {
+        where.OR = [
+          { paidAt: dateRange },
+          { paidAt: null, createdAt: dateRange },
+        ];
+      } else {
+        where.createdAt = dateRange;
+      }
     }
 
     const page = filters.page || 1;

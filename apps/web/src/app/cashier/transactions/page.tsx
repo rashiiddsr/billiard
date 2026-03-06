@@ -13,11 +13,17 @@ function toDateInputValue(date: Date) {
   return new Date(date.getTime() - tzOffset).toISOString().split('T')[0];
 }
 
+function toDateTimeIso(date: string, time: string) {
+  return new Date(`${date}T${time}:00`).toISOString();
+}
+
 export default function CashierTransactionsPage() {
   const today = useMemo(() => toDateInputValue(new Date()), []);
   const [activeShortcut, setActiveShortcut] = useState<'today' | 'last7' | 'last30' | 'month' | null>('today');
   const [startDate, setStartDate] = useState(today);
   const [endDate, setEndDate] = useState(today);
+  const [startTime, setStartTime] = useState('00:00');
+  const [endTime, setEndTime] = useState('23:59');
   const [data, setData] = useState<any[]>([]);
   const [detail, setDetail] = useState<any>(null);
   const [detailPaymentId, setDetailPaymentId] = useState<string | null>(null);
@@ -27,8 +33,8 @@ export default function CashierTransactionsPage() {
     paymentsApi
       .list({
         status: 'PAID',
-        startDate: new Date(`${startDate}T00:00:00`).toISOString(),
-        endDate: new Date(`${endDate}T23:59:59`).toISOString(),
+        startDate: toDateTimeIso(startDate, startTime),
+        endDate: toDateTimeIso(endDate, endTime),
         limit: 200,
       })
       .then((r) => setData(r.data || []));
@@ -36,7 +42,7 @@ export default function CashierTransactionsPage() {
 
   useEffect(() => {
     fetchData();
-  }, [startDate, endDate]);
+  }, [startDate, endDate, startTime, endTime]);
 
   useEffect(() => {
     companyApi.getProfile().then(setCompanyProfile).catch(() => setCompanyProfile(null));
@@ -94,7 +100,7 @@ export default function CashierTransactionsPage() {
 
     const transactionRows = data.map((payment) => [
       payment.paymentNumber,
-      new Date(payment.createdAt).toLocaleString('id-ID'),
+      new Date(payment.paidAt || payment.createdAt).toLocaleString('id-ID'),
       payment.method,
       payment.billingSession?.table?.name || 'Standalone',
       Number(payment.totalAmount || 0),
@@ -134,7 +140,7 @@ export default function CashierTransactionsPage() {
       return rows;
     });
 
-    downloadWorkbookXls(`transaksi-kasir-detail-${startDate}-${endDate}`, [
+    downloadWorkbookXls(`transaksi-kasir-detail-${startDate}-${startTime}-${endDate}-${endTime}`, [
       {
         name: 'Transaksi',
         rows: [
@@ -226,11 +232,13 @@ export default function CashierTransactionsPage() {
       </div>
 
       <div className="card p-4 space-y-3">
-        <div className="grid gap-3 md:grid-cols-[auto_1fr_auto_1fr] md:items-center">
-          <label className="text-sm text-slate-600">Rentang Tanggal</label>
+        <div className="grid gap-3 md:grid-cols-[auto_1fr_1fr_auto_1fr_1fr] md:items-center">
+          <label className="text-sm text-slate-600">Rentang Tanggal & Jam</label>
           <input type="date" className="input w-full" value={startDate} onChange={(e) => { setActiveShortcut(null); setStartDate(e.target.value); }} />
+          <input type="time" className="input w-full" value={startTime} onChange={(e) => { setActiveShortcut(null); setStartTime(e.target.value || '00:00'); }} />
           <span className="text-center text-slate-500">s/d</span>
           <input type="date" className="input w-full" value={endDate} onChange={(e) => { setActiveShortcut(null); setEndDate(e.target.value); }} />
+          <input type="time" className="input w-full" value={endTime} onChange={(e) => { setActiveShortcut(null); setEndTime(e.target.value || '23:59'); }} />
         </div>
         <div className="flex flex-wrap gap-2">
           <button onClick={() => applyShortcut('today')} className={getShortcutClassName('today')}>Hari ini</button>
@@ -240,7 +248,7 @@ export default function CashierTransactionsPage() {
         </div>
       </div>
 
-      <div className="card p-0"><div className="table-wrapper"><table className="data-table"><thead><tr><th>ID</th><th>Waktu</th><th>Metode</th><th>Total</th><th>Aksi</th></tr></thead><tbody>{data.map((x) => <tr key={x.id}><td className="font-mono text-xs">{x.paymentNumber}</td><td>{new Date(x.createdAt).toLocaleString('id-ID')}</td><td>{x.method}</td><td className="font-semibold">{formatCurrency(x.totalAmount)}</td><td><button onClick={() => openDetail(x.id)} className="rounded bg-slate-100 px-2 py-1 text-xs">Detail</button></td></tr>)}</tbody></table></div></div>
+      <div className="card p-0"><div className="table-wrapper"><table className="data-table"><thead><tr><th>ID</th><th>Waktu</th><th>Metode</th><th>Total</th><th>Aksi</th></tr></thead><tbody>{data.map((x) => <tr key={x.id}><td className="font-mono text-xs">{x.paymentNumber}</td><td>{new Date(x.paidAt || x.createdAt).toLocaleString('id-ID')}</td><td>{x.method}</td><td className="font-semibold">{formatCurrency(x.totalAmount)}</td><td><button onClick={() => openDetail(x.id)} className="rounded bg-slate-100 px-2 py-1 text-xs">Detail</button></td></tr>)}</tbody></table></div></div>
 
       {detail && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">

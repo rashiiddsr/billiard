@@ -18,6 +18,7 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { PrismaService } from '../common/prisma/prisma.service';
+import { Prisma } from '@prisma/client';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
 
@@ -54,6 +55,10 @@ class UpsertBillingPackageDto {
   @Min(0)
   price: number;
 
+  @IsNumber()
+  @Min(0)
+  targetHourlyRate: number;
+
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
@@ -71,6 +76,19 @@ export class PackagesService {
 
   private normalizeName(name: string) {
     return name.trim().replace(/\s+/g, ' ');
+  }
+
+
+  private async validateTargetHourlyRate(targetHourlyRate: number) {
+    const normalizedRate = new Prisma.Decimal(targetHourlyRate).toDecimalPlaces(2);
+    const matchingTables = await this.prisma.table.findMany({
+      where: { hourlyRate: normalizedRate },
+      select: { id: true },
+      take: 1,
+    });
+    if (matchingTables.length === 0) {
+      throw new BadRequestException('Harga meja untuk target paket tidak ditemukan di meja aktif');
+    }
   }
 
   private async validateItems(dto: UpsertBillingPackageDto) {
@@ -124,11 +142,32 @@ export class PackagesService {
     });
   }
 
+
+  async getTargetRateOptions() {
+    const activeTables = await this.prisma.table.findMany({
+      select: { id: true, name: true, hourlyRate: true },
+      orderBy: [{ hourlyRate: 'asc' }, { name: 'asc' }],
+    });
+
+    const grouped = new Map<string, { hourlyRate: string; tableIds: string[]; tableNames: string[] }>();
+    for (const table of activeTables) {
+      const key = table.hourlyRate.toFixed(2);
+      if (!grouped.has(key)) {
+        grouped.set(key, { hourlyRate: key, tableIds: [], tableNames: [] });
+      }
+      grouped.get(key)!.tableIds.push(table.id);
+      grouped.get(key)!.tableNames.push(table.name);
+    }
+
+    return Array.from(grouped.values());
+  }
+
   async create(dto: UpsertBillingPackageDto) {
     const normalizedName = this.normalizeName(dto.name || '');
     if (!normalizedName) throw new BadRequestException('Nama paket wajib diisi');
 
     await this.validateItems(dto);
+    await this.validateTargetHourlyRate(dto.targetHourlyRate);
 
     return this.prisma.billingPackage.create({
       data: {
@@ -136,6 +175,7 @@ export class PackagesService {
         durationMinutes: dto.durationMinutes,
         price: dto.price,
         isActive: dto.isActive ?? true,
+        targetHourlyRate: dto.targetHourlyRate,
         items: {
           create: dto.items.map((item) => ({
             type: item.type,
@@ -157,6 +197,7 @@ export class PackagesService {
     if (!normalizedName) throw new BadRequestException('Nama paket wajib diisi');
 
     await this.validateItems(dto);
+    await this.validateTargetHourlyRate(dto.targetHourlyRate);
 
     await this.prisma.billingPackage.update({
       where: { id },
@@ -165,6 +206,7 @@ export class PackagesService {
         durationMinutes: dto.durationMinutes,
         price: dto.price,
         isActive: dto.isActive ?? existing.isActive,
+        targetHourlyRate: dto.targetHourlyRate,
         items: {
           deleteMany: {},
           create: dto.items.map((item) => ({
@@ -208,6 +250,13 @@ export class PackagesController {
   @Roles('OWNER' as any, 'MANAGER' as any, 'CASHIER' as any)
   active() {
     return this.service.activeForCashier();
+  }
+
+
+  @Get('target-rates')
+  @Roles('OWNER' as any, 'MANAGER' as any)
+  targetRates() {
+    return this.service.getTargetRateOptions();
   }
 
   @Post()

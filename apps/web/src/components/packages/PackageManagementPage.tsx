@@ -15,6 +15,7 @@ type PackageForm = {
   name: string;
   durationMinutes?: number;
   price?: number;
+  targetHourlyRate?: number;
   fnbItems: FnbRow[];
 };
 
@@ -22,12 +23,14 @@ const newForm = (): PackageForm => ({
   name: '',
   durationMinutes: undefined,
   price: 0,
+  targetHourlyRate: undefined,
   fnbItems: [],
 });
 
 export default function PackageManagementPage() {
   const [items, setItems] = useState<any[]>([]);
   const [menuItems, setMenuItems] = useState<any[]>([]);
+  const [targetRateOptions, setTargetRateOptions] = useState<any[]>([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -38,12 +41,14 @@ export default function PackageManagementPage() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [pkgData, menuData] = await Promise.all([
+      const [pkgData, menuData, ratesData] = await Promise.all([
         packagesApi.list(),
         menuApi.list({ isActive: true, limit: 500 }),
+        packagesApi.targetRates(),
       ]);
       setItems(pkgData || []);
       setMenuItems(menuData.data || []);
+      setTargetRateOptions(ratesData || []);
     } catch {
       toast.error('Gagal memuat data paket');
     } finally {
@@ -73,6 +78,7 @@ export default function PackageManagementPage() {
       name: pkg.name || '',
       durationMinutes: pkg.durationMinutes || undefined,
       price: Number(pkg.price || 0),
+      targetHourlyRate: Number(pkg.targetHourlyRate || 0),
       fnbItems: (pkg.items || [])
         .filter((it: any) => it.type === 'MENU_ITEM')
         .map((it: any) => ({
@@ -122,6 +128,7 @@ export default function PackageManagementPage() {
       name: normalizedName,
       durationMinutes: form.durationMinutes || undefined,
       price: Number(form.price) || 0,
+      targetHourlyRate: Number(form.targetHourlyRate) || 0,
       isActive: activeFlag,
       items: packageItems,
     };
@@ -131,6 +138,7 @@ export default function PackageManagementPage() {
     if (!form.name.trim()) return toast.error('Nama paket wajib diisi');
     if ((Number(form.price) || 0) < 0) return toast.error('Harga paket tidak valid');
     if (!form.durationMinutes || form.durationMinutes < 1) return toast.error('Billing (menit) wajib diisi');
+    if (!form.targetHourlyRate || form.targetHourlyRate <= 0) return toast.error('Target harga meja wajib dipilih');
     if (form.fnbItems.some((x) => !x.menuItemId)) {
       return toast.error('Semua baris F&B wajib pilih menu');
     }
@@ -166,6 +174,7 @@ export default function PackageManagementPage() {
         name: pkg.name,
         durationMinutes: pkg.durationMinutes || undefined,
         price: Number(pkg.price || 0),
+        targetHourlyRate: Number(pkg.targetHourlyRate || 0),
         isActive: !pkg.isActive,
         items: (pkg.items || []).map((it: any) => ({
           type: it.type,
@@ -212,6 +221,7 @@ export default function PackageManagementPage() {
                 <th>Nama Paket</th>
                 <th>Durasi Billing</th>
                 <th>Harga</th>
+                <th>Target Tarif Meja</th>
                 <th>Item F&B</th>
                 <th>Status</th>
                 <th>Aksi</th>
@@ -219,9 +229,9 @@ export default function PackageManagementPage() {
             </thead>
             <tbody>
               {loading ? (
-                <tr><td className="text-center py-8 text-slate-500" colSpan={6}>Memuat data...</td></tr>
+                <tr><td className="text-center py-8 text-slate-500" colSpan={7}>Memuat data...</td></tr>
               ) : filtered.length === 0 ? (
-                <tr><td className="text-center py-8 text-slate-500" colSpan={6}>Tidak ada paket.</td></tr>
+                <tr><td className="text-center py-8 text-slate-500" colSpan={7}>Tidak ada paket.</td></tr>
               ) : filtered.map((pkg) => {
                 const fnbCount = (pkg.items || []).filter((x: any) => x.type === 'MENU_ITEM').length;
                 return (
@@ -229,6 +239,7 @@ export default function PackageManagementPage() {
                     <td className="font-medium">{pkg.name}</td>
                     <td>{pkg.durationMinutes ? `${pkg.durationMinutes} menit` : '-'}</td>
                     <td>{formatCurrency(pkg.price)}</td>
+                    <td>{formatCurrency(pkg.targetHourlyRate || 0)}</td>
                     <td>{fnbCount} item</td>
                     <td>
                       <button
@@ -272,6 +283,17 @@ export default function PackageManagementPage() {
                 <div className="col-span-12 md:col-span-4">
                   <label className="label">Harga Paket (Rp) <span className="text-red-500">*</span></label>
                   <input type="number" min={0} className="input" value={form.price ?? ''} onChange={(e) => setForm((p) => ({ ...p, price: e.target.value === '' ? undefined : Number(e.target.value) }))} />
+                </div>
+                <div className="col-span-12 md:col-span-12">
+                  <label className="label">Target Meja (berdasarkan harga per jam) <span className="text-red-500">*</span></label>
+                  <select className="input" value={form.targetHourlyRate ?? ''} onChange={(e) => setForm((p) => ({ ...p, targetHourlyRate: e.target.value === '' ? undefined : Number(e.target.value) }))}>
+                    <option value="">Pilih harga per jam meja</option>
+                    {targetRateOptions.map((opt: any) => (
+                      <option key={opt.hourlyRate} value={Number(opt.hourlyRate)}>
+                        {formatCurrency(Number(opt.hourlyRate))} ({(opt.tableNames || []).join(', ')})
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
 

@@ -37,6 +37,16 @@ export class BillingService {
     return prorated.div(5000).ceil().mul(5000).toDecimalPlaces(0);
   }
 
+
+  private assertPackageRateMatchesTable(pkg: { targetHourlyRate: any; name: string }, tableRate: Decimal) {
+    const packageRate = new Decimal(pkg.targetHourlyRate.toString()).toDecimalPlaces(2);
+    const normalizedTableRate = tableRate.toDecimalPlaces(2);
+    if (!packageRate.equals(normalizedTableRate)) {
+      throw new BadRequestException(`Paket ${pkg.name} hanya berlaku untuk meja dengan tarif ${packageRate.toFormat()} per jam`);
+    }
+  }
+
+
   async createSession(dto: CreateBillingSessionDto, userId: string, userRole: Role) {
     // OWNER must provide re-auth token
     if (userRole === Role.OWNER) {
@@ -100,6 +110,7 @@ export class BillingService {
         include: { items: true },
       });
       if (!pkg || !pkg.isActive) throw new BadRequestException('Paket tidak ditemukan atau tidak aktif');
+      this.assertPackageRateMatchesTable(pkg, new Decimal(table.hourlyRate.toString()));
       if (!pkg.durationMinutes) throw new BadRequestException('Paket harus memiliki durasi billing');
       dto.durationMinutes = pkg.durationMinutes;
       packageName = pkg.name;
@@ -190,6 +201,7 @@ export class BillingService {
     if (dto.billingPackageId) {
       const pkg = await this.prisma.billingPackage.findUnique({ where: { id: dto.billingPackageId } });
       if (!pkg || !pkg.isActive) throw new BadRequestException('Paket tidak ditemukan atau tidak aktif');
+      this.assertPackageRateMatchesTable(pkg, new Decimal(session.table.hourlyRate.toString()));
       if (!pkg.durationMinutes) throw new BadRequestException('Paket perpanjang harus memiliki durasi');
       dto.additionalMinutes = pkg.durationMinutes;
       extensionPackagePrice = new Decimal(pkg.price.toString());

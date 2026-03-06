@@ -134,6 +134,7 @@ export const billingApi = {
 export const packagesApi = {
   list: () => api.get('/packages').then((r) => r.data),
   active: () => api.get('/packages/active').then((r) => r.data),
+  targetRates: () => api.get('/packages/target-rates').then((r) => r.data),
   create: (data: any) => api.post('/packages', data).then((r) => r.data),
   update: (id: string, data: any) => api.patch(`/packages/${id}`, data).then((r) => r.data),
   remove: (id: string) => api.delete(`/packages/${id}`).then((r) => r.data),

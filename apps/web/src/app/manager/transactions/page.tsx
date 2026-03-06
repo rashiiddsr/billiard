@@ -12,11 +12,17 @@ function toDateInputValue(date: Date) {
   return new Date(date.getTime() - tzOffset).toISOString().split('T')[0];
 }
 
+function toDateTimeIso(date: string, time: string) {
+  return new Date(`${date}T${time}:00`).toISOString();
+}
+
 export default function ManagerTransactionsPage() {
   const today = useMemo(() => toDateInputValue(new Date()), []);
   const [activeShortcut, setActiveShortcut] = useState<'today' | 'last7' | 'last30' | 'month' | null>('today');
   const [startDate, setStartDate] = useState(today);
   const [endDate, setEndDate] = useState(today);
+  const [startTime, setStartTime] = useState('00:00');
+  const [endTime, setEndTime] = useState('23:59');
   const [users, setUsers] = useState<any[]>([]);
   const [paidById, setPaidById] = useState('');
   const [data, setData] = useState<any[]>([]);
@@ -29,8 +35,8 @@ export default function ManagerTransactionsPage() {
       const r = await paymentsApi.list({
         status: 'PAID',
         paidById: paidById || undefined,
-        startDate: new Date(`${startDate}T00:00:00`).toISOString(),
-        endDate: new Date(`${endDate}T23:59:59`).toISOString(),
+        startDate: toDateTimeIso(startDate, startTime),
+        endDate: toDateTimeIso(endDate, endTime),
         limit: 300,
       });
       setData(r.data || []);
@@ -41,7 +47,7 @@ export default function ManagerTransactionsPage() {
 
   useEffect(() => {
     fetchData();
-  }, [startDate, endDate, paidById]);
+  }, [startDate, endDate, startTime, endTime, paidById]);
 
   useEffect(() => {
     usersApi
@@ -101,7 +107,7 @@ export default function ManagerTransactionsPage() {
 
     const trxRows = data.map((payment) => [
       payment.paymentNumber,
-      new Date(payment.createdAt).toLocaleString('id-ID'),
+      new Date(payment.paidAt || payment.createdAt).toLocaleString('id-ID'),
       payment.paidBy?.name || '-',
       payment.method,
       payment.billingSession?.table?.name || 'Standalone',
@@ -125,7 +131,7 @@ export default function ManagerTransactionsPage() {
       return rows;
     });
 
-    downloadWorkbookXls(`transaksi-manager-detail-${startDate}-${endDate}`, [
+    downloadWorkbookXls(`transaksi-manager-detail-${startDate}-${startTime}-${endDate}-${endTime}`, [
       { name: 'Transaksi', rows: [['No. Transaksi', 'Waktu', 'Kasir', 'Metode', 'Meja', 'Total'], ...(trxRows.length ? trxRows : [['Tidak ada transaksi', '-', '-', '-', '-', 0]])] },
       { name: 'Detail Item', rows: [['No. Transaksi', 'Kasir', 'Kategori Detail', 'Nama Item', 'Qty', 'Subtotal'], ...(detailRows.length ? detailRows : [['Tidak ada detail', '-', '-', '-', 0, 0]])] },
     ]);
@@ -158,11 +164,13 @@ export default function ManagerTransactionsPage() {
       <div className="flex items-center justify-between"><h1 className="text-2xl font-bold">Daftar Transaksi</h1><div className="flex items-center gap-3"><p className="text-lg font-bold text-emerald-600">Total: {formatCurrency(total)}</p><button className="btn-secondary" onClick={downloadDetailReport}>Unduh Laporan Detail</button></div></div>
 
       <div className="card space-y-3 p-4">
-        <div className="grid gap-3 md:grid-cols-[auto_1fr_auto_1fr] md:items-center">
-          <label className="text-sm text-slate-600">Rentang Tanggal</label>
+        <div className="grid gap-3 md:grid-cols-[auto_1fr_1fr_auto_1fr_1fr] md:items-center">
+          <label className="text-sm text-slate-600">Rentang Tanggal & Jam</label>
           <input type="date" className="input w-full" value={startDate} onChange={(e) => { setActiveShortcut(null); setStartDate(e.target.value); }} />
+          <input type="time" className="input w-full" value={startTime} onChange={(e) => { setActiveShortcut(null); setStartTime(e.target.value || '00:00'); }} />
           <span className="text-center text-slate-500">s/d</span>
           <input type="date" className="input w-full" value={endDate} onChange={(e) => { setActiveShortcut(null); setEndDate(e.target.value); }} />
+          <input type="time" className="input w-full" value={endTime} onChange={(e) => { setActiveShortcut(null); setEndTime(e.target.value || '23:59'); }} />
         </div>
         <div className="flex flex-wrap gap-2">
           <button onClick={() => applyShortcut('today')} className={getShortcutClassName('today')}>Hari ini</button>

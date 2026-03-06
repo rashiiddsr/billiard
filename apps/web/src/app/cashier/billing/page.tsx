@@ -34,6 +34,12 @@ export default function BillingPage() {
   const isFetchingRef = useRef(false);
   const isTabVisibleRef = useRef(true);
 
+  const startEligiblePackages = selectedTable
+    ? packages.filter((pkg) => Number(pkg.targetHourlyRate || 0) === Number(selectedTable.hourlyRate || 0))
+    : [];
+  const extendEligiblePackages = selectedSession
+    ? packages.filter((pkg) => Number(pkg.targetHourlyRate || 0) === Number(selectedSession.table?.hourlyRate || 0))
+    : [];
   const selectedPackage = packages.find((p) => p.id === selectedPackageId);
 
   const fetchData = useCallback(async () => {
@@ -129,6 +135,10 @@ export default function BillingPage() {
       toast.error('Pilih paket terlebih dahulu');
       return;
     }
+    if (!isOwner && startMode === 'PACKAGE' && selectedPackage && Number(selectedPackage.targetHourlyRate || 0) !== Number(selectedTable?.hourlyRate || 0)) {
+      toast.error('Paket tidak sesuai dengan tarif meja ini');
+      return;
+    }
     if (!isOwner && startMode === 'HOURLY') {
       const parsedDuration = Number(duration);
       if (!Number.isFinite(parsedDuration) || parsedDuration < 60) {
@@ -170,6 +180,18 @@ export default function BillingPage() {
       const parsedExtend = Number(extendMinutes);
       if (!Number.isFinite(parsedExtend) || parsedExtend < 60) {
         toast.error('Tambahan waktu minimal 60 menit');
+        return;
+      }
+    }
+
+    if (extendMode === 'PACKAGE') {
+      const pkg = packages.find((x) => x.id === selectedPackageId);
+      if (!pkg) {
+        toast.error('Pilih paket terlebih dahulu');
+        return;
+      }
+      if (Number(pkg.targetHourlyRate || 0) !== Number(selectedSession?.table?.hourlyRate || 0)) {
+        toast.error('Paket tidak sesuai dengan tarif meja sesi ini');
         return;
       }
     }
@@ -514,8 +536,9 @@ export default function BillingPage() {
                   <label className="label">Pilih Paket <span className="text-red-500">*</span></label>
                   <select className="input" value={selectedPackageId} onChange={(e) => setSelectedPackageId(e.target.value)}>
                     <option value="">Pilih paket</option>
-                    {packages.map((pkg) => <option key={pkg.id} value={pkg.id}>{pkg.name} • {formatCurrency(pkg.price)}</option>)}
+                    {startEligiblePackages.map((pkg) => <option key={pkg.id} value={pkg.id}>{pkg.name} • {formatCurrency(pkg.price)}</option>)}
                   </select>
+                  {startEligiblePackages.length === 0 && <p className="mt-1 text-xs text-amber-600">Tidak ada paket untuk tarif meja ini.</p>}
                   {selectedPackage && (
                     <div className="mt-2 rounded-lg border border-blue-100 bg-blue-50 p-2 text-xs text-slate-700">
                       <p className="font-semibold text-blue-700">Detail Paket {selectedPackage.name}</p>
@@ -597,8 +620,9 @@ export default function BillingPage() {
                 <label className="label">Pilih Paket <span className="text-red-500">*</span></label>
                 <select className="input" value={selectedPackageId} onChange={(e) => setSelectedPackageId(e.target.value)}>
                   <option value="">Pilih paket</option>
-                  {packages.map((pkg) => <option key={pkg.id} value={pkg.id}>{pkg.name} • {formatCurrency(pkg.price)}</option>)}
+                  {extendEligiblePackages.map((pkg) => <option key={pkg.id} value={pkg.id}>{pkg.name} • {formatCurrency(pkg.price)}</option>)}
                 </select>
+                {extendEligiblePackages.length === 0 && <p className="mt-1 text-xs text-amber-600">Tidak ada paket untuk tarif meja sesi ini.</p>}
               </div>
             )}
 
