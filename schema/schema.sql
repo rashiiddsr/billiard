@@ -117,6 +117,7 @@ CREATE TABLE `billing_packages` (
     `name` VARCHAR(191) NOT NULL,
     `durationMinutes` INTEGER NULL,
     `price` DECIMAL(12, 2) NOT NULL,
+    `targetHourlyRate` DECIMAL(12, 2) NOT NULL,
     `isActive` BOOLEAN NOT NULL DEFAULT true,
     `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `updatedAt` DATETIME(3) NOT NULL,

@@ -12,6 +12,10 @@ function toDateInputValue(date: Date) {
   return new Date(date.getTime() - tzOffset).toISOString().split('T')[0];
 }
 
+function toDateTimeIso(date: string, time: string) {
+  return new Date(`${date}T${time}:00`).toISOString();
+}
+
 export default function FinancePage() {
   const today = useMemo(() => toDateInputValue(new Date()), []);
   const monthStart = useMemo(() => {
@@ -21,6 +25,8 @@ export default function FinancePage() {
 
   const [startDate, setStartDate] = useState(monthStart);
   const [endDate, setEndDate] = useState(today);
+  const [startTime, setStartTime] = useState('00:00');
+  const [endTime, setEndTime] = useState('23:59');
   const [activeShortcut, setActiveShortcut] = useState<'today' | 'last7' | 'last30' | 'month' | null>('month');
   const [report, setReport] = useState<any>(null);
   const [expenses, setExpenses] = useState<any[]>([]);
@@ -48,8 +54,8 @@ export default function FinancePage() {
     setLoadingReport(true);
     try {
       const data = await financeApi.getReport(
-        new Date(`${startDate}T00:00:00`).toISOString(),
-        new Date(`${endDate}T23:59:59`).toISOString(),
+        toDateTimeIso(startDate, startTime),
+        toDateTimeIso(endDate, endTime),
       );
       setReport(data);
     } catch {
@@ -63,8 +69,8 @@ export default function FinancePage() {
     setLoadingExpenses(true);
     try {
       const data = await financeApi.listExpenses({
-        startDate: new Date(`${startDate}T00:00:00`).toISOString(),
-        endDate: new Date(`${endDate}T23:59:59`).toISOString(),
+        startDate: toDateTimeIso(startDate, startTime),
+        endDate: toDateTimeIso(endDate, endTime),
         limit: 100,
       });
       setExpenses(data.data || []);
@@ -81,8 +87,8 @@ export default function FinancePage() {
       const data = await paymentsApi.list({
         status: 'PAID',
         paidById: paidById || undefined,
-        startDate: new Date(`${startDate}T00:00:00`).toISOString(),
-        endDate: new Date(`${endDate}T23:59:59`).toISOString(),
+        startDate: toDateTimeIso(startDate, startTime),
+        endDate: toDateTimeIso(endDate, endTime),
         limit: 300,
       });
       setPayments(data.data || []);
@@ -102,12 +108,12 @@ export default function FinancePage() {
     if (!startDate || !endDate) return;
     fetchReport();
     fetchExpenses();
-  }, [startDate, endDate]);
+  }, [startDate, endDate, startTime, endTime]);
 
   useEffect(() => {
     if (!startDate || !endDate) return;
     fetchPayments();
-  }, [startDate, endDate, paidById]);
+  }, [startDate, endDate, startTime, endTime, paidById]);
 
   const applyShortcut = (type: 'today' | 'last7' | 'last30' | 'month') => {
     const now = new Date();
@@ -162,12 +168,12 @@ export default function FinancePage() {
 
     const productRows = Array.from(productSalesMap.entries()).map(([name, v]) => [name, v.qty, v.revenue]);
 
-    downloadWorkbookXls(`cash-flow-lengkap-${startDate}-${endDate}`, [
+    downloadWorkbookXls(`cash-flow-lengkap-${startDate}-${startTime}-${endDate}-${endTime}`, [
       {
         name: 'Ringkasan',
         rows: [
-          ['Mulai', startDate],
-          ['Selesai', endDate],
+          ['Mulai', `${startDate} ${startTime}`],
+          ['Selesai', `${endDate} ${endTime}`],
           ['Total Pendapatan', report.revenue.total],
           ['Pendapatan Billiard', report.revenue.billiard],
           ['Pendapatan FNB', report.revenue.fnb],
@@ -181,7 +187,7 @@ export default function FinancePage() {
         name: 'Transaksi',
         rows: [
           ['No. Transaksi', 'Waktu', 'Kasir', 'Metode', 'Total', 'Status'],
-          ...(payments.length ? payments.map((payment) => [payment.paymentNumber, new Date(payment.createdAt).toLocaleString('id-ID'), payment.paidBy?.name || '-', payment.method, payment.totalAmount, payment.status]) : [['Tidak ada transaksi', '-', '-', '-', 0, '-']]),
+          ...(payments.length ? payments.map((payment) => [payment.paymentNumber, new Date(payment.paidAt || payment.createdAt).toLocaleString('id-ID'), payment.paidBy?.name || '-', payment.method, payment.totalAmount, payment.status]) : [['Tidak ada transaksi', '-', '-', '-', 0, '-']]),
         ],
       },
       {
@@ -260,11 +266,13 @@ export default function FinancePage() {
       </div>
 
       <div className="card p-4 space-y-3">
-        <div className="grid gap-3 md:grid-cols-[auto_1fr_auto_1fr] md:items-center">
-          <label className="text-sm text-slate-600">Rentang Tanggal</label>
+        <div className="grid gap-3 md:grid-cols-[auto_1fr_1fr_auto_1fr_1fr] md:items-center">
+          <label className="text-sm text-slate-600">Rentang Tanggal & Jam</label>
           <input type="date" className="input w-full" value={startDate} onChange={(e) => { setActiveShortcut(null); setStartDate(e.target.value); }} />
+          <input type="time" className="input w-full" value={startTime} onChange={(e) => { setActiveShortcut(null); setStartTime(e.target.value || '00:00'); }} />
           <span className="text-slate-500 text-center">s/d</span>
           <input type="date" className="input w-full" value={endDate} onChange={(e) => { setActiveShortcut(null); setEndDate(e.target.value); }} />
+          <input type="time" className="input w-full" value={endTime} onChange={(e) => { setActiveShortcut(null); setEndTime(e.target.value || '23:59'); }} />
         </div>
         <div className="flex flex-wrap gap-2">
           <button onClick={() => applyShortcut('today')} className={getShortcutClassName('today')}>Hari ini</button>

@@ -239,6 +239,7 @@ model BillingPackage {
   name           String   @unique
   durationMinutes Int?
   price          Decimal  @db.Decimal(12, 2)
+  targetHourlyRate Decimal @db.Decimal(12, 2)
   isActive       Boolean  @default(true)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
