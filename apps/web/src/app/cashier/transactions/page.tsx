@@ -5,6 +5,7 @@ import { companyApi, paymentsApi } from '@/lib/api';
 import { formatCurrency } from '@/lib/utils';
 import { centerReceiptText, formatReceiptLine, printReceiptText, separatorLine, wrapAndCenterReceiptText } from '@/lib/receiptPrinter';
 import toast from 'react-hot-toast';
+import { downloadWorkbookXls } from '@/lib/exportWorkbook';
 
 function toDateInputValue(date: Date) {
   const tzOffset = date.getTimezoneOffset() * 60000;
@@ -79,14 +80,6 @@ export default function CashierTransactionsPage() {
 
   const total = useMemo(() => data.reduce((s, x) => s + parseFloat(x.totalAmount || '0'), 0), [data]);
 
-  const escapeCsvValue = (value: unknown) => {
-    const normalized = value === null || value === undefined ? '' : String(value);
-    const escaped = normalized.replace(/"/g, '""');
-    return /[",\n]/.test(escaped) ? `"${escaped}"` : escaped;
-  };
-
-  const buildCsvRow = (row: unknown[]) => row.map((cell) => escapeCsvValue(cell)).join(',');
-
   const downloadTransactionsCsv = async () => {
     const receipts = await Promise.all(
       data.map(async (payment) => {
@@ -98,79 +91,66 @@ export default function CashierTransactionsPage() {
       }),
     );
 
-    const rows = receipts.flatMap((receipt, idx) => {
+    const transactionRows = data.map((payment) => [
+      payment.paymentNumber,
+      new Date(payment.createdAt).toLocaleString('id-ID'),
+      payment.method,
+      payment.billingSession?.table?.name || 'Standalone',
+      Number(payment.totalAmount || 0),
+    ]);
+
+    const detailRows = receipts.flatMap((receipt, idx) => {
       const payment = data[idx];
       if (!payment) return [];
 
-      const itemRows: string[] = [];
-
+      const rows: unknown[][] = [];
       (receipt?.packageUsages || []).forEach((pkg: any) => {
         (pkg.fnbItems || []).forEach((item: any) => {
-          itemRows.push(
-            buildCsvRow([
-              payment.paymentNumber,
-              new Date(payment.createdAt).toLocaleString('id-ID'),
-              payment.method,
-              payment.billingSession?.table?.name || 'Standalone',
-              `Paket: ${pkg.packageName}`,
-              item.name,
-              item.qty,
-              item.subtotal,
-              payment.totalAmount,
-            ]),
-          );
+          rows.push([
+            payment.paymentNumber,
+            `Paket: ${pkg.packageName}`,
+            item.name,
+            item.qty,
+            item.subtotal,
+          ]);
         });
       });
 
       (receipt?.fnbItems || []).forEach((item: any) => {
-        itemRows.push(
-          buildCsvRow([
-            payment.paymentNumber,
-            new Date(payment.createdAt).toLocaleString('id-ID'),
-            payment.method,
-            payment.billingSession?.table?.name || 'Standalone',
-            'F&B Tambahan',
-            item.name,
-            item.qty,
-            item.subtotal,
-            payment.totalAmount,
-          ]),
-        );
+        rows.push([
+          payment.paymentNumber,
+          'F&B Tambahan',
+          item.name,
+          item.qty,
+          item.subtotal,
+        ]);
       });
 
-      if (itemRows.length === 0) {
-        itemRows.push(
-          buildCsvRow([
-            payment.paymentNumber,
-            new Date(payment.createdAt).toLocaleString('id-ID'),
-            payment.method,
-            payment.billingSession?.table?.name || 'Standalone',
-            'Tanpa Item F&B',
-            '-',
-            0,
-            0,
-            payment.totalAmount,
-          ]),
-        );
+      if (rows.length === 0) {
+        rows.push([payment.paymentNumber, 'Tanpa Item F&B', '-', 0, 0]);
       }
 
-      return itemRows;
+      return rows;
     });
 
-    const csv = [
-      `Laporan Detail Transaksi Kasir,${startDate},${endDate}`,
-      buildCsvRow(['No. Transaksi', 'Waktu', 'Metode', 'Meja', 'Kategori Detail', 'Nama Item', 'Qty', 'Subtotal Item', 'Total Transaksi']),
-      ...(rows.length > 0 ? rows : [buildCsvRow(['Tidak ada transaksi', '-', '-', '-', '-', '-', 0, 0, 0])]),
-    ].join('\n');
+    downloadWorkbookXls(`transaksi-kasir-detail-${startDate}-${endDate}`, [
+      {
+        name: 'Transaksi',
+        rows: [
+          ['No. Transaksi', 'Waktu', 'Metode', 'Meja', 'Total Transaksi'],
+          ...(transactionRows.length ? transactionRows : [['Tidak ada transaksi', '-', '-', '-', 0]]),
+        ],
+      },
+      {
+        name: 'Detail Item',
+        rows: [
+          ['No. Transaksi', 'Kategori Detail', 'Nama Item', 'Qty', 'Subtotal Item'],
+          ...(detailRows.length ? detailRows : [['Tidak ada detail', '-', '-', 0, 0]]),
+        ],
+      },
+    ]);
 
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `transaksi-kasir-detail-${startDate}-${endDate}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
-    toast.success('CSV detail transaksi berhasil diunduh');
+    toast.success('Laporan berhasil diunduh (multi-sheet)');
   };
 
   const openDetail = async (id: string) => {
@@ -240,7 +220,7 @@ export default function CashierTransactionsPage() {
         <h1 className="text-2xl font-bold">Daftar Transaksi</h1>
         <div className="flex items-center gap-3">
           <p className="text-lg font-bold text-emerald-600">Total: {formatCurrency(total)}</p>
-          <button className="btn-secondary" onClick={downloadTransactionsCsv}>Unduh CSV Detail</button>
+          <button className="btn-secondary" onClick={downloadTransactionsCsv}>Unduh Laporan Detail</button>
         </div>
       </div>
 

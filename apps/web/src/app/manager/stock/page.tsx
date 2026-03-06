@@ -4,6 +4,18 @@ import { useEffect, useState } from 'react';
 import { stockApi } from '@/lib/api';
 import toast from 'react-hot-toast';
 
+const ASSET_CATEGORIES = [
+  'Meja Biliar',
+  'Bola & Segitiga',
+  'Stick Biliar',
+  'Kapur & Aksesoris',
+  'Pencahayaan Meja',
+  'Furniture Area',
+  'Perangkat Kasir',
+  'Lainnya',
+] as const;
+
+
 export default function StockPage() {
   const [assets, setAssets] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -12,11 +24,15 @@ export default function StockPage() {
 
   const [newAssetName, setNewAssetName] = useState('');
   const [newAssetCategory, setNewAssetCategory] = useState('');
+  const [newAssetCustomCategory, setNewAssetCustomCategory] = useState('');
   const [newAssetGood, setNewAssetGood] = useState('0');
   const [newAssetBad, setNewAssetBad] = useState('0');
   const [newAssetNotes, setNewAssetNotes] = useState('');
 
   const [assetModal, setAssetModal] = useState<any>(null);
+  const [assetName, setAssetName] = useState('');
+  const [assetCategory, setAssetCategory] = useState('');
+  const [assetCustomCategory, setAssetCustomCategory] = useState('');
   const [assetGood, setAssetGood] = useState('');
   const [assetBad, setAssetBad] = useState('');
   const [assetNotes, setAssetNotes] = useState('');
@@ -38,13 +54,16 @@ export default function StockPage() {
   const resetCreateForm = () => {
     setNewAssetName('');
     setNewAssetCategory('');
+    setNewAssetCustomCategory('');
     setNewAssetGood('0');
     setNewAssetBad('0');
     setNewAssetNotes('');
   };
 
   const submitCreateAsset = async () => {
-    if (!newAssetName.trim() || !newAssetCategory.trim()) {
+    const finalCategory = newAssetCategory === 'Lainnya' ? newAssetCustomCategory.trim() : newAssetCategory.trim();
+
+    if (!newAssetName.trim() || !finalCategory) {
       toast.error('Nama dan kategori aset wajib diisi');
       return;
     }
@@ -53,7 +72,7 @@ export default function StockPage() {
     try {
       await stockApi.createAsset({
         name: newAssetName.trim(),
-        category: newAssetCategory.trim(),
+        category: finalCategory,
         qtyGood: newAssetGood ? parseInt(newAssetGood, 10) : 0,
         qtyBad: newAssetBad ? parseInt(newAssetBad, 10) : 0,
         notes: newAssetNotes.trim() || undefined,
@@ -70,27 +89,26 @@ export default function StockPage() {
   };
 
   const submitAssetUpdate = async () => {
-    if (!assetGood && !assetBad) { toast.error('Masukkan jumlah'); return; }
+    const finalCategory = assetCategory === 'Lainnya' ? assetCustomCategory.trim() : assetCategory.trim();
+    if (!assetName.trim() || !finalCategory || !assetGood || !assetBad) { toast.error('Nama, kategori, dan jumlah aset wajib diisi'); return; }
 
-    const nextGood = assetGood ? parseInt(assetGood, 10) : undefined;
-    const nextBad = assetBad ? parseInt(assetBad, 10) : undefined;
-    const changed = (nextGood !== undefined && nextGood !== assetModal.qtyGood)
-      || (nextBad !== undefined && nextBad !== assetModal.qtyBad);
-
-    if (!changed) {
-      toast('Tidak ada perubahan stok aset');
-      return;
-    }
+    const nextGood = parseInt(assetGood, 10);
+    const nextBad = parseInt(assetBad, 10);
 
     setSubmitting(true);
     try {
       await stockApi.updateAsset(assetModal.id, {
+        name: assetName.trim(),
+        category: finalCategory,
         qtyGood: nextGood,
         qtyBad: nextBad,
         notes: assetNotes || undefined,
       });
       toast.success('Aset diperbarui');
       setAssetModal(null);
+      setAssetName('');
+      setAssetCategory('');
+      setAssetCustomCategory('');
       setAssetGood('');
       setAssetBad('');
       setAssetNotes('');
@@ -134,17 +152,38 @@ export default function StockPage() {
                     <td className={`font-bold text-lg ${a.qtyBad > 0 ? 'text-red-400' : 'text-slate-500'}`}>{a.qtyBad}</td>
                     <td>{a.qtyGood + a.qtyBad}</td>
                     <td>
-                      <button
-                        onClick={() => {
-                          setAssetModal(a);
-                          setAssetGood(a.qtyGood.toString());
-                          setAssetBad(a.qtyBad.toString());
-                          setAssetNotes('');
-                        }}
-                        className="text-xs px-2 py-1 bg-blue-100 text-blue-700 hover:bg-blue-200 rounded"
-                      >
-                        Perbarui
-                      </button>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => {
+                            setAssetModal(a);
+                            setAssetName(a.name || '');
+                            const hasPreset = ASSET_CATEGORIES.includes(a.category as any);
+                            setAssetCategory(hasPreset ? a.category : 'Lainnya');
+                            setAssetCustomCategory(hasPreset ? '' : (a.category || ''));
+                            setAssetGood(a.qtyGood.toString());
+                            setAssetBad(a.qtyBad.toString());
+                            setAssetNotes(a.notes || '');
+                          }}
+                          className="text-xs px-2 py-1 bg-blue-100 text-blue-700 hover:bg-blue-200 rounded"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={async () => {
+                            if (!window.confirm(`Hapus aset ${a.name}?`)) return;
+                            try {
+                              await stockApi.deleteAsset(a.id);
+                              toast.success('Aset dihapus');
+                              fetchData();
+                            } catch (e: any) {
+                              toast.error(e?.response?.data?.message || 'Gagal menghapus aset');
+                            }
+                          }}
+                          className="text-xs px-2 py-1 bg-red-100 text-red-700 hover:bg-red-200 rounded"
+                        >
+                          Hapus
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -163,6 +202,23 @@ export default function StockPage() {
               <button onClick={() => setAssetModal(null)} className="text-slate-500 hover:text-slate-700">✕</button>
             </div>
             <div className="p-4 space-y-4">
+              <div>
+                <label className="label">Nama Aset <span className="text-red-500">*</span></label>
+                <input className="input" value={assetName} onChange={(e) => setAssetName(e.target.value)} />
+              </div>
+              <div>
+                <label className="label">Kategori <span className="text-red-500">*</span></label>
+                <select className="input" value={assetCategory} onChange={(e) => setAssetCategory(e.target.value)}>
+                  <option value="">Pilih kategori</option>
+                  {ASSET_CATEGORIES.map((category) => <option key={category} value={category}>{category}</option>)}
+                </select>
+              </div>
+              {assetCategory === 'Lainnya' && (
+                <div>
+                  <label className="label">Kategori Lainnya <span className="text-red-500">*</span></label>
+                  <input className="input" value={assetCustomCategory} onChange={(e) => setAssetCustomCategory(e.target.value)} placeholder="Masukkan kategori aset" />
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="label text-green-500">Kondisi Baik <span className="text-red-500">*</span></label>
@@ -202,8 +258,17 @@ export default function StockPage() {
               </div>
               <div>
                 <label className="label">Kategori <span className="text-red-500">*</span></label>
-                <input className="input" placeholder="Contoh: Peralatan Meja" value={newAssetCategory} onChange={(e) => setNewAssetCategory(e.target.value)} />
+                <select className="input" value={newAssetCategory} onChange={(e) => setNewAssetCategory(e.target.value)}>
+                  <option value="">Pilih kategori</option>
+                  {ASSET_CATEGORIES.map((category) => <option key={category} value={category}>{category}</option>)}
+                </select>
               </div>
+              {newAssetCategory === 'Lainnya' && (
+                <div>
+                  <label className="label">Kategori Lainnya <span className="text-red-500">*</span></label>
+                  <input className="input" placeholder="Masukkan kategori aset" value={newAssetCustomCategory} onChange={(e) => setNewAssetCustomCategory(e.target.value)} />
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="label text-green-500">Kondisi Baik</label>
