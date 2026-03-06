@@ -67,7 +67,7 @@ export default function BillingPage() {
 
   useEffect(() => {
     fetchData();
-    const interval = setInterval(fetchData, 15000);
+    const interval = setInterval(fetchData, 120000);
     const clockInterval = setInterval(() => setNow(new Date()), 1000);
     return () => {
       clearInterval(interval);
@@ -254,6 +254,28 @@ export default function BillingPage() {
   };
 
 
+  const calculateFlexibleTemporaryAmount = (session: any, refNow: Date = now) => {
+    const rate = Number(session?.ratePerHour || 0);
+    const startedAt = new Date(session?.startTime || refNow).getTime();
+    const endedAt = session?.actualEndTime ? new Date(session.actualEndTime).getTime() : refNow.getTime();
+    const elapsedMinutes = Math.max(1, Math.ceil((endedAt - startedAt) / 60000));
+    if (elapsedMinutes <= 60) return { amount: Math.round(rate), elapsedMinutes };
+    const prorated = (rate * elapsedMinutes) / 60;
+    const rounded = Math.ceil(prorated / 5000) * 5000;
+    return { amount: rounded, elapsedMinutes };
+  };
+
+  const getSessionChargeLabel = (session: any) => {
+    if (session.rateType === 'OWNER_LOCK') return formatCurrency(0);
+    if (session.rateType === 'FLEXIBLE') {
+      const backendAmount = Number(session.temporaryAmount || 0);
+      const fallback = calculateFlexibleTemporaryAmount(session).amount;
+      return `${formatCurrency(backendAmount > 0 ? backendAmount : fallback)} (sementara)`;
+    }
+    return formatCurrency(session.totalAmount);
+  };
+
+
   const availableMoveTables = tables.filter((table) => table.status === 'AVAILABLE' && table.id !== selectedSession?.tableId);
 
   const canMoveToTable = (session: any, table: any) => {
@@ -343,7 +365,8 @@ export default function BillingPage() {
               {session && (
                 <div className="mb-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
                   {remaining ? <p className={`font-mono text-sm font-bold ${remaining.isWarning ? 'animate-pulse text-red-500' : 'text-emerald-600'}`}>{remaining.text}</p> : <p className="font-mono text-sm font-bold text-slate-500">-</p>}
-                  <p className="mt-1 text-xs text-slate-500">Tagihan sementara: {session.rateType === 'OWNER_LOCK' ? formatCurrency(0) : session.rateType === 'FLEXIBLE' ? `${formatCurrency(session.ratePerHour)}/jam` : formatCurrency(session.totalAmount)}</p>
+                  <p className="mt-1 text-xs text-slate-500">Mulai: {new Date(session.startTime).toLocaleString('id-ID')}</p>
+                  <p className="mt-1 text-xs text-slate-500">Tagihan sementara: {getSessionChargeLabel(session)}</p>
                 </div>
               )}
 
@@ -628,7 +651,7 @@ export default function BillingPage() {
       {modal === 'stop' && selectedSession && (
         <Modal title="Hentikan Sesi?" onClose={() => setModal(null)}>
           <p className="mb-4 text-slate-600">
-            Yakin hentikan sesi <span className="font-bold">{selectedSession.table?.name}</span>? {selectedSession.rateType === 'OWNER_LOCK' ? 'Sesi owner akan ditutup dan masuk histori owner.' : selectedSession.rateType === 'FLEXIBLE' ? 'Durasi aktual akan dibulatkan ke atas per jam sesuai tarif meja.' : 'Biaya akan dihitung berdasarkan durasi paket/perpanjangan.'}
+            Yakin hentikan sesi <span className="font-bold">{selectedSession.table?.name}</span>? {selectedSession.rateType === 'OWNER_LOCK' ? 'Sesi owner akan ditutup dan masuk histori owner.' : selectedSession.rateType === 'FLEXIBLE' ? '60 menit pertama dibulatkan 1 jam, setelah itu prorata dan dibulatkan ke kelipatan Rp5.000.' : 'Biaya akan dihitung berdasarkan durasi paket/perpanjangan.'}
           </p>
           <div className="flex gap-2">
             <button onClick={() => setModal(null)} className="btn-secondary flex-1">Batal</button>
@@ -645,9 +668,10 @@ export default function BillingPage() {
           {!detailLoading && sessionDetail && (
             <div className="space-y-3 text-sm">
               <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-                <div className="flex justify-between"><span className="text-slate-500">Sesi</span><span>{new Date(sessionDetail.startTime).toLocaleTimeString('id-ID')} - {new Date(sessionDetail.endTime).toLocaleTimeString('id-ID')}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500">Mulai</span><span>{new Date(sessionDetail.startTime).toLocaleString('id-ID')}</span></div>
+                <div className="mt-1 flex justify-between"><span className="text-slate-500">Selesai</span><span>{sessionDetail.actualEndTime ? new Date(sessionDetail.actualEndTime).toLocaleString('id-ID') : 'Masih berjalan'}</span></div>
                 <div className="mt-1 flex justify-between"><span className="text-slate-500">Status Pembayaran</span><span className={`font-semibold ${(sessionDetail.payments || []).some((p: any) => p.status === 'PAID') ? 'text-emerald-600' : 'text-amber-600'}`}>{(sessionDetail.payments || []).some((p: any) => p.status === 'PAID') ? 'Sudah Dibayar' : 'Belum Dibayar'}</span></div>
-                <div className="mt-1 flex justify-between"><span className="text-slate-500">Billing awal</span><span className="font-semibold">{formatCurrency(sessionDetail.billingBreakdown?.baseAmount || 0)}</span></div>
+                <div className="mt-1 flex justify-between"><span className="text-slate-500">Billing sementara</span><span className="font-semibold">{formatCurrency(sessionDetail.billingBreakdown?.baseAmount || 0)}</span></div>
                 {(sessionDetail.billingBreakdown?.extensions || []).map((ext: any, idx: number) => (
                   <div key={ext.id || idx} className="mt-1 flex justify-between text-slate-600"><span>Perpanjangan #{idx + 1} (+{ext.additionalMinutes} menit)</span><span>{formatCurrency(ext.additionalAmount)}</span></div>
                 ))}

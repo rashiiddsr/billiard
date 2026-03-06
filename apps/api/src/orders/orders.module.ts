@@ -48,7 +48,7 @@ export class OrdersService {
     return `ORD-${datePart}-${timePart}${randPart}`;
   }
 
-  private async deductStockForOrder(orderId: string, userId: string) {
+  private async adjustStockForOrder(orderId: string, userId: string, direction: 'DEDUCT' | 'RESTORE', notePrefix: string) {
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
       include: { items: { include: { menuItem: { include: { stock: true } } } } },
@@ -60,19 +60,29 @@ export class OrdersService {
       if (item.menuItem.stock?.trackStock) {
         await this.prisma.stockFnb.update({
           where: { menuItemId: item.menuItemId },
-          data: { qtyOnHand: { decrement: item.quantity } },
+          data: direction === 'DEDUCT'
+            ? { qtyOnHand: { decrement: item.quantity } }
+            : { qtyOnHand: { increment: item.quantity } },
         });
         await this.prisma.stockAdjustment.create({
           data: {
             stockFnbId: item.menuItem.stock.id,
-            actionType: 'SALE_DEDUCTION',
-            quantityDelta: -item.quantity,
-            notes: `Sale from owner-locked order ${orderId}`,
+            actionType: direction === 'DEDUCT' ? 'SALE_DEDUCTION' : 'MANUAL_ADJUSTMENT',
+            quantityDelta: direction === 'DEDUCT' ? -item.quantity : item.quantity,
+            notes: `${notePrefix} ${orderId}`,
             performedById: userId,
           },
         });
       }
     }
+  }
+
+  private async deductStockForOrder(orderId: string, userId: string) {
+    await this.adjustStockForOrder(orderId, userId, 'DEDUCT', 'Sale from order');
+  }
+
+  private async restoreStockForOrder(orderId: string, userId: string) {
+    await this.adjustStockForOrder(orderId, userId, 'RESTORE', 'Restore cancelled order');
   }
 
   async createOrder(dto: CreateOrderDto, userId: string) {
@@ -167,9 +177,7 @@ export class OrdersService {
       throw new BadRequestException('Gagal membuat nomor order unik, silakan coba lagi');
     }
 
-    if (ownerLockedSession) {
-      await this.deductStockForOrder(order.id, userId);
-    }
+    await this.deductStockForOrder(order.id, userId);
 
     await this.audit.log({
       userId,
@@ -207,7 +215,7 @@ export class OrdersService {
   async cancelOrder(id: string, userId: string) {
     const order = await this.prisma.order.findUnique({
       where: { id },
-      include: { payments: { where: { status: 'PAID' } } },
+      include: { payments: { where: { status: 'PAID' } }, billingSession: true },
     });
     if (!order) throw new NotFoundException('Order not found');
     if (order.status === 'CANCELLED') throw new BadRequestException('Order already cancelled');
@@ -215,10 +223,16 @@ export class OrdersService {
       throw new BadRequestException('Order sudah dibayar dan tidak bisa dihapus');
     }
 
+    const shouldRestoreStock = order.status === 'DRAFT' && order.billingSession?.rateType !== 'OWNER_LOCK';
+
     const updated = await this.prisma.order.update({
       where: { id },
       data: { status: 'CANCELLED' },
     });
+
+    if (shouldRestoreStock) {
+      await this.restoreStockForOrder(order.id, userId);
+    }
 
     await this.audit.log({
       userId,

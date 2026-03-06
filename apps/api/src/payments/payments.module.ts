@@ -58,6 +58,16 @@ export class PaymentsService {
     return undefined;
   }
 
+  private getElapsedMinutes(startTime: Date, endTime: Date = new Date()) {
+    return Math.max(1, Math.ceil((endTime.getTime() - startTime.getTime()) / 60000));
+  }
+
+  private calculateFlexibleAmount(ratePerHour: Decimal, minutes: number) {
+    if (minutes <= 60) return ratePerHour.toDecimalPlaces(0);
+    const prorated = ratePerHour.mul(minutes).div(60);
+    return prorated.div(5000).ceil().mul(5000).toDecimalPlaces(0);
+  }
+
   async createCheckout(dto: CreateCheckoutDto, userId: string) {
     let billingAmount = new Decimal(0);
     let fnbAmount = new Decimal(0);
@@ -72,7 +82,16 @@ export class PaymentsService {
         include: { packageUsages: true },
       });
       if (!session) throw new NotFoundException('Billing session not found');
-      billingAmount = new Decimal(session.totalAmount.toString());
+      if (session.rateType === 'FLEXIBLE' && session.status === 'ACTIVE') {
+        throw new BadRequestException('Sesi fleksibel masih berjalan. Hentikan sesi terlebih dahulu sebelum checkout.');
+      }
+
+      if (session.rateType === 'FLEXIBLE') {
+        const elapsedMinutes = this.getElapsedMinutes(session.startTime, session.actualEndTime || new Date());
+        billingAmount = this.calculateFlexibleAmount(new Decimal(session.ratePerHour.toString()), elapsedMinutes);
+      } else {
+        billingAmount = new Decimal(session.totalAmount.toString());
+      }
 
       // `session.totalAmount` already stores final package pricing,
       // so package discount is informational for receipt breakdown only.
@@ -137,7 +156,6 @@ export class PaymentsService {
           where: { id: orderId },
           data: { status: 'CONFIRMED' },
         });
-        await this.deductStock(orderId, userId);
       }
     }
 
@@ -182,11 +200,6 @@ export class PaymentsService {
         paidAt: new Date(),
       },
     });
-
-    // Deduct stock for F&B items
-    if (payment.orderId) {
-      await this.deductStock(payment.orderId, userId);
-    }
 
     // Generate receipt data
     const receiptData = await this.generateReceiptData(updated);
@@ -402,33 +415,6 @@ export class PaymentsService {
       reference: fullPayment.reference,
       paidAt: fullPayment.paidAt,
     };
-  }
-
-  private async deductStock(orderId: string, userId: string) {
-    const order = await this.prisma.order.findUnique({
-      where: { id: orderId },
-      include: { items: { include: { menuItem: { include: { stock: true } } } } },
-    });
-
-    if (!order) return;
-
-    for (const item of order.items) {
-      if (item.menuItem.stock?.trackStock) {
-        await this.prisma.stockFnb.update({
-          where: { menuItemId: item.menuItemId },
-          data: { qtyOnHand: { decrement: item.quantity } },
-        });
-        await this.prisma.stockAdjustment.create({
-          data: {
-            stockFnbId: item.menuItem.stock.id,
-            actionType: 'SALE_DEDUCTION',
-            quantityDelta: -item.quantity,
-            notes: `Sale from order ${orderId}`,
-            performedById: userId,
-          },
-        });
-      }
-    }
   }
 
   async voidPayment(paymentId: string, userId: string) {
