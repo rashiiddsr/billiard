@@ -149,6 +149,7 @@ export const menuApi = {
   deleteCategory: (id: string) => api.delete(`/menu/categories/${id}`).then((r) => r.data),
   create: (data: any) => api.post('/menu', data).then((r) => r.data),
   update: (id: string, data: any) => api.patch(`/menu/${id}`, data).then((r) => r.data),
+  remove: (id: string) => api.delete(`/menu/${id}`).then((r) => r.data),
 };
 
 // ─── Orders ──────────────────────────────────────────────────────────────────
@@ -200,6 +201,7 @@ export const stockApi = {
   createAsset: (data: any) => api.post('/stock/assets', data).then((r) => r.data),
   updateAsset: (id: string, data: any) =>
     api.patch(`/stock/assets/${id}`, data).then((r) => r.data),
+  deleteAsset: (id: string) => api.delete(`/stock/assets/${id}`).then((r) => r.data),
 };
 
 // ─── Audit ───────────────────────────────────────────────────────────────────

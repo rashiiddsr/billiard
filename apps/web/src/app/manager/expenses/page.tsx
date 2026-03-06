@@ -81,6 +81,7 @@ export default function ExpensesPage() {
   const submit = async () => {
     if (!category || !amount) { toast.error('Kategori dan jumlah wajib diisi'); return; }
     if (category === 'Lainnya' && !notes.trim()) { toast.error('Catatan wajib diisi untuk kategori Lainnya'); return; }
+    if (date > today) { toast.error('Tanggal pengeluaran tidak boleh lebih dari hari ini'); return; }
     setSubmitting(true);
     try {
       const payload = { category, date, amount: parseFloat(amount), notes };
@@ -99,6 +100,19 @@ export default function ExpensesPage() {
       toast.error(e?.response?.data?.message || 'Gagal');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+
+  const deleteExpense = async (expense: any) => {
+    if (!window.confirm(`Hapus pengeluaran ${expense.category} (${formatCurrency(expense.amount)})?`)) return;
+
+    try {
+      await financeApi.deleteExpense(expense.id);
+      toast.success('Pengeluaran dihapus');
+      fetchExpenses();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || 'Gagal menghapus pengeluaran');
     }
   };
 
@@ -161,7 +175,7 @@ export default function ExpensesPage() {
                   {expenseCategories.map((c) => <option key={c} value={c}>{c}</option>)}
                 </select>
               </div>
-              <div><label className="label">Tanggal <span className="text-red-500">*</span></label><input type="date" className="input" value={date} onChange={(e) => setDate(e.target.value)} /></div>
+              <div><label className="label">Tanggal <span className="text-red-500">*</span></label><input type="date" className="input" value={date} max={today} onChange={(e) => setDate(e.target.value)} /></div>
               <div><label className="label">Jumlah (Rp) <span className="text-red-500">*</span></label><input type="number" className="input" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="500000" /></div>
               <div><label className="label">Catatan {category === 'Lainnya' && <span className="text-red-500">*</span>}</label><textarea className="input resize-none" rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Keterangan..." /></div>
               <div className="flex gap-2">
@@ -196,7 +210,7 @@ export default function ExpensesPage() {
             <thead><tr><th>Tanggal</th><th>Kategori</th><th>Jumlah</th><th>Catatan</th><th>Dibuat Oleh</th><th>Aksi</th></tr></thead>
             <tbody>
               {loading ? <tr><td colSpan={6} className="text-center py-8 text-slate-500">Memuat...</td></tr> : expenses.length === 0 ? <tr><td colSpan={6} className="text-center py-8 text-slate-500">Belum ada pengeluaran</td></tr> : expenses.map((e) => (
-                <tr key={e.id}><td>{formatDateShort(e.date)}</td><td><span className="badge bg-slate-100 text-slate-700">{e.category}</span></td><td className="font-bold text-red-600">{formatCurrency(e.amount)}</td><td className="text-slate-500 text-sm">{e.notes || '-'}</td><td className="text-slate-500 text-sm">{e.createdBy?.name}</td><td><button onClick={() => openEdit(e)} className="text-xs px-2 py-1 rounded bg-amber-100 text-amber-700 hover:bg-amber-200">Edit</button></td></tr>
+                <tr key={e.id}><td>{formatDateShort(e.date)}</td><td><span className="badge bg-slate-100 text-slate-700">{e.category}</span></td><td className="font-bold text-red-600">{formatCurrency(e.amount)}</td><td className="text-slate-500 text-sm">{e.notes || '-'}</td><td className="text-slate-500 text-sm">{e.createdBy?.name}</td><td><div className="flex gap-2"><button onClick={() => openEdit(e)} className="text-xs px-2 py-1 rounded bg-amber-100 text-amber-700 hover:bg-amber-200">Edit</button><button onClick={() => deleteExpense(e)} className="text-xs px-2 py-1 rounded bg-red-100 text-red-700 hover:bg-red-200">Hapus</button></div></td></tr>
               ))}
             </tbody>
           </table>

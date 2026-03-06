@@ -37,6 +37,20 @@ export class FinanceService {
     private audit: AuditService,
   ) {}
 
+  private validateExpenseDate(dateRaw?: string) {
+    if (!dateRaw) return;
+    const submittedDate = new Date(dateRaw);
+    submittedDate.setHours(0, 0, 0, 0);
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    if (submittedDate > today) {
+      throw new BadRequestException('Tanggal pengeluaran tidak boleh melebihi hari ini');
+    }
+  }
+
+
   async getReport(startDate: Date, endDate: Date) {
     // Revenue from billiard
     const billingRevenue = await this.prisma.payment.aggregate({
@@ -138,6 +152,7 @@ export class FinanceService {
     if (dto.category === 'Lainnya' && !dto.notes?.trim()) {
       throw new BadRequestException('Catatan wajib diisi untuk kategori Lainnya');
     }
+    this.validateExpenseDate(dto.date);
 
     const expense = await this.prisma.expense.create({
       data: {
@@ -176,6 +191,8 @@ export class FinanceService {
     if (nextCategory === 'Lainnya' && !nextNotes.trim()) {
       throw new BadRequestException('Catatan wajib diisi untuk kategori Lainnya');
     }
+
+    this.validateExpenseDate(dto.date);
 
     const expense = await this.prisma.expense.update({
       where: { id: expenseId },
@@ -281,14 +298,14 @@ export class FinanceController {
   }
 
   @Post('expenses')
-  @Roles('MANAGER' as any)
+  @Roles('OWNER' as any, 'MANAGER' as any)
   createExpense(@Body() dto: CreateExpenseDto, @CurrentUser() user: any) {
     return this.financeService.createExpense(dto, user.id);
   }
 
 
   @Patch('expenses/:id')
-  @Roles('MANAGER' as any)
+  @Roles('OWNER' as any, 'MANAGER' as any)
   updateExpense(
     @Param('id') id: string,
     @Body() dto: UpdateExpenseDto,
@@ -299,7 +316,7 @@ export class FinanceController {
 
 
   @Delete('expenses/:id')
-  @Roles('MANAGER' as any)
+  @Roles('OWNER' as any, 'MANAGER' as any)
   deleteExpense(
     @Param('id') id: string,
     @CurrentUser() user: any,

@@ -279,6 +279,28 @@ export class MenuService {
     if (!item) throw new NotFoundException('Menu item not found');
     return item;
   }
+
+  async delete(id: string, userId: string) {
+    const existing = await this.prisma.menuItem.findUnique({ where: { id }, include: { stock: true } });
+    if (!existing) throw new NotFoundException('Menu item not found');
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.orderItemModifier.deleteMany({ where: { orderItem: { menuItemId: id } } });
+      await tx.orderItem.deleteMany({ where: { menuItemId: id } });
+      await tx.stockFnb.deleteMany({ where: { menuItemId: id } });
+      await tx.menuItem.delete({ where: { id } });
+    });
+
+    await this.audit.log({
+      userId,
+      action: AuditAction.DELETE,
+      entity: 'MenuItem',
+      entityId: id,
+      beforeData: existing,
+    });
+
+    return { success: true };
+  }
 }
 
 @ApiTags('Menu')
@@ -343,6 +365,12 @@ export class MenuController {
   @Roles('OWNER' as any, 'MANAGER' as any)
   update(@Param('id') id: string, @Body() dto: UpdateMenuItemDto, @CurrentUser() user: any) {
     return this.menuService.update(id, dto, user.id);
+  }
+
+  @Delete(':id')
+  @Roles('OWNER' as any, 'MANAGER' as any)
+  remove(@Param('id') id: string, @CurrentUser() user: any) {
+    return this.menuService.delete(id, user.id);
   }
 }
 

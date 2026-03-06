@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { paymentsApi, usersApi } from '@/lib/api';
 import { formatCurrency } from '@/lib/utils';
 import toast from 'react-hot-toast';
+import { downloadWorkbookXls } from '@/lib/exportWorkbook';
 
 function toDateInputValue(date: Date) {
   const tzOffset = date.getTimezoneOffset() * 60000;
@@ -85,6 +86,52 @@ export default function ManagerTransactionsPage() {
 
   const total = useMemo(() => data.reduce((s, x) => s + parseFloat(x.totalAmount || '0'), 0), [data]);
 
+
+  const downloadDetailReport = async () => {
+    const receipts = await Promise.all(
+      data.map(async (payment) => {
+        try {
+          return await paymentsApi.getReceipt(payment.id);
+        } catch {
+          return null;
+        }
+      }),
+    );
+
+    const trxRows = data.map((payment) => [
+      payment.paymentNumber,
+      new Date(payment.createdAt).toLocaleString('id-ID'),
+      payment.paidBy?.name || '-',
+      payment.method,
+      payment.billingSession?.table?.name || 'Standalone',
+      Number(payment.totalAmount || 0),
+    ]);
+
+    const detailRows = receipts.flatMap((receipt, idx) => {
+      const payment = data[idx];
+      if (!payment) return [];
+
+      const rows: unknown[][] = [];
+      (receipt?.packageUsages || []).forEach((pkg: any) => {
+        (pkg.fnbItems || []).forEach((item: any) => {
+          rows.push([payment.paymentNumber, payment.paidBy?.name || '-', `Paket: ${pkg.packageName}`, item.name, item.qty, item.subtotal]);
+        });
+      });
+      (receipt?.fnbItems || []).forEach((item: any) => {
+        rows.push([payment.paymentNumber, payment.paidBy?.name || '-', 'F&B Tambahan', item.name, item.qty, item.subtotal]);
+      });
+      if (rows.length === 0) rows.push([payment.paymentNumber, payment.paidBy?.name || '-', 'Tanpa Item F&B', '-', 0, 0]);
+      return rows;
+    });
+
+    downloadWorkbookXls(`transaksi-manager-detail-${startDate}-${endDate}`, [
+      { name: 'Transaksi', rows: [['No. Transaksi', 'Waktu', 'Kasir', 'Metode', 'Meja', 'Total'], ...(trxRows.length ? trxRows : [['Tidak ada transaksi', '-', '-', '-', '-', 0]])] },
+      { name: 'Detail Item', rows: [['No. Transaksi', 'Kasir', 'Kategori Detail', 'Nama Item', 'Qty', 'Subtotal'], ...(detailRows.length ? detailRows : [['Tidak ada detail', '-', '-', '-', 0, 0]])] },
+    ]);
+
+    toast.success('Laporan detail transaksi berhasil diunduh');
+  };
+
   const submitVoidRequest = async () => {
     if (!voidModal) return;
     try {
@@ -107,7 +154,7 @@ export default function ManagerTransactionsPage() {
 
   return (
     <div className="space-y-4 p-6">
-      <div className="flex items-center justify-between"><h1 className="text-2xl font-bold">Daftar Transaksi</h1><p className="text-lg font-bold text-emerald-600">Total: {formatCurrency(total)}</p></div>
+      <div className="flex items-center justify-between"><h1 className="text-2xl font-bold">Daftar Transaksi</h1><div className="flex items-center gap-3"><p className="text-lg font-bold text-emerald-600">Total: {formatCurrency(total)}</p><button className="btn-secondary" onClick={downloadDetailReport}>Unduh Laporan Detail</button></div></div>
 
       <div className="card space-y-3 p-4">
         <div className="grid gap-3 md:grid-cols-[auto_1fr_auto_1fr] md:items-center">

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { financeApi, paymentsApi, usersApi } from '@/lib/api';
 import { formatCurrency, formatDateShort } from '@/lib/utils';
 import toast from 'react-hot-toast';
+import { downloadWorkbookXls } from '@/lib/exportWorkbook';
 
 function toDateInputValue(date: Date) {
   const tzOffset = date.getTimezoneOffset() * 60000;
@@ -136,39 +137,8 @@ export default function FinancePage() {
     setEndDate(end);
   };
 
-  const escapeCsvValue = (value: unknown) => {
-    const normalized = value === null || value === undefined ? '' : String(value);
-    const escaped = normalized.replace(/"/g, '""');
-    return /[",\n]/.test(escaped) ? `"${escaped}"` : escaped;
-  };
-
-  const buildCsvRow = (row: unknown[]) => row.map((cell) => escapeCsvValue(cell)).join(',');
-
   const downloadCsv = async () => {
     if (!report) return;
-    const summaryRows = [
-      ['Mulai', startDate],
-      ['Selesai', endDate],
-      ['Total Pendapatan', report.revenue.total],
-      ['Pendapatan Billiard', report.revenue.billiard],
-      ['Pendapatan FNB', report.revenue.fnb],
-      ['Total Diskon', report.revenue.discount],
-      ['Total Pajak', report.revenue.tax],
-      ['Total Pengeluaran', report.expenses.total],
-      ['Profit Bersih', report.netProfit],
-    ];
-
-    const paymentMethodRows: unknown[][] = (report.paymentMethods || []).map((method: any) => [
-      method.method,
-      method.count,
-      method.total,
-    ]);
-
-    const perTableRows: unknown[][] = (report.perTable || []).map((table: any) => [
-      table.tableName,
-      table.sessions,
-      table.revenue,
-    ]);
 
     const receipts = await Promise.all(
       payments.map(async (payment) => {
@@ -183,101 +153,60 @@ export default function FinancePage() {
     const productSalesMap = new Map<string, { qty: number; revenue: number }>();
     receipts.forEach((receipt) => {
       if (!receipt) return;
-
-      (receipt.fnbItems || []).forEach((item: any) => {
-        const key = item.name || 'Produk Tanpa Nama';
-        const existing = productSalesMap.get(key) || { qty: 0, revenue: 0 };
-        existing.qty += Number(item.qty || 0);
-        existing.revenue += Number(item.subtotal || 0);
-        productSalesMap.set(key, existing);
-      });
-
-      (receipt.packageUsages || []).forEach((pkg: any) => {
-        (pkg.fnbItems || []).forEach((item: any) => {
-          const key = item.name || 'Produk Tanpa Nama';
-          const existing = productSalesMap.get(key) || { qty: 0, revenue: 0 };
-          existing.qty += Number(item.qty || 0);
-          existing.revenue += Number(item.subtotal || 0);
-          productSalesMap.set(key, existing);
-        });
+      [...(receipt.fnbItems || []), ...((receipt.packageUsages || []).flatMap((x: any) => x.fnbItems || []))].forEach((item: any) => {
+        const current = productSalesMap.get(item.name) || { qty: 0, revenue: 0 };
+        productSalesMap.set(item.name, { qty: current.qty + Number(item.qty || 0), revenue: current.revenue + Number(item.subtotal || 0) });
       });
     });
 
-    const productRows: unknown[][] = Array.from(productSalesMap.entries())
-      .map(([name, metrics]) => [name, metrics.qty, metrics.revenue])
-      .sort((a, b) => Number(b[2]) - Number(a[2]));
+    const productRows = Array.from(productSalesMap.entries()).map(([name, v]) => [name, v.qty, v.revenue]);
 
-    const totalRevenue = Number(report.revenue.total || 0);
-    const totalExpense = Number(report.expenses.total || 0);
-    const totalTransaction = payments.length;
-    const averageTransaction = totalTransaction > 0 ? totalRevenue / totalTransaction : 0;
-    const profitMargin = totalRevenue > 0 ? (Number(report.netProfit || 0) / totalRevenue) * 100 : 0;
+    downloadWorkbookXls(`cash-flow-lengkap-${startDate}-${endDate}`, [
+      {
+        name: 'Ringkasan',
+        rows: [
+          ['Mulai', startDate],
+          ['Selesai', endDate],
+          ['Total Pendapatan', report.revenue.total],
+          ['Pendapatan Billiard', report.revenue.billiard],
+          ['Pendapatan FNB', report.revenue.fnb],
+          ['Total Diskon', report.revenue.discount],
+          ['Total Pajak', report.revenue.tax],
+          ['Total Pengeluaran', report.expenses.total],
+          ['Profit Bersih', report.netProfit],
+        ],
+      },
+      {
+        name: 'Transaksi',
+        rows: [
+          ['No. Transaksi', 'Waktu', 'Kasir', 'Metode', 'Total', 'Status'],
+          ...(payments.length ? payments.map((payment) => [payment.paymentNumber, new Date(payment.createdAt).toLocaleString('id-ID'), payment.paidBy?.name || '-', payment.method, payment.totalAmount, payment.status]) : [['Tidak ada transaksi', '-', '-', '-', 0, '-']]),
+        ],
+      },
+      {
+        name: 'Pengeluaran',
+        rows: [
+          ['Tanggal', 'Kategori', 'Jumlah', 'Catatan', 'Dibuat Oleh'],
+          ...(expenses.length ? expenses.map((expense) => [formatDateShort(expense.date), expense.category, expense.amount, expense.notes || '-', expense.createdBy?.name || '-']) : [['Tidak ada pengeluaran', '-', 0, '-', '-']]),
+        ],
+      },
+      {
+        name: 'Produk Laku',
+        rows: [
+          ['Produk', 'Qty Terjual', 'Omzet Produk'],
+          ...(productRows.length ? productRows : [['Tidak ada produk terjual', 0, 0]]),
+        ],
+      },
+      {
+        name: 'Analisis Meja',
+        rows: [
+          ['Meja', 'Jumlah Sesi', 'Pendapatan Billing'],
+          ...((report.perTable || []).length ? (report.perTable || []).map((table: any) => [table.tableName, table.sessions, table.revenue]) : [['Tidak ada sesi meja', 0, 0]]),
+        ],
+      },
+    ]);
 
-    const sections: string[] = [
-      'RINGKASAN KEUANGAN',
-      buildCsvRow(['Metrik', 'Nilai']),
-      ...summaryRows.map((row) => buildCsvRow(row)),
-      '',
-      'UANG MASUK PER METODE',
-      buildCsvRow(['Metode', 'Jumlah Transaksi', 'Total Uang Masuk']),
-      ...(paymentMethodRows.length > 0 ? paymentMethodRows.map((row: unknown[]) => buildCsvRow(row)) : [buildCsvRow(['Tidak ada data', 0, 0])]),
-      '',
-      'DETAIL TRANSAKSI',
-      buildCsvRow(['Nomor', 'Tanggal', 'Kasir', 'Metode', 'Meja', 'Total', 'Billing', 'FNB', 'Status']),
-      ...(payments.length > 0
-        ? payments.map((payment) =>
-            buildCsvRow([
-              payment.paymentNumber,
-              new Date(payment.createdAt).toLocaleString('id-ID'),
-              payment.paidBy?.name || '-',
-              payment.method,
-              payment.billingSession?.table?.name || 'Standalone',
-              payment.totalAmount,
-              payment.billingAmount,
-              payment.fnbAmount,
-              payment.status,
-            ]),
-          )
-        : [buildCsvRow(['Tidak ada transaksi', '-', '-', '-', '-', 0, 0, 0, '-'])]),
-      '',
-      'PENGELUARAN',
-      buildCsvRow(['Tanggal', 'Kategori', 'Jumlah', 'Catatan', 'Dibuat Oleh']),
-      ...(expenses.length > 0
-        ? expenses.map((expense) =>
-            buildCsvRow([
-              formatDateShort(expense.date),
-              expense.category,
-              expense.amount,
-              expense.notes || '-',
-              expense.createdBy?.name || '-',
-            ]),
-          )
-        : [buildCsvRow(['Tidak ada pengeluaran', '-', 0, '-', '-'])]),
-      '',
-      'STOK PRODUK YANG LAKU',
-      buildCsvRow(['Produk', 'Qty Terjual', 'Omzet Produk']),
-      ...(productRows.length > 0 ? productRows.map((row: unknown[]) => buildCsvRow(row)) : [buildCsvRow(['Tidak ada produk terjual', 0, 0])]),
-      '',
-      'ANALISIS LAIN',
-      buildCsvRow(['Metrik', 'Nilai']),
-      buildCsvRow(['Jumlah Transaksi', totalTransaction]),
-      buildCsvRow(['Rata-rata Nilai Transaksi', averageTransaction.toFixed(2)]),
-      buildCsvRow(['Margin Profit (%)', profitMargin.toFixed(2)]),
-      '',
-      'ANALISIS MEJA',
-      buildCsvRow(['Meja', 'Jumlah Sesi', 'Pendapatan Billing']),
-      ...(perTableRows.length > 0 ? perTableRows.map((row: unknown[]) => buildCsvRow(row)) : [buildCsvRow(['Tidak ada sesi meja', 0, 0])]),
-    ];
-
-    const csv = sections.join('\n');
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `cash-flow-lengkap-${startDate}-${endDate}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
-    toast.success('CSV cash flow lengkap berhasil diunduh');
+    toast.success('Laporan berhasil diunduh (multi-sheet)');
   };
 
   const approveVoid = async (id: string) => {
@@ -305,6 +234,19 @@ export default function FinancePage() {
     }
   };
 
+  const deleteExpense = async (expense: any) => {
+    if (!window.confirm(`Hapus pengeluaran ${expense.category} (${formatCurrency(expense.amount)})?`)) return;
+
+    try {
+      await financeApi.deleteExpense(expense.id);
+      toast.success('Pengeluaran dihapus');
+      fetchExpenses();
+      fetchReport();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || 'Gagal menghapus pengeluaran');
+    }
+  };
+
   const totalPayments = useMemo(() => payments.reduce((s, x) => s + parseFloat(x.totalAmount || '0'), 0), [payments]);
   const getShortcutClassName = (type: 'today' | 'last7' | 'last30' | 'month') =>
     `text-xs px-3 py-1.5 rounded ${activeShortcut === type ? 'bg-blue-100 text-blue-700 hover:bg-blue-200' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`;
@@ -313,7 +255,7 @@ export default function FinancePage() {
     <div className="space-y-6 p-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Laporan & Transaksi</h1>
-        <button className="btn-secondary" onClick={downloadCsv}>Download CSV</button>
+        <button className="btn-secondary" onClick={downloadCsv}>Download Laporan</button>
       </div>
 
       <div className="card p-4 space-y-3">
@@ -400,10 +342,10 @@ export default function FinancePage() {
         <div className="card p-0 overflow-hidden">
           <div className="table-wrapper">
             <table className="data-table">
-              <thead><tr><th>Tanggal</th><th>Kategori</th><th>Jumlah</th><th>Catatan</th><th>Dibuat Oleh</th></tr></thead>
+              <thead><tr><th>Tanggal</th><th>Kategori</th><th>Jumlah</th><th>Catatan</th><th>Dibuat Oleh</th><th>Aksi</th></tr></thead>
               <tbody>
-                {loadingExpenses ? <tr><td colSpan={5} className="text-center py-8 text-slate-500">Memuat...</td></tr> : expenses.length === 0 ? <tr><td colSpan={5} className="text-center py-8 text-slate-500">Belum ada pengeluaran</td></tr> : expenses.map((e) => (
-                  <tr key={e.id}><td>{formatDateShort(e.date)}</td><td><span className="badge bg-slate-100 text-slate-700">{e.category}</span></td><td className="font-bold text-red-600">{formatCurrency(e.amount)}</td><td className="text-sm text-slate-500">{e.notes || '-'}</td><td className="text-sm text-slate-500">{e.createdBy?.name || '-'}</td></tr>
+                {loadingExpenses ? <tr><td colSpan={6} className="text-center py-8 text-slate-500">Memuat...</td></tr> : expenses.length === 0 ? <tr><td colSpan={6} className="text-center py-8 text-slate-500">Belum ada pengeluaran</td></tr> : expenses.map((e) => (
+                  <tr key={e.id}><td>{formatDateShort(e.date)}</td><td><span className="badge bg-slate-100 text-slate-700">{e.category}</span></td><td className="font-bold text-red-600">{formatCurrency(e.amount)}</td><td className="text-sm text-slate-500">{e.notes || '-'}</td><td className="text-sm text-slate-500">{e.createdBy?.name || '-'}</td><td><button onClick={() => deleteExpense(e)} className="text-xs px-2 py-1 rounded bg-red-100 text-red-700 hover:bg-red-200">Hapus</button></td></tr>
                 ))}
               </tbody>
             </table>

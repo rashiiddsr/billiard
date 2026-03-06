@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Module } from '@nestjs/common';
-import { Controller, Get, Post, Patch, Param, Body, UseGuards, Query } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Param, Body, UseGuards, Query } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { IsString, IsNumber, IsOptional, IsEnum } from 'class-validator';
@@ -18,6 +18,8 @@ export class AdjustStockDto {
 }
 
 export class UpdateAssetDto {
+  @IsOptional() @IsString() name?: string;
+  @IsOptional() @IsString() category?: string;
   @IsOptional() @IsNumber() qtyGood?: number;
   @IsOptional() @IsNumber() qtyBad?: number;
   @IsOptional() @IsString() notes?: string;
@@ -138,17 +140,18 @@ export class StockService {
     const asset = await this.prisma.operationalAsset.findUnique({ where: { id } });
     if (!asset) throw new NotFoundException('Asset not found');
 
-    const qtyGoodChanged = dto.qtyGood !== undefined && dto.qtyGood !== asset.qtyGood;
-    const qtyBadChanged = dto.qtyBad !== undefined && dto.qtyBad !== asset.qtyBad;
-    const hasStockChange = qtyGoodChanged || qtyBadChanged;
-
-    if (!hasStockChange) {
-      return asset;
-    }
+    const payload = {
+      name: dto.name?.trim(),
+      category: dto.category?.trim(),
+      qtyGood: dto.qtyGood,
+      qtyBad: dto.qtyBad,
+      notes: dto.notes,
+      updatedAt: new Date(),
+    };
 
     const updated = await this.prisma.operationalAsset.update({
       where: { id },
-      data: { ...dto, updatedAt: new Date() },
+      data: payload,
     });
 
     await this.audit.log({
@@ -156,12 +159,30 @@ export class StockService {
       action: AuditAction.UPDATE,
       entity: 'OperationalAsset',
       entityId: id,
-      beforeData: { qtyGood: asset.qtyGood, qtyBad: asset.qtyBad },
-      afterData: { qtyGood: updated.qtyGood, qtyBad: updated.qtyBad },
+      beforeData: asset,
+      afterData: payload,
     });
 
     return updated;
   }
+
+  async deleteAsset(id: string, userId: string) {
+    const existing = await this.prisma.operationalAsset.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('Asset not found');
+
+    await this.prisma.operationalAsset.delete({ where: { id } });
+
+    await this.audit.log({
+      userId,
+      action: AuditAction.DELETE,
+      entity: 'OperationalAsset',
+      entityId: id,
+      beforeData: existing,
+    });
+
+    return { success: true };
+  }
+
 }
 
 @ApiTags('Stock')
@@ -216,6 +237,15 @@ export class StockController {
     @CurrentUser() user: any,
   ) {
     return this.stockService.updateAsset(id, dto, user.id);
+  }
+
+  @Delete('assets/:id')
+  @Roles('OWNER' as any, 'MANAGER' as any)
+  deleteAsset(
+    @Param('id') id: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.stockService.deleteAsset(id, user.id);
   }
 }
 
