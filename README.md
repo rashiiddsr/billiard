@@ -4,7 +4,7 @@ A production-ready POS system for billiard halls with:
 - **Server-side billing timer** (survives browser refresh)
 - **IoT light control** via HTTP polling with HMAC auth
 - **F&B POS** with stock management
-- **RBAC** (OWNER / MANAGER / CASHIER)
+- **RBAC** (OWNER / DEVELOPER / MANAGER / CASHIER)
 - **Finance reporting** & audit logs
 
 ---
@@ -37,6 +37,10 @@ billiard-pos/
 │   │   │   ├── finance/      # Reports + expenses
 │   │   │   ├── stock/        # F&B stock + operational assets
 │   │   │   ├── audit/        # Audit log viewer
+│   │   │   ├── company/      # Company profile settings
+│   │   │   ├── packages/     # Billing package management
+│   │   │   ├── notifications/ # Internal notification features
+│   │   │   ├── print/        # QZ signing + receipt print service
 │   │   │   ├── users/        # User CRUD
 │   │   │   └── tables/       # Billiard tables
 │   │   └── prisma/
@@ -47,11 +51,30 @@ billiard-pos/
 │           │   ├── login/
 │           │   ├── cashier/   # Dashboard, billing, orders, checkout
 │           │   ├── owner/     # Dashboard, finance, users, audit
-│           │   └── manager/   # Dashboard, menu, stock, expenses
+│           │   ├── manager/   # Dashboard, menu, stock, expenses
+│           │   └── developer/ # Dashboard, IoT tools, table utilities
 │           ├── components/
 │           └── lib/           # API client, auth context, utils
 └── docker-compose.yml
 ```
+
+---
+
+## Analisis Perubahan Sistem (Ringkas)
+
+Berikut ringkasan perubahan yang saat ini sudah terintegrasi di codebase:
+
+1. **Backend bertambah modular untuk kebutuhan operasional penuh**
+   - Selain modul inti billing/POS, sekarang ada modul `company`, `packages`, `notifications`, dan `print` untuk menutup kebutuhan konfigurasi profil usaha, paket billiard, notifikasi internal, dan signing QZ Tray.
+
+2. **Role DEVELOPER sudah menjadi role resmi sistem**
+   - Role ini tersedia di skema database dan UI khusus (`/developer/*`) untuk kebutuhan teknis seperti utilitas IoT dan manajemen meja saat maintenance.
+
+3. **Keamanan API lebih ketat untuk skala produksi**
+   - API menggunakan JWT + refresh token, RBAC berbasis role, serta rate limiting (`@nestjs/throttler`) yang bisa dikonfigurasi lewat env (`THROTTLE_TTL` dan `THROTTLE_LIMIT`).
+
+4. **Sumber struktur data utama sudah distandardisasi ke SQL schema**
+   - Setup awal database diarahkan ke `schema/schema.sql` agar bootstrap sistem konsisten lintas environment.
 
 ---
 
