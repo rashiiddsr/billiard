@@ -6,6 +6,7 @@ import { formatCurrency } from '@/lib/utils';
 import { centerReceiptText, formatReceiptLine, printReceiptText, separatorLine, wrapAndCenterReceiptText } from '@/lib/receiptPrinter';
 import toast from 'react-hot-toast';
 import { downloadWorkbookXls } from '@/lib/exportWorkbook';
+import TransactionDetailSummary from '@/components/shared/TransactionDetailSummary';
 
 function toDateInputValue(date: Date) {
   const tzOffset = date.getTimezoneOffset() * 60000;
@@ -171,13 +172,13 @@ export default function CashierTransactionsPage() {
       centerReceiptText('RE-PRINT'),
       separatorLine(32, '='),
       centerReceiptText(companyProfile?.name || 'Billiard Club OS'),
-      centerReceiptText(companyProfile?.address || ''),
+      ...wrapAndCenterReceiptText(companyProfile?.address || ''),
       separatorLine(),
       formatReceiptLine('No', detail.paymentNumber),
       formatReceiptLine('Kasir', detail.cashier),
       formatReceiptLine('Waktu', paidAt),
       detail.table !== 'Standalone' ? formatReceiptLine('Meja', detail.table) : '',
-      (detail.billingSession?.amount || 0) > 0 ? formatReceiptLine('Billiard', formatCurrency(detail.billingSession?.amount || 0)) : '',
+      (detail.billingSession?.amount || 0) > 0 ? formatReceiptLine(`Billiard (${detail.billingSession?.duration || 0}m)`, formatCurrency(detail.billingSession?.amount || 0)) : '',
       (detail.packageUsages || []).length > 0 ? separatorLine() : '',
       (detail.packageUsages || []).length > 0 ? 'Rincian Paket' : '',
       ...(detail.packageUsages || []).flatMap((pkg: any) => {
@@ -245,31 +246,7 @@ export default function CashierTransactionsPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-xl rounded-xl bg-white p-4">
             <div className="mb-3 flex items-center justify-between"><h3 className="font-semibold">Detail Transaksi {detail.paymentNumber}</h3><button onClick={() => { setDetail(null); setDetailPaymentId(null); }}>✕</button></div>
-            <div className="space-y-1 text-sm">
-              {(detail.billingSession?.amount || 0) > 0 && (
-                <>
-                  <div className="flex justify-between"><span>Billiard awal</span><span>{formatCurrency(detail.billingSession?.breakdown?.baseAmount || 0)}</span></div>
-                  {(detail.billingSession?.breakdown?.extensions || []).map((x: any, i: number) => <div key={x.id || i} className="flex justify-between text-slate-600"><span>Perpanjangan #{i + 1} (+{x.additionalMinutes} menit)</span><span>{formatCurrency(x.additionalAmount)}</span></div>)}
-                  <div className="flex justify-between"><span>Total Billiard</span><span>{formatCurrency(detail.billingSession?.amount || 0)}</span></div>
-                </>
-              )}
-              {(detail.packageUsages || []).length > 0 && (
-                <div className="mt-2 border-t pt-2">
-                  <p className="font-semibold">Rincian Paket</p>
-                  {(detail.packageUsages || []).map((pkg: any, i: number) => (
-                    <div key={pkg.id || i} className="mt-1 rounded bg-slate-50 p-2">
-                      <div className="font-medium">{pkg.packageName}{pkg.qty > 1 ? ` × ${pkg.qty}` : ''}</div>
-                      {pkg.durationMinutes ? <div className="flex justify-between text-slate-600"><span>Billing {pkg.durationMinutes} menit</span><span>{formatCurrency(pkg.billingEquivalent)}</span></div> : null}
-                      {(pkg.fnbItems || []).map((f: any, idx: number) => <div key={idx} className="flex justify-between text-slate-600"><span>{f.name} × {f.qty}</span><span>{formatCurrency(f.subtotal)}</span></div>)}
-                      <div className="flex justify-between text-slate-700"><span>Diskon</span><span>-{formatCurrency(Math.max(0, Number(pkg.originalPrice || 0) - Number(pkg.packagePrice || 0)))}</span></div>
-                      <div className="flex justify-between font-semibold"><span>Subtotal</span><span>{formatCurrency(pkg.packagePrice)}</span></div>
-                    </div>
-                  ))}
-                </div>
-              )}
-              <div className="mt-2 border-t pt-2"><p className="font-semibold">F&B Tambahan</p>{(detail.fnbItems || []).length === 0 ? <p className="text-slate-500">Tidak ada F&B tambahan</p> : detail.fnbItems.map((f: any, i: number) => <div key={i} className="flex justify-between"><span>{f.name} × {f.qty}</span><span>{formatCurrency(f.subtotal)}</span></div>)}</div>
-              <div className="mt-2 flex justify-between border-t pt-2 font-semibold"><span>Total Transaksi</span><span>{formatCurrency(detail.total)}</span></div>
-            </div>
+            <TransactionDetailSummary detail={detail} />
             <button className="btn-primary mt-4 w-full" onClick={reprintReceipt}>Cetak Ulang Struk</button>
           </div>
         </div>

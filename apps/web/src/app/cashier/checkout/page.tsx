@@ -212,13 +212,13 @@ export default function CheckoutPage() {
       : 'Terima kasih atas kunjungan Anda.';
     const rawLines: string[] = [
       centerReceiptText(companyProfile?.name || 'Billiard Club OS'),
-      centerReceiptText(companyProfile?.address || ''),
+      ...wrapAndCenterReceiptText(companyProfile?.address || ''),
       separatorLine(),
       formatReceiptLine('No', currentReceipt.paymentNumber),
       formatReceiptLine('Kasir', currentReceipt.cashier),
       formatReceiptLine('Waktu', paidAt),
       currentReceipt.table !== 'Standalone' ? formatReceiptLine('Meja', currentReceipt.table) : '',
-      (currentReceipt.billingSession?.amount || 0) > 0 ? formatReceiptLine('Billiard', formatCurrency(currentReceipt.billingSession?.amount || 0)) : '',
+      (currentReceipt.billingSession?.amount || 0) > 0 ? formatReceiptLine(`Billiard (${currentReceipt.billingSession?.duration || 0}m)`, formatCurrency(currentReceipt.billingSession?.amount || 0)) : '',
       (currentReceipt.packageUsages || []).length > 0 ? separatorLine() : '',
       (currentReceipt.packageUsages || []).length > 0 ? 'Rincian Paket' : '',
       ...(currentReceipt.packageUsages || []).flatMap((pkg: any) => {

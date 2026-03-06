@@ -495,7 +495,7 @@ export function buildBusinessReceiptHtml({
       .bold { font-weight: 700; }
       .tag { border: 1px solid #111827; display: inline-block; padding: 2px 8px; font-weight: 700; margin-bottom: 6px; }
       .small { font-size: 13px; line-height: 1.3; }
-      .pre { white-space: pre-wrap; }
+      .pre { white-space: pre-wrap; text-align: center; }
       @media print {
         html, body { width: ${paperWidth}; }
       }
