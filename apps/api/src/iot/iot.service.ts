@@ -16,6 +16,11 @@ const usedNonces = new Map<string, Date>();
 
 type ButtonAction = 'TOGGLE' | 'ON' | 'OFF';
 
+type SendCommandOptions = {
+  requireOnline?: boolean;
+  dedupeWindowSeconds?: number;
+};
+
 @Injectable()
 export class IotService {
   // Default GPIO list for relay channel 0..15. Can be customized per device by developer.
@@ -402,8 +407,47 @@ export class IotService {
     return table;
   }
 
-  async sendCommand(tableId: string, commandType: IoTCommandType | string) {
-    const table = await this.assertTableReadyForBilling(tableId);
+  async sendCommand(
+    tableId: string,
+    commandType: IoTCommandType | string,
+    options: SendCommandOptions = {},
+  ) {
+    const { requireOnline = true, dedupeWindowSeconds = 15 } = options;
+
+    const table = requireOnline
+      ? await this.assertTableReadyForBilling(tableId)
+      : await this.prisma.table.findUnique({
+        where: { id: tableId },
+        include: { iotDevice: true },
+      });
+
+    if (!table) throw new NotFoundException('Table not found');
+
+    if (!table.iotDevice.isActive) {
+      throw new BadRequestException('ESP untuk meja ini sedang nonaktif. Hubungi developer.');
+    }
+
+    const pendingStatuses = [IoTCommandStatus.PENDING, IoTCommandStatus.SENT];
+    const cutoff = new Date(Date.now() - dedupeWindowSeconds * 1000);
+    const recentCommands = await this.prisma.iotCommand.findMany({
+      where: {
+        deviceId: table.iotDeviceId,
+        command: commandType as IoTCommandType,
+        status: { in: pendingStatuses },
+        createdAt: { gte: cutoff },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+    });
+
+    const existing = recentCommands.find((cmd) => {
+      const payload = (cmd.payload as { tableId?: string } | null) || null;
+      return payload?.tableId === tableId;
+    });
+
+    if (existing) {
+      return existing;
+    }
 
     const nonce = uuidv4();
     return this.prisma.iotCommand.create({
