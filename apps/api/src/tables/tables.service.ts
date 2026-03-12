@@ -287,7 +287,7 @@ export class TablesService {
     }
 
     try {
-      await this.iotService.sendCommand(id, 'LIGHT_OFF', { requireOnline: false, dedupeWindowSeconds: 60 });
+      await this.iotService.sendCommand(id, 'LIGHT_OFF');
     } catch (error) {
       this.logger.error(`Failed sending LIGHT_OFF when stop testing table ${id}`, error as any);
       throw error;
