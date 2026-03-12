@@ -42,7 +42,7 @@ export class BillingService {
     const packageRate = new Decimal(pkg.targetHourlyRate.toString()).toDecimalPlaces(2);
     const normalizedTableRate = tableRate.toDecimalPlaces(2);
     if (!packageRate.equals(normalizedTableRate)) {
-      throw new BadRequestException(`Paket ${pkg.name} hanya berlaku untuk meja dengan tarif ${packageRate.toFormat()} per jam`);
+      throw new BadRequestException(`Paket ${pkg.name} hanya berlaku untuk meja dengan tarif ${packageRate.toFixed(0)} per jam`);
     }
   }
 
@@ -364,7 +364,7 @@ export class BillingService {
       data: { status: TableStatus.AVAILABLE },
     });
 
-    await this.iot.sendCommand(session.tableId, 'LIGHT_OFF');
+    await this.iot.sendCommand(session.tableId, 'LIGHT_OFF', { requireOnline: false, dedupeWindowSeconds: 60 });
 
     await this.audit.log({
       userId,
@@ -436,8 +436,8 @@ export class BillingService {
     ]);
 
     try {
-      await this.iot.sendCommand(session.tableId, 'LIGHT_OFF');
-      await this.iot.sendCommand(targetTable.id, 'LIGHT_ON');
+      await this.iot.sendCommand(session.tableId, 'LIGHT_OFF', { requireOnline: false, dedupeWindowSeconds: 60 });
+      await this.iot.sendCommand(targetTable.id, 'LIGHT_ON', { requireOnline: false, dedupeWindowSeconds: 60 });
     } catch (error) {
       console.error('Move session IoT command failed:', error);
     }
@@ -679,7 +679,7 @@ export class BillingService {
           where: { id: session.tableId },
           data: { status: TableStatus.AVAILABLE },
         });
-        await this.iot.sendCommand(session.tableId, 'LIGHT_OFF');
+        await this.iot.sendCommand(session.tableId, 'LIGHT_OFF', { requireOnline: false, dedupeWindowSeconds: 60 });
         await this.audit.log({
           action: AuditAction.AUTO_STOP_BILLING,
           entity: 'BillingSession',
@@ -704,7 +704,7 @@ export class BillingService {
 
     for (const session of nearlyExpiredSessions) {
       try {
-        await this.iot.sendCommand(session.tableId, 'BLINK_3X');
+        await this.iot.sendCommand(session.tableId, 'BLINK_3X', { requireOnline: false, dedupeWindowSeconds: 180 });
         await this.prisma.billingSession.update({
           where: { id: session.id },
           data: { blinkCommandSent: true },

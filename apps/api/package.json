@@ -3,9 +3,9 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "prebuild": "PRISMA_CLIENT_ENGINE_TYPE=binary prisma generate",
+    "prebuild": "PRISMA_CLIENT_ENGINE_TYPE=library prisma generate",
     "build": "nest build",
-    "start": "PRISMA_CLIENT_ENGINE_TYPE=binary node dist/main",
+    "start": "node dist/main",
     "format": "prettier --write \"src/**/*.ts\"",
     "qz:generate-cert": "node scripts/generate-qz-cert.mjs"
   },
