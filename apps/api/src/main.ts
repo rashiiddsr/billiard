@@ -71,16 +71,4 @@ async function bootstrap() {
   console.log(`🚀 API running on port ${port}`);
 }
 
-
-process.on('uncaughtException', async (error) => {
-  console.error('[Fatal] uncaughtException:', error);
-  process.exit(1);
-});
-
-process.on('unhandledRejection', async (error) => {
-  console.error('[Fatal] unhandledRejection:', error);
-  process.exit(1);
-});
-
-
 bootstrap();
